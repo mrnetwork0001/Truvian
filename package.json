@@ -1,15 +1,19 @@
 {
   "name": "truvian",
   "version": "1.0.0",
-  "description": "",
+  "description": "Truvian: exact on-chain truth engine for the Telegraph Protocol Season I Hackathon",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx src/miner/server.ts",
+    "test:miner": "tsx src/scripts/test-miner.ts",
+    "probe:xlayer": "tsx src/scripts/probe-chain.ts",
+    "discover:xlayer": "tsx src/scripts/discover-dex.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "dotenv": "^17.4.2",
     "fastify": "^5.11.2",

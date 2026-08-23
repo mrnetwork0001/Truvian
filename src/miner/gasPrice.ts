@@ -1,0 +1,64 @@
+/**
+ * GAS_PRICE intent handler.
+ * Snapshot anchored to an explicit block number so any answer is verifiable.
+ */
+import { chainMeta, getClient, isSupportedChain } from '../config/chains.js';
+import { IntentError, type GasPriceInput, type GasPriceResult } from '../types/index.js';
+
+/** OP-stack GasPriceOracle predeploy, same address on every OP-stack chain. */
+const GAS_PRICE_ORACLE = '0x420000000000000000000000000000000000000F' as const;
+const l1BaseFeeAbi = [
+  { name: 'l1BaseFee', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint256' }] },
+] as const;
+
+export function validateGasPriceInput(raw: unknown): GasPriceInput {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new IntentError('INVALID_INPUT', 'input must be an object');
+  }
+  const { chain } = raw as Record<string, unknown>;
+  if (typeof chain !== 'string' || !isSupportedChain(chain)) {
+    throw new IntentError('CHAIN_UNSUPPORTED', `chain must be one of base|ethereum|xlayer, got ${String(chain)}`);
+  }
+  return { chain };
+}
+
+export async function handleGasPrice(input: GasPriceInput): Promise<GasPriceResult> {
+  const client = getClient(input.chain);
+  const meta = chainMeta(input.chain);
+
+  try {
+    const [block, gasPrice, maxPriorityFee, feeHistory, l1BaseFee] = await Promise.all([
+      client.getBlock({ blockTag: 'latest' }),
+      client.getGasPrice(),
+      client.estimateMaxPriorityFeePerGas(),
+      client.getFeeHistory({ blockCount: 5, rewardPercentiles: [25, 50, 75] }),
+      meta.isOpStack
+        ? client.readContract({ address: GAS_PRICE_ORACLE, abi: l1BaseFeeAbi, functionName: 'l1BaseFee' })
+        : Promise.resolve(0n),
+    ]);
+
+    // median across the sampled blocks for each percentile column
+    const median = (col: number): bigint => {
+      const vals = (feeHistory.reward ?? [])
+        .map((row) => row[col])
+        .filter((v): v is bigint => v !== undefined)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+      if (vals.length === 0) return 0n;
+      return vals[Math.floor(vals.length / 2)]!;
+    };
+
+    return {
+      chain: input.chain,
+      chainId: meta.chainId,
+      blockNumber: block.number.toString(),
+      baseFeePerGasWei: (block.baseFeePerGas ?? 0n).toString(),
+      gasPriceWei: gasPrice.toString(),
+      maxPriorityFeePerGasWei: maxPriorityFee.toString(),
+      priorityFeePercentilesWei: { p25: median(0).toString(), p50: median(1).toString(), p75: median(2).toString() },
+      l1GasPriceWei: l1BaseFee.toString(),
+    };
+  } catch (err: any) {
+    if (err instanceof IntentError) throw err;
+    throw new IntentError('UPSTREAM_RPC_ERROR', err?.shortMessage ?? err?.message ?? 'rpc failure');
+  }
+}

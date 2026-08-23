@@ -1,84 +1,82 @@
-# 🛡️ Truvian — Verifiable Agentic Execution & Slippage Shield Engine
+# 🛡️ Truvian — Exact On-Chain Truth Engine
 
-> **Telegraph Protocol Season I Hackathon Master Blueprint**  
-> *Targeting Track 1 (Miner), Track 2 (Script Author), and Track 3 (Application)*  
-> **Author:** `mrnetwork`  
+> **Telegraph Protocol Season I Hackathon — corrected master blueprint (2026-08-23)**
+> *Track 1 (Miner) + Track 2 (Script Author) now · Track 3 (Application) from Aug 31*
+> **Author:** `mrnetwork`
 
 ---
 
 ## 📌 Executive Summary
-Autonomous AI agents cannot execute transactions safely using unverified, raw API quotes. **Truvian** bridges this trust gap by acting as a **Verifiable Execution Oracle**. Before an agent signs any transaction, Truvian simulates execution, checks live order book depth, calculates maximum slippage bounds, and issues a signed verification payload.
+Telegraph ranks miners per **intent** against ground truth and routes real demand to the best ones. Truvian competes where engineering rigor is the whole game: **Tier A deterministic intents scored by WASM exact match**. Our miner serves `ONCHAIN_TX_LOOKUP` and `GAS_PRICE` on Base with answers that are *provably exactly right* — including the OP-stack L1 fee component most implementations forget. The same verification machinery becomes our Track 2 evaluation script, and in Track 3 it powers **Truvian Shield**, the execution-safety agent from the original vision — rebuilt on top of real Telegraph miners as the rules require.
+
+**This spec supersedes the original blueprint.** The original assumed an invented `verify-execution` intent, a $15K single-round pool, simultaneous tracks, and X Layer as the target chain. All four were wrong. The intent list is finalized (40 intents), H1 pays $5K (season $15K), tracks are sequential, and Telegraph is built on **Base**.
 
 ---
 
-## 🏗️ Tripartite Architecture & Hackathon Track Alignment
+## 🏗️ Architecture & Track Alignment
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                         TRUVIAN TELEGRAPH ECOSYSTEM                      │
+│                     TRUVIAN × TELEGRAPH (H1, corrected)                  │
 └──────────────────────────────────────────────────────────────────────────┘
-                                      │
-     TRACK 1: MINER                   ▼                    TRACK 2: SCRIPT
-┌───────────────────────────┐    Queried by    ┌───────────────────────────┐
-│  Truvian Miner API        │ ───────────────► │ On-Chain Settlement Eval  │
-│  (Wraps DEX depth,        │                  │ (Parses RPC mined block   │
-│   slippage & route risk)  │ ◄─────────────── │  logs vs predicted output)│
-└─────────────┬─────────────┘                  └───────────────────────────┘
-              │                                              ▲
-              │ Issues Signed Verifications                  │ Evaluates
-              ▼                                              │ Accuracy
-┌────────────────────────────────────────────────────────────┴─────────────┐
-│ TRACK 3: APPLICATION (Truvian Terminal & Autonomous Agent)                │
-│ Live Next.js dashboard routing real-time transactions through Truvian,  │
-│ driving massive verifiable request volume back to the Telegraph Miner.   │
+
+ TRACK 1 · Aug 17–31                          TRACK 2 · Aug 17–31
+┌───────────────────────────────┐            ┌───────────────────────────────┐
+│ Truvian Miner (Base, viem)    │  scored by │ Truvian Canonical Evaluator   │
+│  · ONCHAIN_TX_LOOKUP (Tier A) │ ◄───────── │  · ground truth from raw RPC  │
+│  · GAS_PRICE       (Tier A)   │            │    receipts & logs            │
+│  envelope-agnostic handlers   │            │  · exact-match, gaming-       │
+│  + thin Telegraph adapter     │            │    resistant                  │
+└──────────────┬────────────────┘            └───────────────────────────────┘
+               │ routed demand (probabilistic, rank-weighted)
+               ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│ TRACK 3 · Aug 31–Sep 7 — TRUVIAN SHIELD                                  │
+│ Execution-safety agent + dashboard. Before an agent signs, Shield pulls  │
+│ live Telegraph miner signals (CRYPTO_PRICE, GAS_PRICE, TVL_LOOKUP,       │
+│ ONCHAIN_TX_LOOKUP) and issues a go/no-go with evidence. Real miners      │
+│ only — mocked data is disqualifying. Drives request volume back to our   │
+│ own Track 1 miner.                                                       │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## ⚙️ Core Components & Technical Specifications
+## ⚙️ Component Specifications
 
-### 1. Track 1: Truvian Miner (Supply Layer)
-* **Endpoint:** `POST /telegraph/miner/verify-execution`
-* **Input Schema:**
-  ```json
-  {
-    "chain": "xlayer",
-    "tokenIn": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
-    "tokenOut": "0xE0B7A2bCF575CFBA10528C4E7C10BD3CE2D7769A",
-    "amountIn": "100.0",
-    "targetContract": "0x...",
-    "slippageTolerance": 0.5
-  }
-  ```
-* **Output Payload (Signed Signal):**
-  ```json
-  {
-    "minerId": "truvian-miner-01",
-    "timestamp": 1785800000,
-    "guaranteedMinOutput": "99.82",
-    "maxSlippagePercent": 0.18,
-    "routeSafetyScore": 98,
-    "executionValidityWindowSec": 30,
-    "signature": "0x..."
-  }
-  ```
+### 1. Track 1 — Truvian Miner (Supply Layer)
+Two Tier A intents, chosen because both are scored by exact match and share one Base RPC data layer:
 
-### 2. Track 2: On-Chain Settlement Evaluator (Quality Layer)
-* **Methodology:** Listens for executed transaction hashes, fetches mined block receipts via RPC, parses actual `Transfer` / `Swap` event logs, and computes exact mathematical accuracy:
-  $$\text{Accuracy Score} = 100 - \left| \frac{\text{Realized Output} - \text{Predicted Output}}{\text{Predicted Output}} \right| \times 100$$
-* **Penalty:** Failed or reverted transactions score **0%**.
+**`ONCHAIN_TX_LOOKUP`** — input: `{ chain, txHash }`. Output (normalized, deterministic):
+- `status`, `blockNumber`, `blockHash`, `from`, `to`, `contractAddress`, `nonce`-free receipt facts
+- `valueWei`, `gasUsed`, `effectiveGasPrice`, `l1Fee`, `totalFeeWei = gasUsed·effectiveGasPrice + l1Fee`
+- decoded ERC-20 `Transfer` events: `{ token, from, to, amount }`
+- All big numbers as decimal strings; addresses EIP-55 checksummed; stable key order.
 
-### 3. Track 3: Truvian Terminal (Demand Layer)
-* **Features:**
-  - **Live Verification Feed:** Real-time stream of incoming agent requests and verification scores.
-  - **Interactive Trade Simulator:** Lets users or agents submit test payloads and visually inspect liquidity depth and slippage guarantees.
-  - **On-Chain Accuracy Leaderboard:** Shows live accuracy scores verified by Track 2 scripts.
+**`GAS_PRICE`** — input: `{ chain }`. Output anchored to a specific block:
+- `blockNumber`, `baseFeePerGas`, `gasPrice` (eth_gasPrice), `maxPriorityFeePerGas`
+- fee-history percentiles (p25/p50/p75 over 5 blocks), plus OP-stack `l1GasPrice` on Base.
+
+**Design rule:** handlers are pure `(input) → payload` functions with no knowledge of Telegraph's envelope. A thin adapter maps Telegraph's request/response contract onto them once recon confirms it. This is deliberate: the envelope is currently **unknown** and will not be guessed.
+
+### 2. Track 2 — Truvian Canonical Evaluator (Quality Layer)
+Scores any miner's `ONCHAIN_TX_LOOKUP`/`GAS_PRICE` answer against ground truth re-derived live from raw `eth_getTransactionReceipt` / `eth_feeHistory`:
+- **Exact-match fields** (status, hashes, addresses, wei amounts): binary per-field score.
+- **Gaming resistance:** ground truth is computed from the chain at evaluation time by the script itself — a miner cannot influence it; malformed/extra fields penalized; reverted-tx handling explicitly tested.
+- Accuracy = weighted exact-field agreement; failed/unparseable responses score 0.
+
+### 3. Track 3 — Truvian Shield (Demand Layer, from Aug 31)
+The original Truvian concept, legalized: pre-signature safety verdicts built from **live Telegraph miner responses** — price sanity (CRYPTO_PRICE), fee spike detection (GAS_PRICE), venue liquidity (TVL_LOOKUP), and post-trade verification (ONCHAIN_TX_LOOKUP). Next.js dashboard with live verdict feed. Every Shield check is real routed demand — which feeds the "applications built on your miner / total requests served" judging criteria for our own Track 1 entry.
 
 ---
 
-## ⏱️ 3-Phase Execution Plan
+## 🏆 Scoring Strategy (from the published rules)
+- **75%** Normalized Performance *within the intent* — best miner in the intent gets full marks, so the target is #1 in `ONCHAIN_TX_LOOKUP`, not global volume.
+- **25%** X engagement — regular tagged updates to **@Telegraphprotoc**. Ship-and-post cadence: every meaningful milestone posts same day.
+- **Guardrail:** intent needs ≥3 miners and ≥100 real Track 3 requests → Truvian Shield exists partly to guarantee our intents cross the demand bar.
 
-- **Phase 1 (Miner & Simulator Core):** Set up Node.js/TypeScript Telegraph Miner wrapper, DEX RPC simulation, and payload signing logic.
-- **Phase 2 (Evaluation Script):** Build script to fetch mined transaction logs, compare against miner signatures, and compute ground-truth score.
-- **Phase 3 (Next.js Dashboard & Demo Video):** Build premium dark-mode Next.js UI, connect live websocket feeds, record demo walkthrough, and post updates on X (`@TelegraphProto`).
+## ⏱️ Remaining-Days Plan (Aug 23 → Sep 7)
+- **Now:** Base data core + both intent handlers + local verification (envelope-agnostic). ✅ in progress
+- **On recon:** register miner, wire the Telegraph adapter, go live on the leaderboard; submit Track 2 script; first X post.
+- **Aug 24–30:** harden (fallback RPCs, reorg safety, latency), monitor ranking, daily X updates.
+- **Aug 31–Sep 7:** build & ship Truvian Shield on live miners; drive real request volume; demo video; final submission.
