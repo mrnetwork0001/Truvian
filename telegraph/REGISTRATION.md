@@ -39,8 +39,14 @@ Note: `0xac683bFa8F1C892E23e8300d14c20678C6FC0CA3` (in older READMEs) is a
 DEAD registry — it rejects every intent. Do not use it.
 
 ## Track 2 — Register the WASM scorer
-After `scorer/` builds and passes its test suite:
-1. Host the built `.wasm` at a stable public URL (≤32 MB, IPFS or HTTPS).
+Built artifact: `telegraph/truvian_scorer.wasm` (112,236 bytes) —
+keccak256 `0x3b581da2712e2ad7f01b08919e646a44afebea944bdc7d13f65b58645dd22c16`.
+1. Host it at a stable public URL serving the EXACT bytes. Plan A:
+   `https://miner.truvian.xyz/truvian_scorer.wasm` (nginx static location in
+   `deploy/nginx-miner.conf`; re-download and keccak-verify after upload).
+   Plan B (if the repo is made public): a commit-pinned
+   raw.githubusercontent.com URL — immutable by construction. The repo is
+   currently PRIVATE, so raw URLs 404.
 2. Portal: "Submit WASM" flow at integrate.telegraphprotocol.com, **or**
    directly: `registerWasm(bytes32 wasmHash, string wasmUrl, string intent)`
    on the Diamond — `wasmHash` = **keccak256** of the exact hosted bytes
