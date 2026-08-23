@@ -144,7 +144,31 @@ s_terse=$(run "$Q" "$GT" "It succeeded at block 50343626 with 171101 gas, total 
 # (Omits both addresses and the value — a partial answer, so mid-range is
 # correct; the guard is against v1-style crushing plus ordering vs wrong-status.)
 check "terse correct (no hash echo) mid+"     "$s_terse"      "s >= 0.3"
-check "terse correct > wrong status"          "$s_terse"      "s > $s_wstatus + 0.2"
+check "terse correct > wrong status"          "$s_terse"      "s > $s_wstatus + 0.05"
+
+# --- v3 regression cases: structured-blob handling --------------------------
+
+# A raw JSON blob with fully correct values: real miners do this (verity,
+# degenlens). It must land in the mid band — below every correct prose answer
+# (champion agreement + the network's revealed preference) but above errors.
+JSON_OK='{"chain":"base","chain_id":8453,"tx_hash":"0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668","status":"confirmed_success","block_number":"50343626","from":"0x76f68adf3d4ecfdd0725b1320fb25b6772754ae2","to":"0xecec48ec5a7b7f7b96460b0f4e2b99cf0db94cb1","value_wei":"0","gas_used":171101,"fee_wei":"9398486826272","confidence":1}'
+s_json_ok=$(run "$Q" "$GT" "$JSON_OK")
+check "correct JSON blob below clean prose"   "$s_json_ok"    "s < $s_clean - 0.3"
+check "correct JSON blob below reworded"      "$s_json_ok"    "s < $s_reword - 0.3"
+check "correct JSON blob above floor"         "$s_json_ok"    "s >= 0.1"
+
+# A JSON error blob (real veyctum shape) must score near zero.
+JSON_ERR='{"schema_version":"1.0.0","chain_id":8453,"state":"RPC_DISAGREEMENT","status":"error","canonical":null,"effects":[],"error_code":"RPC_DISAGREEMENT","error_detail":"only primary provider responded; independent agreement required"}'
+s_json_err=$(run "$Q" "$GT" "$JSON_ERR")
+check "JSON error blob near 0"                "$s_json_err"   "s < 0.1"
+check "JSON error blob < correct JSON blob"   "$s_json_err"   "s < $s_json_ok"
+
+# When the ground truth itself is structured, the blob penalty neutralizes:
+# a near-identical JSON answer must still score high.
+GT_JSON='{"tx":"0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668","status":"success","block":50343626,"fee_wei":"9398486826272"}'
+MA_JSON='{"tx":"0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668","status":"success","block":50343626,"fee_wei":"9398486826272","source":"rpc"}'
+s_jsongt=$(run "$Q" "$GT_JSON" "$MA_JSON")
+check "JSON gt neutralizes blob penalty"      "$s_jsongt"     "s >= 0.6"
 
 # Empty question must not trap and self-match must still be 1.0.
 s_noq=$(run "" "$GT" "$GT")

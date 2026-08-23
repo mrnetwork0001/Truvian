@@ -746,6 +746,42 @@ fn text_similarity(gt: &[Tok], ma: &[Tok]) -> f32 {
 // Scoring
 // ---------------------------------------------------------------------------
 
+/// Structural-syntax density: the fraction of non-whitespace characters that
+/// are JSON/key-value syntax. Prose answers sit under ~4%; raw JSON blobs sit
+/// above ~15%. Used to penalize machine-readable dumps the way the network's
+/// champion (and its revealed leaderboard preference) does: an answer is
+/// supposed to be an answer, not a serialized API response.
+fn structure_density(s: &str) -> f32 {
+    let mut structural = 0u32;
+    let mut nonspace = 0u32;
+    for c in s.chars() {
+        if c.is_whitespace() {
+            continue;
+        }
+        nonspace += 1;
+        if matches!(c, '{' | '}' | '[' | ']' | '"' | ':' | ',') {
+            structural += 1;
+        }
+    }
+    if nonspace == 0 {
+        0.0
+    } else {
+        structural as f32 / nonspace as f32
+    }
+}
+
+/// Blobness in [0,1]: how much a text is a serialized data structure rather
+/// than prose. Two signals, take the max:
+///   - JSON key pattern: occurrences of '":' (one per key in a serialized
+///     object) — robust even when long hex payloads dilute character counts;
+///   - structural character density, for bracket/CSV-style dumps.
+fn blobness(s: &str) -> f32 {
+    let keys = s.matches("\":").count() as f32;
+    let key_ramp = ((keys - 1.0) / 5.0).clamp(0.0, 1.0);
+    let density_ramp = ((structure_density(s) - 0.08) / 0.14).clamp(0.0, 1.0);
+    key_ramp.max(density_ramp)
+}
+
 /// Smooth monotone contrast curve: fixes s=0, 0.5, 1; pushes >0.5 toward 1
 /// and <0.5 toward 0. Never reorders scores.
 fn contrast(s: f32) -> f32 {
@@ -876,7 +912,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             || (g_neg && !g_pos && m_pos && !m_neg);
         if contradiction {
             p_contra += match g {
-                G_STATUS => 0.65,
+                G_STATUS => 0.55,
                 G_YESNO => 0.55,
                 G_WINLOSE => 0.68,
                 _ => 0.65,
@@ -1026,7 +1062,16 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     let excess = (extra_units - 2.0).max(0.0);
     let p_prec = 0.7 * excess / (excess + 4.0);
 
-    let s = (raw * (1.0 - p_contra) - p_prec).clamp(0.0, 1.0);
+    // --- Structured-blob penalty -------------------------------------------
+    // Answers that are predominantly JSON / key-value syntax (relative to the
+    // ground truth's own density, so a structured ground truth neutralizes
+    // it) are serialized API responses, not answers. The champion's semantic
+    // scoring and the network's live leaderboard both put such blobs below
+    // every correct prose answer; ranking them the same way is required for
+    // champion agreement on real traffic.
+    let blob = (blobness(ma_trim) - blobness(gt_trim)).clamp(0.0, 1.0);
+
+    let s = ((raw * (1.0 - p_contra) - p_prec) * (1.0 - 0.58 * blob)).clamp(0.0, 1.0);
     contrast(s).clamp(0.0, 0.995)
 }
 
