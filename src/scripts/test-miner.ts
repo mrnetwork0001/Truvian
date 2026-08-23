@@ -59,7 +59,8 @@ async function main() {
   check('answer contains tx hash', tx.answer.includes(tx.txHash));
   check('answer contains block number', tx.answer.includes(`block ${tx.blockNumber}`));
   check('answer contains from/to addresses', tx.answer.includes(tx.from) && (tx.to === null || tx.answer.includes(tx.to)));
-  check('answer contains exact total fee in wei', tx.answer.includes(`${tx.totalFeeWei} wei`));
+  check('scored answer stays in ground-truth scope (no fee numerics)', !tx.answer.includes(tx.totalFeeWei));
+  check('total fee still in structured payload', BigInt(tx.totalFeeWei) > 0n);
   check('answer states status word', /succeeded|reverted/.test(tx.answer));
   check('signal carries the full answer (scored via label_field)', tx.signal === tx.answer);
   check('answer includes function selector when present', tx.inputData === '0x' || tx.answer.includes(tx.inputData.slice(0, 10)));
