@@ -2,6 +2,7 @@ version: "1"
 kind: miner
 id: 8453
 slug: truvian-onchain-truth
+protocol: generic
 name: Truvian Exact On-Chain Truth Engine
 base_url: https://miner.truvian.xyz
 description: >
