@@ -48,7 +48,9 @@ export function buildServer() {
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop()!)) {
   const app = buildServer();
   const port = Number(process.env.PORT ?? 8787);
-  app.listen({ port, host: '0.0.0.0' }).catch((err) => {
+  // In production HOST=127.0.0.1 — nginx terminates TLS and proxies in.
+  const host = process.env.HOST ?? '0.0.0.0';
+  app.listen({ port, host }).catch((err) => {
     app.log.error(err);
     process.exit(1);
   });
