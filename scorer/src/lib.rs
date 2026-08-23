@@ -786,8 +786,8 @@ fn blobness(s: &str) -> f32 {
 /// and <0.5 toward 0. Never reorders scores.
 fn contrast(s: f32) -> f32 {
     let s = s.clamp(0.0, 1.0);
-    let a = s * s;
-    let b = (1.0 - s) * (1.0 - s);
+    let a = s * s * s;
+    let b = (1.0 - s) * (1.0 - s) * (1.0 - s);
     if a + b <= 0.0 {
         return 0.0;
     }
@@ -912,7 +912,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             || (g_neg && !g_pos && m_pos && !m_neg);
         if contradiction {
             p_contra += match g {
-                G_STATUS => 0.55,
+                G_STATUS => 0.60,
                 G_YESNO => 0.55,
                 G_WINLOSE => 0.68,
                 _ => 0.65,
@@ -1003,13 +1003,14 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
         (&gt.from_addr, &gt.to_addr, &ma.from_addr, &ma.to_addr)
     {
         if gf != gt_to && mf == gt_to && mt == gf {
-            p_contra += 0.40;
+            p_contra += 0.55;
         }
     }
 
     // Near-miss numerics / corrupted hex: actively wrong assertions.
     let mut near_int = 0.0f32;
     let mut near_hex = 0.0f32;
+    let mut sub_hex = 0.0f32;
     for gf in &gt.facts {
         if match_credit(gf, &ma.facts) >= 1.0 {
             continue;
@@ -1022,23 +1023,56 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                         && !gt.facts.iter().any(|g2| facts_match(g2, mf)))
                 });
                 if hit {
-                    near_int += if gs.len() >= 10 { 0.25 } else { 0.15 };
+                    near_int += if gs.len() >= 10 { 0.40 } else { 0.25 };
                 }
             }
             Fact::Hex(gs) => {
-                let hit = ma.facts.iter().any(|mf| {
+                // Corrupted hex (shared prefix) is a near-miss; a completely
+                // different address/hash asserted in place of an unmatched
+                // ground-truth one is a substitution — both actively wrong.
+                let near = ma.facts.iter().any(|mf| {
                     matches!(mf, Fact::Hex(ms)
                         if hex_near_miss(gs, ms)
                         && !gt.facts.iter().any(|g2| facts_match(g2, mf)))
                 });
-                if hit {
-                    near_hex += 0.15;
+                if near {
+                    near_hex += 0.30;
+                } else {
+                    let sub = ma.facts.iter().any(|mf| {
+                        matches!(mf, Fact::Hex(ms)
+                            if ms.len() == gs.len()
+                            && (ms.len() == 42 || ms.len() == 66)
+                            && !gt.facts.iter().any(|g2| facts_match(g2, mf)))
+                    });
+                    if sub {
+                        sub_hex += if gs.len() == 66 { 0.20 } else { 0.12 };
+                    }
                 }
             }
             _ => {}
         }
     }
-    p_contra += near_int.min(0.40) + near_hex.min(0.30);
+    p_contra += near_int.min(0.55) + near_hex.min(0.45) + sub_hex.min(0.24);
+
+    // Numeric substitution: the ground truth has unmatched numbers AND the
+    // answer asserts different unmatched numbers — a wrong-amount answer
+    // (balance 0.3 ETH instead of 12.5 ETH), not merely an omission.
+    {
+        let unmatched_num = |facts: &[Fact], other: &[Fact]| -> u32 {
+            facts
+                .iter()
+                .filter(|f| match f {
+                    Fact::Int(v) => v.len() >= 2,
+                    Fact::Dec(_) => true,
+                    _ => false,
+                })
+                .filter(|f| !other.iter().any(|o| facts_match(f, o)))
+                .count() as u32
+        };
+        let g_open = unmatched_num(&gt.facts, &ma.facts);
+        let m_open = unmatched_num(&ma.facts, &gt.facts);
+        p_contra += 0.10 * g_open.min(m_open).min(2) as f32;
+    }
 
     // Negation asymmetry: strong negators the answer adds over the ground
     // truth (mild — the polarity groups carry the real contradiction signal).
@@ -1071,8 +1105,11 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     // champion agreement on real traffic.
     let blob = (blobness(ma_trim) - blobness(gt_trim)).clamp(0.0, 1.0);
 
-    let s = ((raw * (1.0 - p_contra) - p_prec) * (1.0 - 0.58 * blob)).clamp(0.0, 1.0);
-    contrast(s).clamp(0.0, 0.995)
+    // The blob factor scales AFTER the contrast curve: a serialized-but-
+    // correct answer lands mid-band (below every correct prose answer, above
+    // wrong values and errors) instead of being contrast-crushed to zero.
+    let s = (raw * (1.0 - p_contra) - p_prec).clamp(0.0, 1.0);
+    (contrast(s) * (1.0 - 0.42 * blob)).clamp(0.0, 0.995)
 }
 
 // ---------------------------------------------------------------------------

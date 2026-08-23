@@ -12,7 +12,7 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OURS="${2:-$SCRIPT_DIR/target/wasm32-unknown-unknown/release/truvian_scorer.wasm}"
-CHAMP="$SCRIPT_DIR/vendor/telegraph-wasm-baseline/target/wasm32-unknown-unknown/release/telegraph_scoring.wasm"
+CHAMP="${CHAMP_WASM:-$SCRIPT_DIR/vendor/telegraph-wasm-baseline/target/wasm32-unknown-unknown/release/telegraph_scoring.wasm}"
 TESTER_DIR="$SCRIPT_DIR/vendor/telegraph-examples/wasm-scoring-module/go-tester"
 TESTER="$TESTER_DIR/tester"
 TRAFFIC="$SCRIPT_DIR/traffic.tsv"
