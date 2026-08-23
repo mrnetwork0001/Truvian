@@ -1,21 +1,39 @@
-//! Truvian — Telegraph Protocol scoring module for the ONCHAIN_TX_LOOKUP intent.
+//! Truvian v2 — Telegraph Protocol scoring module for the ONCHAIN_TX_LOOKUP intent.
 //!
 //! Contract (C ABI, wasm32-unknown-unknown, zero imports):
 //!   alloc(size: i32) -> i32
 //!   dealloc(ptr: i32, size: i32)
 //!   rank_answer(q_ptr, q_len, gt_ptr, gt_len, ma_ptr, ma_len) -> f32 in [0,1]
 //!
-//! Strategy: ONCHAIN_TX_LOOKUP is a Tier A deterministic intent — there is ONE
-//! right answer. Instead of generic semantic similarity (the current champion),
-//! we extract *typed on-chain facts* (tx hashes, addresses, integers/wei values,
-//! decimal numbers, tx-status keywords) from the ground truth and score the
-//! miner answer by weighted recall of those facts, blended with a word-overlap
-//! similarity component, with an anti-gaming precision penalty for answers
-//! stuffed with contradicting hex values / numbers, and a contradiction penalty
-//! for wrong tx status.
+//! v2 strategy (post-rejection iteration):
+//!   1. Typed on-chain fact recall (tx hashes, addresses, ints/wei, decimals,
+//!      tx status) — unchanged core idea, now with partial hex-prefix credit.
+//!   2. NEGATION-AWARE lexing: a strong negator ("not", "never", "didn't",
+//!      "wasn't", "without", "rather"/"instead", sentence punctuation resets)
+//!      opens a 3-content-token window that flips polarity words and flags
+//!      similarity tokens as negated, so "was never included" stops matching
+//!      "included" and "did not succeed" reads as failure.
+//!   3. POLARITY GROUPS with contradiction penalties: tx status
+//!      (succeed/confirm/mined vs fail/revert/rejected), direction
+//!      (rise/climb vs fall/drop), win/lose, leading Yes/No — including
+//!      Chinese substring forms (成功/失败, 上涨/下跌) with 未/没/不 flips.
+//!      A wrong conclusion wrapped around the right numbers gets multiplied
+//!      down hard.
+//!   4. NEAR-MISS detection: an unmatched ground-truth integer whose answer
+//!      contains a same-length, few-digits-off value (block off by one, wei
+//!      last digit wrong) is an active wrong assertion, penalized beyond the
+//!      lost recall. Same for corrupted hex sharing a long prefix, and for
+//!      swapped from/to address pairs.
+//!   5. Much stronger text fallback: stopword-weighted unigram F1 (with a
+//!      6-char canonical prefix stemmer) + bigram Dice, replacing plain Dice.
+//!   6. CONTRAST transform: smooth monotone s^2/(s^2+(1-s)^2) pushes good
+//!      answers toward 1 and bad answers toward 0, widening the good-bad
+//!      margin without ever reordering scores.
 //!
-//! Determinism: only Vec-based, sorted data structures; no hash maps, no
-//! randomness, no time, no I/O. Fixed iteration order everywhere.
+//! Hard invariants: empty/whitespace answer == 0.0 exactly; verbatim
+//! (trimmed) match == 1.0 exactly (=> Stage-2 self-match 1.0); all other
+//! scores in [0, 0.995]; fully deterministic (Vec + sort only, no hash maps,
+//! no randomness, no time, no I/O, zero WASM imports).
 
 use std::alloc::{alloc as raw_alloc, dealloc as raw_dealloc, Layout};
 
@@ -28,7 +46,6 @@ use std::alloc::{alloc as raw_alloc, dealloc as raw_dealloc, Layout};
 #[no_mangle]
 pub extern "C" fn alloc(size: i32) -> i32 {
     let size = if size <= 0 { 1 } else { size as usize };
-    // Layout with align 1: raw byte buffers for UTF-8 strings.
     let layout = match Layout::from_size_align(size, 1) {
         Ok(l) => l,
         Err(_) => return 0,
@@ -58,20 +75,118 @@ unsafe fn read_str(ptr: i32, len: i32) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Typed fact extraction
+// Word lists (linear scans — small, deterministic)
+// ---------------------------------------------------------------------------
+
+const STOPWORDS: &[&str] = &[
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being", "of",
+    "in", "on", "at", "to", "from", "by", "for", "with", "and", "or", "it",
+    "its", "this", "that", "these", "those", "as", "has", "have", "had",
+    "does", "do", "did", "but", "if", "then", "than", "so", "such", "there",
+    "here", "what", "which", "who", "whom", "when", "where", "why", "how",
+    "all", "any", "both", "each", "into", "about", "over", "under", "again",
+    "he", "she", "they", "them", "his", "her", "their", "we", "you", "your",
+    "i", "me", "my", "am", "will", "would", "can", "could", "should", "shall",
+    "may", "might", "must", "also", "just", "very", "per", "via",
+];
+
+const ZH_STOP: &[char] = &['的', '了', '在', '是', '于', '该', '和', '与', '为'];
+
+/// Strong negators: counted for asymmetry AND open the flip window.
+const NEG_STRONG: &[&str] = &[
+    "not", "never", "cannot", "cant", "dont", "doesnt", "didnt", "isnt",
+    "wasnt", "arent", "werent", "hasnt", "havent", "hadnt", "wont",
+    "couldnt", "wouldnt", "shouldnt", "without", "none", "neither", "nor",
+];
+
+/// Weak negators: open the flip window only (not counted for asymmetry).
+const NEG_WEAK: &[&str] = &["no", "rather", "instead", "unable"];
+
+// Polarity groups: 0 = tx status, 1 = up/down direction, 2 = win/lose,
+// 3 = leading yes/no. Bit 1 = positive asserted, bit 2 = negative asserted.
+const NGROUPS: usize = 4;
+const G_STATUS: usize = 0;
+const G_UPDOWN: usize = 1;
+const G_WINLOSE: usize = 2;
+const G_YESNO: usize = 3;
+
+const STATUS_POS: &[&str] = &[
+    "succeed", "succeeds", "succeeded", "succeeding", "success", "successful",
+    "successfully", "confirmed", "executed", "completed", "mined", "included",
+    "landed", "found", "exists", "exist",
+];
+const STATUS_NEG: &[&str] = &[
+    "fail", "fails", "failed", "failing", "failure", "unsuccessful",
+    "unsuccessfully", "revert", "reverts", "reverted", "reverting",
+    "rejected", "invalid",
+];
+const UPDOWN_POS: &[&str] = &[
+    "increase", "increases", "increased", "increasing", "rise", "rises",
+    "rose", "risen", "rising", "climb", "climbs", "climbed", "climbing",
+    "gain", "gains", "gained", "surge", "surged", "jump", "jumps", "jumped",
+    "rally", "rallied", "grew", "grow", "grows", "growing", "up", "higher",
+    "appreciated",
+];
+const UPDOWN_NEG: &[&str] = &[
+    "decrease", "decreases", "decreased", "decreasing", "fall", "falls",
+    "fell", "fallen", "falling", "drop", "drops", "dropped", "dropping",
+    "decline", "declines", "declined", "declining", "dip", "dips", "dipped",
+    "plunge", "plunged", "sank", "sink", "slumped", "slid", "down", "lower",
+    "depreciated", "shrank",
+];
+const WINLOSE_POS: &[&str] = &["won", "win", "wins", "winning", "victory", "victorious", "beat"];
+const WINLOSE_NEG: &[&str] = &["lost", "lose", "loses", "losing"];
+
+/// Chinese polarity substrings: (pattern, group, positive).
+const ZH_POLARITY: &[(&str, usize, bool)] = &[
+    ("成功", G_STATUS, true),
+    ("上链", G_STATUS, true),
+    ("失败", G_STATUS, false),
+    ("失敗", G_STATUS, false),
+    ("回滚", G_STATUS, false),
+    ("上涨", G_UPDOWN, true),
+    ("上漲", G_UPDOWN, true),
+    ("上升", G_UPDOWN, true),
+    ("下跌", G_UPDOWN, false),
+    ("下降", G_UPDOWN, false),
+];
+const ZH_NEGATORS: &[char] = &['未', '没', '沒', '不', '无', '無', '别', '別'];
+
+fn in_list(list: &[&str], w: &str) -> bool {
+    list.iter().any(|x| *x == w)
+}
+
+fn polarity_word(w: &str) -> Option<(usize, bool)> {
+    if in_list(STATUS_POS, w) {
+        Some((G_STATUS, true))
+    } else if in_list(STATUS_NEG, w) {
+        Some((G_STATUS, false))
+    } else if in_list(UPDOWN_POS, w) {
+        Some((G_UPDOWN, true))
+    } else if in_list(UPDOWN_NEG, w) {
+        Some((G_UPDOWN, false))
+    } else if in_list(WINLOSE_POS, w) {
+        Some((G_WINLOSE, true))
+    } else if in_list(WINLOSE_NEG, w) {
+        Some((G_WINLOSE, false))
+    } else {
+        None
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Typed facts
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq)]
 enum Fact {
-    /// 0x-prefixed hex, lowercased. len == 66 → tx hash, len == 42 → address,
-    /// anything else → other hex blob (topics, calldata fragments, ...).
+    /// 0x-prefixed hex, lowercased. len == 66 → tx hash, len == 42 → address.
     Hex(String),
-    /// Integer, normalized digit string (commas stripped, leading zeros
-    /// stripped). Kept as a string so 78-digit uint256 values compare exactly.
+    /// Integer, normalized digit string (commas / leading zeros stripped).
     Int(String),
     /// Number with a decimal point; compared with tiny relative tolerance.
     Dec(f64),
-    /// Transaction status: true = success group, false = failed/reverted group.
+    /// Transaction status after negation flipping: true = success group.
     Status(bool),
 }
 
@@ -105,9 +220,8 @@ impl Fact {
         }
     }
 
-    /// Anti-gaming penalty units for a fact present in the answer but absent
-    /// from the ground truth. Small numbers are near-free supporting detail;
-    /// contradicting hex values and big integers are what value-dumping needs.
+    /// Anti-gaming penalty units for a fact asserted in the answer but absent
+    /// from the ground truth.
     fn extra_units(&self) -> f32 {
         match self {
             Fact::Hex(_) => 1.0,
@@ -115,10 +229,10 @@ impl Fact {
                 if s.len() >= 10 {
                     1.0
                 } else {
-                    0.25
+                    0.4
                 }
             }
-            Fact::Dec(_) => 0.25,
+            Fact::Dec(_) => 0.3,
             Fact::Status(_) => 0.0, // handled by the contradiction penalty
         }
     }
@@ -140,7 +254,7 @@ fn num_eq(a: f64, b: f64) -> bool {
     (a - b).abs() <= 1e-6 * scale
 }
 
-/// Does ground-truth fact `gt` count as matched by miner fact `ma`?
+/// Exact fact match.
 fn facts_match(gt: &Fact, ma: &Fact) -> bool {
     match (gt, ma) {
         (Fact::Hex(a), Fact::Hex(b)) => a == b,
@@ -154,38 +268,128 @@ fn facts_match(gt: &Fact, ma: &Fact) -> bool {
     }
 }
 
+/// Partial credit in [0,1] for a ground-truth fact against all answer facts.
+/// Hex prefix (>=10 hex chars, one a prefix of the other) earns 0.75 —
+/// handles truncated hash/address display.
+fn match_credit(gt: &Fact, ma_facts: &[Fact]) -> f32 {
+    let mut best = 0.0f32;
+    for mf in ma_facts {
+        if facts_match(gt, mf) {
+            return 1.0;
+        }
+        if let (Fact::Hex(a), Fact::Hex(b)) = (gt, mf) {
+            let (short, long) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+            if short.len() >= 12 && long.starts_with(short.as_str()) && best < 0.75 {
+                best = 0.75;
+            }
+        }
+    }
+    best
+}
+
+/// Near-miss digits: same-length strings differing in at most 2 positions
+/// (block off by one, wei last digit wrong), or a one-digit append/prepend
+/// variant (847 vs 8470, 251 vs 3251) — an actively wrong number.
+fn digits_near_miss(a: &str, b: &str) -> bool {
+    if a == b {
+        return false;
+    }
+    if a.len() == b.len() && a.len() >= 4 {
+        let mut diff = 0u32;
+        for (ca, cb) in a.bytes().zip(b.bytes()) {
+            if ca != cb {
+                diff += 1;
+                if diff > 2 {
+                    return false;
+                }
+            }
+        }
+        return diff >= 1;
+    }
+    let (short, long) = if a.len() < b.len() { (a, b) } else { (b, a) };
+    short.len() >= 3
+        && long.len() == short.len() + 1
+        && (long.starts_with(short) || long.ends_with(short))
+}
+
+/// Same-length hex values sharing a >=10-char prefix but differing → corrupted
+/// hash/address assertion.
+fn hex_near_miss(a: &str, b: &str) -> bool {
+    if a.len() != b.len() || a.len() < 40 || a == b {
+        return false;
+    }
+    let pa = &a.as_bytes()[..12.min(a.len())];
+    let pb = &b.as_bytes()[..12.min(b.len())];
+    pa == pb
+}
+
+// ---------------------------------------------------------------------------
+// Lexer / analyzer
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq)]
+enum Kind {
+    Word,
+    Num,
+    Hex,
+    Cjk,
+}
+
+struct Tok {
+    text: String,
+    kind: Kind,
+    negated: bool,
+    /// Original text had a leading uppercase letter (proper-noun heuristic).
+    proper: bool,
+}
+
+struct Analysis {
+    facts: Vec<Fact>,
+    toks: Vec<Tok>,
+    pol: [u8; NGROUPS], // bit 1 = positive asserted, bit 2 = negative asserted
+    neg_strong: u32,
+    from_addr: Option<String>,
+    to_addr: Option<String>,
+}
+
 fn is_cjk_or_symbol(c: char) -> bool {
-    // CJK / Hangul / Kana / fullwidth / emoji: treat each char as its own
-    // token so non-space-delimited languages still produce overlap signal.
     (c as u32) >= 0x2E80 && !c.is_whitespace()
 }
 
-fn classify_status(word: &str) -> Option<bool> {
-    // Order matters: "unsuccessful" must classify as failure.
-    if word.starts_with("unsuccess") {
-        Some(false)
-    } else if word.starts_with("success") || word.starts_with("succeed") {
-        Some(true)
-    } else if word.starts_with("fail") || word.starts_with("revert") {
-        Some(false)
-    } else {
-        None
-    }
-}
-
-/// Lex a text into (typed facts, similarity tokens).
-///
-/// Similarity tokens are every lexeme (words, numbers, hex strings) lowercased,
-/// used for the word-overlap component.
-fn extract(text: &str) -> (Vec<Fact>, Vec<String>) {
+/// Full analysis pass: typed facts, similarity tokens with negation flags,
+/// polarity groups (with negation flipping), from/to address orientation.
+fn analyze(text: &str) -> Analysis {
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len();
     let mut facts: Vec<Fact> = Vec::new();
-    let mut sim: Vec<String> = Vec::new();
-    let mut i = 0usize;
+    let mut toks: Vec<Tok> = Vec::new();
+    let mut pol = [0u8; NGROUPS];
+    let mut neg_strong = 0u32;
+    let mut from_addr: Option<String> = None;
+    let mut to_addr: Option<String> = None;
 
+    // Negation windows: `neg_active` counts remaining CONTENT tokens a
+    // negator flips polarity words over (3); `flag_budget` marks only the
+    // FIRST content token after a negator as lexically negated ("not Sydney")
+    // so collateral nouns further along don't get falsely flagged.
+    // Stopwords / numbers / hex do not consume either window.
+    let mut neg_active = 0i32;
+    let mut flag_budget = 0i32;
+    // from/to orientation: which marker was last seen and how many tokens ago.
+    let mut marker: Option<(bool, u32)> = None; // (is_from, tokens_since)
+    let mut word_index = 0usize; // index among Word toks (for leading yes/no)
+
+    let mut i = 0usize;
     while i < n {
         let c = chars[i];
+
+        // Sentence/clause punctuation closes any open negation scope.
+        if c == '.' || c == ',' || c == ';' || c == '!' || c == '?' || c == ':' {
+            neg_active = 0;
+            flag_budget = 0;
+            i += 1;
+            continue;
+        }
 
         // 0x-prefixed hex token
         if c == '0'
@@ -198,8 +402,24 @@ fn extract(text: &str) -> (Vec<Fact>, Vec<String>) {
                 j += 1;
             }
             let tok: String = chars[i..j].iter().collect::<String>().to_ascii_lowercase();
-            sim.push(tok.clone());
-            facts.push(Fact::Hex(tok));
+            if tok.len() == 42 {
+                if let Some((is_from, dist)) = marker {
+                    if dist <= 3 {
+                        if is_from {
+                            if from_addr.is_none() {
+                                from_addr = Some(tok.clone());
+                            }
+                        } else if to_addr.is_none() {
+                            to_addr = Some(tok.clone());
+                        }
+                    }
+                }
+            }
+            if let Some((f, d)) = marker {
+                marker = Some((f, d + 1));
+            }
+            facts.push(Fact::Hex(tok.clone()));
+            toks.push(Tok { text: tok, kind: Kind::Hex, negated: false, proper: false });
             i = j;
             continue;
         }
@@ -229,12 +449,15 @@ fn extract(text: &str) -> (Vec<Fact>, Vec<String>) {
                 if let Ok(v) = raw.parse::<f64>() {
                     facts.push(Fact::Dec(v));
                 }
-                sim.push(raw.clone());
+                toks.push(Tok { text: raw, kind: Kind::Num, negated: false, proper: false });
             } else {
                 let trimmed = raw.trim_start_matches('0');
                 let norm = if trimmed.is_empty() { "0" } else { trimmed };
                 facts.push(Fact::Int(norm.to_string()));
-                sim.push(norm.to_string());
+                toks.push(Tok { text: norm.to_string(), kind: Kind::Num, negated: false, proper: false });
+            }
+            if let Some((f, d)) = marker {
+                marker = Some((f, d + 1));
             }
             i = j;
             continue;
@@ -242,22 +465,104 @@ fn extract(text: &str) -> (Vec<Fact>, Vec<String>) {
 
         // CJK / emoji: one char = one similarity token
         if is_cjk_or_symbol(c) {
-            sim.push(c.to_string());
+            toks.push(Tok { text: c.to_string(), kind: Kind::Cjk, negated: false, proper: false });
             i += 1;
             continue;
         }
 
-        // Alphabetic word (Latin, Cyrillic, ... — below the CJK ranges)
+        // Alphabetic word (Latin, Cyrillic, ...). Contractions merge across
+        // an apostrophe: "didn't" -> "didnt"; possessive "'s" is dropped.
         if c.is_alphabetic() {
+            let prop = c.is_uppercase();
             let mut j = i;
             while j < n && chars[j].is_alphabetic() && !is_cjk_or_symbol(chars[j]) {
                 j += 1;
             }
-            let word: String = chars[i..j].iter().collect::<String>().to_lowercase();
-            if let Some(s) = classify_status(&word) {
-                facts.push(Fact::Status(s));
+            let mut word: String = chars[i..j].iter().collect::<String>().to_lowercase();
+            if j + 1 < n && (chars[j] == '\'' || chars[j] == '\u{2019}') {
+                let nxt = chars[j + 1].to_ascii_lowercase();
+                let boundary = j + 2 >= n || !chars[j + 2].is_alphabetic();
+                if nxt == 't' && boundary {
+                    word.push('t');
+                    j += 2;
+                } else if nxt == 's' && boundary {
+                    j += 2; // possessive — drop
+                }
             }
-            sim.push(word);
+
+            let is_first_word = word_index == 0;
+            word_index += 1;
+
+            // Leading yes/no interjection → yes/no polarity group.
+            if is_first_word && (word == "yes" || word == "no") {
+                if word == "yes" {
+                    pol[G_YESNO] |= 1;
+                } else {
+                    pol[G_YESNO] |= 2;
+                    // "No," / "No —" is an interjection only; a bare leading
+                    // "no" ("No transaction was found") also negates.
+                    let mut k = j;
+                    while k < n && chars[k] == ' ' {
+                        k += 1;
+                    }
+                    let interjection = k < n
+                        && (chars[k] == ',' || chars[k] == '-' || chars[k] == '\u{2014}');
+                    if !interjection {
+                        neg_active = 3;
+                        flag_budget = 1;
+                    }
+                }
+                toks.push(Tok { text: word, kind: Kind::Word, negated: false, proper: prop });
+                i = j;
+                continue;
+            }
+
+            let strong_neg = in_list(NEG_STRONG, &word);
+            let weak_neg = in_list(NEG_WEAK, &word);
+            if strong_neg || weak_neg {
+                if strong_neg {
+                    neg_strong += 1;
+                }
+                neg_active = 3;
+                flag_budget = 1;
+                toks.push(Tok { text: word, kind: Kind::Word, negated: false, proper: prop });
+                if let Some((f, d)) = marker {
+                    marker = Some((f, d + 1));
+                }
+                i = j;
+                continue;
+            }
+
+            // from/to orientation markers
+            if word == "from" || word == "sender" {
+                marker = Some((true, 0));
+            } else if word == "to" || word == "recipient" || word == "receiver" {
+                marker = Some((false, 0));
+            } else if let Some((f, d)) = marker {
+                marker = Some((f, d + 1));
+            }
+
+            let flipped = neg_active > 0;
+            if let Some((g, positive)) = polarity_word(&word) {
+                let effective = positive != flipped;
+                pol[g] |= if effective { 1 } else { 2 };
+                if g == G_STATUS {
+                    facts.push(Fact::Status(effective));
+                }
+            }
+
+            let stop = in_list(STOPWORDS, &word);
+            let flag = flag_budget > 0 && !stop;
+            toks.push(Tok { text: word, kind: Kind::Word, negated: flag, proper: prop });
+            if !stop {
+                // content words consume both negation windows
+                if neg_active > 0 {
+                    neg_active -= 1;
+                }
+                if flag_budget > 0 {
+                    flag_budget -= 1;
+                }
+            }
             i = j;
             continue;
         }
@@ -265,25 +570,157 @@ fn extract(text: &str) -> (Vec<Fact>, Vec<String>) {
         i += 1;
     }
 
+    // Chinese polarity: substring scan with a 2-char negator look-behind.
+    let full: String = chars.iter().collect::<String>();
+    for (pat, g, positive) in ZH_POLARITY {
+        let mut start = 0usize;
+        while let Some(off) = full[start..].find(pat) {
+            let abs = start + off;
+            let prefix: Vec<char> = full[..abs].chars().rev().take(4).collect();
+            let flipped = prefix.iter().any(|c| ZH_NEGATORS.contains(c));
+            let effective = *positive != flipped;
+            pol[*g] |= if effective { 1 } else { 2 };
+            if *g == G_STATUS {
+                facts.push(Fact::Status(effective));
+            }
+            start = abs + pat.len();
+        }
+    }
+
     // Deterministic dedup of facts by content key (Vec-based, no hash maps).
     facts.sort_by(|a, b| a.key().cmp(&b.key()));
     facts.dedup_by(|a, b| a.key() == b.key());
 
-    (facts, sim)
+    Analysis { facts, toks, pol, neg_strong, from_addr, to_addr }
 }
 
 // ---------------------------------------------------------------------------
-// Similarity + scoring
+// Text similarity: weighted unigram F1 + bigram Dice
 // ---------------------------------------------------------------------------
 
-/// Dice coefficient over sorted token multisets (deterministic two-pointer
-/// merge; multiplicity-aware).
-fn dice_similarity(a: &mut Vec<String>, b: &mut Vec<String>) -> f32 {
-    if a.is_empty() || b.is_empty() {
+/// Canonical form for matching: strip one common inflection suffix (when at
+/// least 4 chars remain), then keep a 5-char prefix — so "succeeded" and
+/// "succeed" both canonicalize to "succe", "clearing" and "clears" to
+/// "clear". Deterministic, applied identically to both texts.
+fn canon(t: &Tok) -> String {
+    if t.kind != Kind::Word {
+        return t.text.clone();
+    }
+    let w = t.text.as_str();
+    let mut stem = w;
+    for suf in ["ing", "ed", "ly", "es", "s"] {
+        if let Some(rest) = w.strip_suffix(suf) {
+            if rest.chars().count() >= 4 {
+                stem = rest;
+                break;
+            }
+        }
+    }
+    if stem.chars().count() > 5 {
+        stem.chars().take(5).collect()
+    } else {
+        stem.to_string()
+    }
+}
+
+fn tok_weight(t: &Tok) -> f32 {
+    match t.kind {
+        Kind::Hex => 2.5,
+        Kind::Num => {
+            if t.text.len() >= 10 {
+                2.5
+            } else {
+                1.8
+            }
+        }
+        Kind::Cjk => {
+            let c = t.text.chars().next().unwrap_or(' ');
+            if ZH_STOP.contains(&c) {
+                0.25
+            } else {
+                1.0
+            }
+        }
+        Kind::Word => {
+            if in_list(STOPWORDS, &t.text)
+                || in_list(NEG_STRONG, &t.text)
+                || in_list(NEG_WEAK, &t.text)
+            {
+                0.25
+            } else {
+                1.0
+            }
+        }
+    }
+}
+
+/// Weighted multiset intersection over (negation-flag, canonical-token) keys.
+fn weighted_f1(gt: &[Tok], ma: &[Tok]) -> f32 {
+    if gt.is_empty() || ma.is_empty() {
         return 0.0;
     }
-    a.sort();
-    b.sort();
+    let keyed = |ts: &[Tok], skip_negated: bool| -> Vec<(String, f32)> {
+        let mut v: Vec<(String, f32)> = ts
+            .iter()
+            .filter(|t| !(skip_negated && t.negated))
+            .map(|t| {
+                (
+                    format!("{}|{}", if t.negated { 'n' } else { 'p' }, canon(t)),
+                    tok_weight(t),
+                )
+            })
+            .collect();
+        v.sort_by(|a, b| a.0.cmp(&b.0));
+        v
+    };
+    // Ground-truth tokens under negation are disclaimed ("not Sydney") — an
+    // answer is not required to repeat them, so they leave the reference set.
+    let a = keyed(gt, true);
+    let b = keyed(ma, false);
+    let total_a: f32 = a.iter().map(|x| x.1).sum();
+    let total_b: f32 = b.iter().map(|x| x.1).sum();
+    if total_a <= 0.0 || total_b <= 0.0 {
+        return 0.0;
+    }
+    let (mut i, mut j, mut matched) = (0usize, 0usize, 0.0f32);
+    while i < a.len() && j < b.len() {
+        match a[i].0.cmp(&b[j].0) {
+            core::cmp::Ordering::Equal => {
+                matched += a[i].1;
+                i += 1;
+                j += 1;
+            }
+            core::cmp::Ordering::Less => i += 1,
+            core::cmp::Ordering::Greater => j += 1,
+        }
+    }
+    let p = matched / total_b;
+    let r = matched / total_a;
+    // Recall-tilted F-beta (beta^2 = 1.5): a paraphrase that covers the
+    // ground truth but adds phrasing of its own loses less than one that
+    // omits content. Value dumps are handled by the precision penalty.
+    const B2: f32 = 2.0;
+    if p <= 0.0 || r <= 0.0 {
+        0.0
+    } else {
+        (1.0 + B2) * p * r / (B2 * p + r)
+    }
+}
+
+/// Dice coefficient over adjacent-token bigrams (word-order signal).
+fn bigram_dice(gt: &[Tok], ma: &[Tok]) -> f32 {
+    if gt.len() < 2 || ma.len() < 2 {
+        return weighted_f1(gt, ma); // degenerate: fall back to unigram signal
+    }
+    let grams = |ts: &[Tok]| -> Vec<String> {
+        let mut v: Vec<String> = (0..ts.len() - 1)
+            .map(|k| format!("{}\u{1}{}", canon(&ts[k]), canon(&ts[k + 1])))
+            .collect();
+        v.sort();
+        v
+    };
+    let a = grams(gt);
+    let b = grams(ma);
     let (mut i, mut j, mut common) = (0usize, 0usize, 0usize);
     while i < a.len() && j < b.len() {
         match a[i].cmp(&b[j]) {
@@ -299,7 +736,75 @@ fn dice_similarity(a: &mut Vec<String>, b: &mut Vec<String>) -> f32 {
     (2.0 * common as f32) / ((a.len() + b.len()) as f32)
 }
 
-fn score(ground_truth: &str, miner_answer: &str) -> f32 {
+fn text_similarity(gt: &[Tok], ma: &[Tok]) -> f32 {
+    let f1 = weighted_f1(gt, ma);
+    let bg = bigram_dice(gt, ma);
+    0.75 * f1 + 0.25 * bg
+}
+
+// ---------------------------------------------------------------------------
+// Scoring
+// ---------------------------------------------------------------------------
+
+/// Smooth monotone contrast curve: fixes s=0, 0.5, 1; pushes >0.5 toward 1
+/// and <0.5 toward 0. Never reorders scores.
+fn contrast(s: f32) -> f32 {
+    let s = s.clamp(0.0, 1.0);
+    let a = s * s;
+    let b = (1.0 - s) * (1.0 - s);
+    if a + b <= 0.0 {
+        return 0.0;
+    }
+    a / (a + b)
+}
+
+/// Canon set of content Word tokens (sorted, deduped) for membership tests.
+fn canon_set(toks: &[Tok]) -> Vec<String> {
+    let mut v: Vec<String> = toks
+        .iter()
+        .filter(|t| t.kind == Kind::Word)
+        .map(canon)
+        .collect();
+    v.sort();
+    v.dedup();
+    v
+}
+
+fn set_has(set: &[String], k: &str) -> bool {
+    set.binary_search_by(|x| x.as_str().cmp(k)).is_ok()
+}
+
+/// Per-canon affirm/deny profile of the content words in a text:
+/// (canon, affirmed_anywhere, negated_anywhere). Sorted by canon.
+fn polarity_profile(toks: &[Tok]) -> Vec<(String, bool, bool)> {
+    let mut v: Vec<(String, bool, bool)> = Vec::new();
+    for t in toks {
+        if t.kind != Kind::Word {
+            continue;
+        }
+        if t.text.len() < 3
+            || in_list(STOPWORDS, &t.text)
+            || in_list(NEG_STRONG, &t.text)
+            || in_list(NEG_WEAK, &t.text)
+        {
+            continue;
+        }
+        let c = canon(t);
+        match v.binary_search_by(|x| x.0.cmp(&c)) {
+            Ok(idx) => {
+                if t.negated {
+                    v[idx].2 = true;
+                } else {
+                    v[idx].1 = true;
+                }
+            }
+            Err(idx) => v.insert(idx, (c, !t.negated, t.negated)),
+        }
+    }
+    v
+}
+
+fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     let ma_trim = miner_answer.trim();
     // HARD RULE: empty / whitespace-only answer → exactly 0.0
     if ma_trim.is_empty() {
@@ -315,57 +820,214 @@ fn score(ground_truth: &str, miner_answer: &str) -> f32 {
         return 0.0;
     }
 
-    let (gt_facts, mut gt_sim) = extract(gt_trim);
-    let (ma_facts, mut ma_sim) = extract(ma_trim);
+    let q = analyze(question.trim());
+    let gt = analyze(gt_trim);
+    let ma = analyze(ma_trim);
 
-    let text_sim = dice_similarity(&mut gt_sim, &mut ma_sim);
+    let text = text_similarity(&gt.toks, &ma.toks);
 
-    let gt_weight_total: f32 = gt_facts.iter().map(|f| f.weight()).sum();
+    // Question-given facts are context the answer need not repeat: a hash or
+    // block number already present in the question carries little answer
+    // information, so its ground-truth weight is discounted. Status facts are
+    // never discounted (a question mentioning "succeed" is a query, not an
+    // assertion).
+    let eff_weight = |gf: &Fact| -> f32 {
+        let w = gf.weight();
+        match gf {
+            Fact::Status(_) => w,
+            _ => {
+                if q.facts.iter().any(|qf| facts_match(gf, qf)) {
+                    w * 0.15
+                } else {
+                    w
+                }
+            }
+        }
+    };
 
-    // Fallback: ground truth has no extractable typed facts → pure text
-    // similarity (capped so only a verbatim match reaches 1.0).
-    if gt_weight_total <= 0.0 {
-        return text_sim.clamp(0.0, 0.995);
+    let gt_weight_total: f32 = gt.facts.iter().map(&eff_weight).sum();
+    let gt_weight_raw: f32 = gt.facts.iter().map(|f| f.weight()).sum();
+
+    // Fact/text blend: fact-rich ground truths are decided by fact recall,
+    // fact-free ones by text similarity (smooth ramp, never a hard switch).
+    // Alpha reflects how fact-like the ground truth is (undiscounted), while
+    // recall itself is measured over question-discounted weights.
+    let alpha = gt_weight_raw / (gt_weight_raw + 3.0);
+    let mut recall = 0.0f32;
+    if gt_weight_total > 0.0 {
+        let mut matched_weight = 0.0f32;
+        for gf in &gt.facts {
+            matched_weight += match_credit(gf, &ma.facts) * eff_weight(gf);
+        }
+        recall = matched_weight / gt_weight_total;
     }
+    let raw = alpha * recall + (1.0 - alpha) * text;
 
-    // Weighted recall of ground-truth facts found in the miner answer.
-    let mut matched_weight = 0.0f32;
-    for gf in &gt_facts {
-        if ma_facts.iter().any(|mf| facts_match(gf, mf)) {
-            matched_weight += gf.weight();
+    // --- Contradiction penalty (multiplicative — crushes high-recall answers
+    // that wrap the right numbers in the wrong conclusion) ------------------
+    let mut p_contra = 0.0f32;
+    for g in 0..NGROUPS {
+        let g_pos = gt.pol[g] & 1 != 0;
+        let g_neg = gt.pol[g] & 2 != 0;
+        let m_pos = ma.pol[g] & 1 != 0;
+        let m_neg = ma.pol[g] & 2 != 0;
+        // Exclusive opposite assertion only.
+        let contradiction = (g_pos && !g_neg && m_neg && !m_pos)
+            || (g_neg && !g_pos && m_pos && !m_neg);
+        if contradiction {
+            p_contra += match g {
+                G_STATUS => 0.65,
+                G_YESNO => 0.55,
+                G_WINLOSE => 0.68,
+                _ => 0.65,
+            };
         }
     }
-    let recall = matched_weight / gt_weight_total;
 
-    // Anti-gaming precision penalty: distinct hex values / big integers in the
-    // answer that contradict (are absent from) the ground truth. A small free
-    // allowance keeps normal supporting detail unpenalized.
+    // Affirm/deny clash on content words: the answer denies something the
+    // ground truth asserts ("was never included" vs "included in block N"),
+    // or affirms something the ground truth explicitly negates ("is Sydney"
+    // vs "not Sydney").
+    {
+        let gp = polarity_profile(&gt.toks);
+        let mp = polarity_profile(&ma.toks);
+        let is_proper = |toks: &[Tok], c: &str| -> bool {
+            toks.iter().any(|t| t.kind == Kind::Word && t.proper && canon(t) == c)
+        };
+        let mut p_clash = 0.0f32;
+        for (c, ga, gn) in &gp {
+            if let Ok(idx) = mp.binary_search_by(|x| x.0.cmp(c)) {
+                let (_, ma_aff, ma_neg) = &mp[idx];
+                let deny = *ga && !*gn && *ma_neg && !*ma_aff;
+                let affirm_denied = *gn && !*ga && *ma_aff && !*ma_neg;
+                if deny || affirm_denied {
+                    // A named entity explicitly negated on one side and
+                    // asserted on the other is decisive; generic words get a
+                    // mild nudge (polarity groups carry the strong signal).
+                    p_clash += if is_proper(&gt.toks, c) && is_proper(&ma.toks, c) {
+                        0.35
+                    } else {
+                        0.12
+                    };
+                }
+            }
+        }
+        p_contra += p_clash.min(0.60);
+    }
+
+    // Proper-noun substitution: the answer replaces a named entity from the
+    // ground truth with a novel one in the same lexical slot
+    // ("Paris is the capital" -> "Marseille is the capital").
+    {
+        let gt_set = canon_set(&gt.toks);
+        let ma_set = canon_set(&ma.toks);
+        let q_set = canon_set(&q.toks);
+        let slot = |toks: &[Tok], k: usize| -> (String, String) {
+            let prev = if k == 0 { "^".to_string() } else { canon(&toks[k - 1]) };
+            let next = if k + 1 >= toks.len() { "$".to_string() } else { canon(&toks[k + 1]) };
+            (prev, next)
+        };
+        let candidate = |t: &Tok, own: &[String], other: &[String]| -> bool {
+            t.kind == Kind::Word
+                && t.proper
+                && t.text.len() >= 3
+                && !in_list(STOPWORDS, &t.text)
+                && !in_list(NEG_STRONG, &t.text)
+                && !in_list(NEG_WEAK, &t.text)
+                && polarity_word(&t.text).is_none()
+                && set_has(own, &canon(t))
+                && !set_has(other, &canon(t))
+                && !set_has(&q_set, &canon(t))
+        };
+        let mut fired = false;
+        'outer: for (gi, gtok) in gt.toks.iter().enumerate() {
+            if !candidate(gtok, &gt_set, &ma_set) {
+                continue;
+            }
+            let (gp, gn) = slot(&gt.toks, gi);
+            for (mi, mtok) in ma.toks.iter().enumerate() {
+                if !candidate(mtok, &ma_set, &gt_set) {
+                    continue;
+                }
+                let (mp, mn) = slot(&ma.toks, mi);
+                let real_side = (gp == mp && gp != "^") || (gn == mn && gn != "$");
+                if gp == mp && gn == mn && real_side {
+                    fired = true;
+                    break 'outer;
+                }
+            }
+        }
+        if fired {
+            p_contra += 0.55;
+        }
+    }
+
+    // Swapped from/to orientation: same two addresses, reversed direction.
+    if let (Some(gf), Some(gt_to), Some(mf), Some(mt)) =
+        (&gt.from_addr, &gt.to_addr, &ma.from_addr, &ma.to_addr)
+    {
+        if gf != gt_to && mf == gt_to && mt == gf {
+            p_contra += 0.40;
+        }
+    }
+
+    // Near-miss numerics / corrupted hex: actively wrong assertions.
+    let mut near_int = 0.0f32;
+    let mut near_hex = 0.0f32;
+    for gf in &gt.facts {
+        if match_credit(gf, &ma.facts) >= 1.0 {
+            continue;
+        }
+        match gf {
+            Fact::Int(gs) => {
+                let hit = ma.facts.iter().any(|mf| {
+                    matches!(mf, Fact::Int(ms)
+                        if digits_near_miss(gs, ms)
+                        && !gt.facts.iter().any(|g2| facts_match(g2, mf)))
+                });
+                if hit {
+                    near_int += if gs.len() >= 10 { 0.25 } else { 0.15 };
+                }
+            }
+            Fact::Hex(gs) => {
+                let hit = ma.facts.iter().any(|mf| {
+                    matches!(mf, Fact::Hex(ms)
+                        if hex_near_miss(gs, ms)
+                        && !gt.facts.iter().any(|g2| facts_match(g2, mf)))
+                });
+                if hit {
+                    near_hex += 0.15;
+                }
+            }
+            _ => {}
+        }
+    }
+    p_contra += near_int.min(0.40) + near_hex.min(0.30);
+
+    // Negation asymmetry: strong negators the answer adds over the ground
+    // truth (mild — the polarity groups carry the real contradiction signal).
+    // Skipped when the ground truth is itself a negative statement, where a
+    // correct answer legitimately negates too ("no transaction was found").
+    let gt_negative = gt.neg_strong > 0 || gt.pol.iter().any(|p| p & 2 != 0);
+    if !gt_negative {
+        let extra_neg = ma.neg_strong.saturating_sub(gt.neg_strong).min(2);
+        p_contra += 0.08 * extra_neg as f32;
+    }
+
+    let p_contra = p_contra.min(0.80);
+
+    // --- Anti-gaming precision penalty (value dumping) ---------------------
     let mut extra_units = 0.0f32;
-    for mf in &ma_facts {
-        if !gt_facts.iter().any(|gf| facts_match(gf, mf)) {
+    for mf in &ma.facts {
+        if !gt.facts.iter().any(|gf| facts_match(gf, mf)) {
             extra_units += mf.extra_units();
         }
     }
     let excess = (extra_units - 2.0).max(0.0);
-    let precision_penalty = 0.5 * excess / (excess + 6.0);
+    let p_prec = 0.7 * excess / (excess + 4.0);
 
-    // Status contradiction penalty: ground truth asserts one status, answer
-    // asserts the opposite.
-    let gt_status = gt_facts.iter().find_map(|f| match f {
-        Fact::Status(s) => Some(*s),
-        _ => None,
-    });
-    let mut status_penalty = 0.0f32;
-    if let Some(s) = gt_status {
-        let ma_has_correct = ma_facts.iter().any(|f| matches!(f, Fact::Status(x) if *x == s));
-        let ma_has_opposite = ma_facts.iter().any(|f| matches!(f, Fact::Status(x) if *x != s));
-        if ma_has_opposite {
-            status_penalty = if ma_has_correct { 0.05 } else { 0.15 };
-        }
-    }
-
-    let base = 0.78 * recall + 0.22 * text_sim;
-    (base - precision_penalty - status_penalty).clamp(0.0, 0.995)
+    let s = (raw * (1.0 - p_contra) - p_prec).clamp(0.0, 1.0);
+    contrast(s).clamp(0.0, 0.995)
 }
 
 // ---------------------------------------------------------------------------
@@ -374,20 +1036,22 @@ fn score(ground_truth: &str, miner_answer: &str) -> f32 {
 
 /// Rank a miner answer against the ground truth. Returns a score in [0,1].
 /// (ptr,len) pairs are UTF-8 strings in fixed order: question, ground_truth,
-/// miner_answer. The question is unused — ONCHAIN_TX_LOOKUP is deterministic
-/// and the ground truth alone defines correctness.
+/// miner_answer. The question is used only to discount ground-truth facts the
+/// question already gives away (a good answer need not echo the asked-about
+/// hash) — the ground truth alone still defines correctness.
 #[no_mangle]
 pub extern "C" fn rank_answer(
-    _q_ptr: i32,
-    _q_len: i32,
+    q_ptr: i32,
+    q_len: i32,
     gt_ptr: i32,
     gt_len: i32,
     ma_ptr: i32,
     ma_len: i32,
 ) -> f32 {
+    let question = unsafe { read_str(q_ptr, q_len) };
     let ground_truth = unsafe { read_str(gt_ptr, gt_len) };
     let miner_answer = unsafe { read_str(ma_ptr, ma_len) };
-    let s = score(&ground_truth, &miner_answer);
+    let s = score(&question, &ground_truth, &miner_answer);
     if s.is_finite() {
         s.clamp(0.0, 1.0)
     } else {

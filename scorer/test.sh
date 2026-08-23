@@ -122,6 +122,34 @@ check "Chinese reworded-correct high"        "$s_zh_re"       "s >= 0.6"
 s_zh_bad=$(run "$Q" "$ZH_GT" "$EMOJI")
 check "Chinese gt vs emoji junk low"         "$s_zh_bad"      "s < $s_zh_re"
 
+# --- v2 regression cases: negation, yes/no, near-miss, question handling ----
+
+# Negation trap: right numbers wrapped in a negated conclusion must score low.
+NEG_TRAP="Transaction 0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 did not succeed and was never included in block 50343626; the transfer from 0x76F68ADF3D4eCFDd0725b1320fB25B6772754Ae2 to 0xecec48Ec5A7B7F7B96460b0F4E2B99cf0dB94Cb1 failed."
+s_negtrap=$(run "$Q" "$GT" "$NEG_TRAP")
+check "negation trap well below reworded"     "$s_negtrap"    "s <= $s_reword - 0.3"
+check "negation trap low"                     "$s_negtrap"    "s < 0.2"
+
+# Yes/No contradiction: gt answers Yes, miner answers No with same facts.
+YN_Q="Did transaction 0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 succeed?"
+YN_GT="Yes, it succeeded in block 50343626."
+s_yn_good=$(run "$YN_Q" "$YN_GT" "Yes — confirmed at block 50343626.")
+s_yn_bad=$(run "$YN_Q" "$YN_GT" "No, it did not succeed; it was dropped before block 50343626.")
+check "yes/no good answer high"               "$s_yn_good"    "s >= 0.6"
+check "yes/no contradiction crushed"          "$s_yn_bad"     "s < $s_yn_good - 0.3"
+
+# Terse correct answer that does not echo the asked-about hash still ranks
+# above a wrong-status answer.
+s_terse=$(run "$Q" "$GT" "It succeeded at block 50343626 with 171101 gas, total fee 9398486826272 wei.")
+# (Omits both addresses and the value — a partial answer, so mid-range is
+# correct; the guard is against v1-style crushing plus ordering vs wrong-status.)
+check "terse correct (no hash echo) mid+"     "$s_terse"      "s >= 0.3"
+check "terse correct > wrong status"          "$s_terse"      "s > $s_wstatus + 0.2"
+
+# Empty question must not trap and self-match must still be 1.0.
+s_noq=$(run "" "$GT" "$GT")
+check "empty question self-match == 1"        "$s_noq"        "s >= 0.99"
+
 # scores must vary (not constant)
 if [ "$s_self" != "$s_unrel" ] && [ "$s_reword" != "$s_unrel" ]; then
   echo "PASS  scores vary (self=$s_self reword=$s_reword unrelated=$s_unrel)"; PASS=$((PASS+1))
