@@ -3,7 +3,7 @@ kind: miner
 id: 8453
 slug: truvian-onchain-truth
 name: Truvian Exact On-Chain Truth Engine
-base_url: https://REPLACE-WITH-VPS-DOMAIN
+base_url: https://miner.truvian.xyz
 description: >
   Deterministic, exactly-verifiable on-chain answers for Base and Ethereum,
   read live from JSON-RPC at request time. ONCHAIN_TX_LOOKUP returns the full
