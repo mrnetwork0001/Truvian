@@ -41,6 +41,25 @@ make a good visual.)*
 
 ---
 
+## Post 4 — the gauntlet iteration story (draft; post after v3 submission, any verdict)
+
+> Two rejections, each one a lesson. Building a WASM judge for
+> @Telegraphprotoc's ONCHAIN_TX_LOOKUP intent:
+>
+> v1: lost on ordering (13/15 vs champion's 15/15).
+> v2: fixed ordering (15/15), beat the champion's margin (0.576 vs 0.557) —
+> then hit a gate that didn't exist at breakfast: agreement with the champion
+> on real traffic. Missed by 0.031.
+>
+> Along the way we benchmarked the incumbent with its own harness: on answers
+> containing every correct number but a negated conclusion ("did NOT
+> succeed…"), it ranks the wrong answer ABOVE the right one. Our scorer reads
+> the logic, not just the vocabulary: 0.995 vs 0.035 on the same trap.
+>
+> Fixture suite, comparison harness, and every iteration are public in the
+> repo. This is what "resistance to gaming" looks like in practice. v3 is in
+> the gauntlet.
+
 ### Cadence plan
 - Day of registration: post 2
 - Each hardening milestone (fallback RPCs, eval script submitted, latency work): short update
