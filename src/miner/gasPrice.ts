@@ -62,8 +62,10 @@ export async function handleGasPrice(input: GasPriceInput): Promise<GasPriceResu
     const chainLabel = CHAIN_LABEL[input.chain] ?? input.chain;
     const baseFee = block.baseFeePerGas ?? 0n;
     const gwei = (v: bigint) => `${formatGwei(v)} gwei (${v} wei)`;
+    // deterministic fee-level classification (thresholds in gwei)
+    const level = gasPrice <= 1_000_000_000n ? 'low' : gasPrice <= 50_000_000_000n ? 'normal' : 'high';
     const answer = [
-      `The current gas price on ${chainLabel} (chain id ${meta.chainId}) is ${gwei(gasPrice)} at block ${block.number}.`,
+      `The current gas price on ${chainLabel} (chain id ${meta.chainId}) is ${gwei(gasPrice)} at block ${block.number}, a ${level} transaction fee level.`,
       `The base fee per gas is ${gwei(baseFee)} and the suggested priority fee is ${gwei(maxPriorityFee)}, so a standard EIP-1559 transaction can use max fee ${gwei(baseFee * 2n + maxPriorityFee)}.`,
       `Recent priority fees over the last 5 blocks: 25th percentile ${formatGwei(median(0))} gwei, median ${formatGwei(median(1))} gwei, 75th percentile ${formatGwei(median(2))} gwei.`,
       meta.isOpStack ? `The L1 base fee observed by ${chainLabel} is ${gwei(l1BaseFee)}.` : '',
@@ -71,7 +73,8 @@ export async function handleGasPrice(input: GasPriceInput): Promise<GasPriceResu
 
     return {
       answer,
-      signal: 'gas-price',
+      // Full statement in the label_field — see txLookup.ts for why.
+      signal: answer,
       source: `${chainLabel} JSON-RPC eth_gasPrice + eth_feeHistory + latest block`,
       confidence: 0.99,
       chain: input.chain,

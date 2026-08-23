@@ -40,7 +40,12 @@ export interface TxLookupResult {
    * with concise exact-figure statements.
    */
   answer: string;
-  /** Short label for Telegraph signal_mapping.label_field */
+  /**
+   * Telegraph signal_mapping.label_field. Carries the FULL answer statement:
+   * the node translates miner responses to an internal standard built from
+   * the mapped fields, so the scored text must live here (the rank-1 miner's
+   * `signal` is its complete sentence — verified against its live API).
+   */
   signal: string;
   /** Provenance for signal_mapping.reason_field */
   source: string;

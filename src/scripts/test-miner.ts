@@ -61,6 +61,8 @@ async function main() {
   check('answer contains from/to addresses', tx.answer.includes(tx.from) && (tx.to === null || tx.answer.includes(tx.to)));
   check('answer contains exact total fee in wei', tx.answer.includes(`${tx.totalFeeWei} wei`));
   check('answer states status word', /succeeded|reverted/.test(tx.answer));
+  check('signal carries the full answer (scored via label_field)', tx.signal === tx.answer);
+  check('answer includes function selector when present', tx.inputData === '0x' || tx.answer.includes(tx.inputData.slice(0, 10)));
 
   // flexible input aliases
   const viaAlias = validateTxLookupInput({ chain: 'BASE', tx_hash: sampleHash });
@@ -99,6 +101,8 @@ async function main() {
   check('gas answer present and number-first', gas.answer.startsWith('The current gas price on Base'));
   check('gas answer contains gwei and wei forms', gas.answer.includes('gwei') && gas.answer.includes(`(${gas.gasPriceWei} wei)`));
   check('gas answer anchored to block', gas.answer.includes(`block ${gas.blockNumber}`));
+  check('gas signal carries the full answer', gas.signal === gas.answer);
+  check('gas answer states fee level', /(low|normal|high) transaction fee level/.test(gas.answer));
   const gasViaQuery = validateGasPriceInput({ query: 'what is the current gas price on ethereum mainnet?' });
   check('gas chain inferred from query', gasViaQuery.chain === 'ethereum');
 

@@ -94,18 +94,24 @@ export async function handleTxLookup(input: TxLookupInput): Promise<TxLookupResu
   const from = getAddress(receipt.from);
   const to = receipt.to ? getAddress(receipt.to) : null;
   const created = receipt.contractAddress ? getAddress(receipt.contractAddress) : null;
+  const selector = tx.input && tx.input.length >= 10 ? tx.input.slice(0, 10) : null;
   const answerParts = [
     `Transaction ${receipt.transactionHash.toLowerCase()} on ${chainLabel} (chain id ${meta.chainId}) ${statusWord} in block ${receipt.blockNumber}.`,
     to
-      ? `It was sent from ${from} to ${to} with a value of ${formatEther(tx.value)} ETH (${tx.value} wei).`
+      ? `It transferred ${formatEther(tx.value)} ETH (${tx.value} wei) from ${from} to the recipient ${to}${selector && selector !== '0x' ? `, invoking function selector ${selector}` : ''}.`
       : `It was sent from ${from} and created contract ${created} with a value of ${formatEther(tx.value)} ETH (${tx.value} wei).`,
     `Gas used was ${receipt.gasUsed} at an effective gas price of ${receipt.effectiveGasPrice} wei, for a total fee of ${formatEther(totalFee)} ETH (${totalFee} wei${l1Fee > 0n ? `, including ${l1Fee} wei L1 data fee` : ''}).`,
     `The transaction emitted ${receipt.logs.length} log${receipt.logs.length === 1 ? '' : 's'}${erc20Transfers.length > 0 ? ` including ${erc20Transfers.length} ERC-20 transfer${erc20Transfers.length === 1 ? '' : 's'}` : ''}.`,
   ];
+  const answer = answerParts.join(' ');
 
   return {
-    answer: answerParts.join(' '),
-    signal: statusWord,
+    answer,
+    // signal is our YAML signal_mapping.label_field — the node's "internal
+    // standard" translation is built from mapped fields, so this must carry
+    // the full factual statement (verified: the rank-1 miner's `signal` is
+    // its complete answer sentence, not a label).
+    signal: answer,
     source: `${chainLabel} JSON-RPC eth_getTransactionReceipt + eth_getTransactionByHash`,
     confidence: 0.99,
     chain: input.chain,
