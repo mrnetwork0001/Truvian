@@ -57,8 +57,16 @@ make a good visual.)*
 > the logic, not just the vocabulary: 0.995 vs 0.035 on the same trap.
 >
 > Fixture suite, comparison harness, and every iteration are public in the
-> repo. This is what "resistance to gaming" looks like in practice. v3 is in
-> the gauntlet.
+> repo. This is what "resistance to gaming" looks like in practice.
+>
+> v3 verdict: PROMOTED. 🏆 Truvian is now the live champion scorer for
+> ONCHAIN_TX_LOOKUP — ordering 15/15, margin 0.565 vs 0.557, real-traffic
+> agreement 0.645. Three submissions, two rejections, one belt. Every
+> gauntlet gate was measured locally before we cleared it — with the node's
+> own runtime, the champion's own binary, and live miners' real answers.
+
+*(Attach: dashboard screenshot of the ACTIVE/champion card + the two
+rejection cards above it — the arc is the story.)*
 
 ### Cadence plan
 - Day of registration: post 2
