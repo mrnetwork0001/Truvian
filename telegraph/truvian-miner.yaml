@@ -64,6 +64,7 @@ output_schema:
 
 endpoints:
   - path: /tx
+    external_path: /tx
     method: GET
     description: >
       Look up a transaction by hash (ONCHAIN_TX_LOOKUP). Params: hash (or
@@ -72,6 +73,7 @@ endpoints:
       exact total fee in wei including L1 data fee, and decoded ERC-20
       transfers.
   - path: /gas
+    external_path: /gas
     method: GET
     description: >
       Current gas prices for a chain (GAS_PRICE). Params: chain (default
