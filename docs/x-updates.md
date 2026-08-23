@@ -22,10 +22,22 @@ same day, tagged **@Telegraphprotoc**. This file logs drafts and what was posted
 *(Optionally attach a screenshot of the `test:miner` run — all-green checks
 make a good visual.)*
 
-## Post 2 — miner registered (draft, pending registration mechanics)
+## Post 2 — miner registered (draft, pending registration)
 
 > Truvian is registered and live on the @Telegraphprotoc leaderboard for
 > ONCHAIN_TX_LOOKUP + GAS_PRICE. [details after registration]
+
+## Post 3 — Track 2 scorer built (draft, ready once submitted)
+
+> Track 2 shipped: a WASM scoring module for ONCHAIN_TX_LOOKUP on
+> @Telegraphprotoc.
+>
+> The incumbent judge is generic text similarity. Ours extracts the on-chain
+> facts — tx hashes, addresses, exact uint256 wei values, status — and scores
+> factual correctness, with penalties for value-dump gaming.
+>
+> 110 KB, zero imports, 18/18 through Telegraph's own wazero harness.
+> Deterministic to the byte. May the best judge win.
 
 ---
 
