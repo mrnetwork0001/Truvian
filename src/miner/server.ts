@@ -18,17 +18,19 @@ export function buildServer() {
 
   app.get('/health', async () => ({ ok: true, minerId: MINER_ID }));
 
-  app.post('/intents/ONCHAIN_TX_LOOKUP', async (req, reply) => {
-    const input = validateTxLookupInput(req.body);
-    const result = await handleTxLookup(input);
-    return reply.send({ minerId: MINER_ID, intent: 'ONCHAIN_TX_LOOKUP', result });
-  });
+  // Primary Telegraph-facing endpoints (GET + query params, the shape used by
+  // the miners that actually score). The response body IS the payload — the
+  // `answer` field leads so text-based validator scoring sees the facts first.
+  app.get('/tx', async (req) => handleTxLookup(validateTxLookupInput(req.query)));
+  app.get('/gas', async (req) => handleGasPrice(validateGasPriceInput(req.query ?? {})));
 
-  app.post('/intents/GAS_PRICE', async (req, reply) => {
-    const input = validateGasPriceInput(req.body);
-    const result = await handleGasPrice(input);
-    return reply.send({ minerId: MINER_ID, intent: 'GAS_PRICE', result });
-  });
+  // POST equivalents for JSON-body callers
+  app.post('/tx', async (req) => handleTxLookup(validateTxLookupInput(req.body)));
+  app.post('/gas', async (req) => handleGasPrice(validateGasPriceInput(req.body ?? {})));
+
+  // Legacy intent-named routes (kept for local tooling)
+  app.post('/intents/ONCHAIN_TX_LOOKUP', async (req) => handleTxLookup(validateTxLookupInput(req.body)));
+  app.post('/intents/GAS_PRICE', async (req) => handleGasPrice(validateGasPriceInput(req.body ?? {})));
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof IntentError) {

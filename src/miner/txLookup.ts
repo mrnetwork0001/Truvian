@@ -2,7 +2,7 @@
  * ONCHAIN_TX_LOOKUP intent handler.
  * Pure (input) -> payload against live RPC; no Telegraph envelope knowledge.
  */
-import { getAddress, isHex } from 'viem';
+import { formatEther, getAddress, isHex } from 'viem';
 import { chainMeta, getClient, isSupportedChain } from '../config/chains.js';
 import { IntentError, type DecodedTransfer, type TxLookupInput, type TxLookupResult } from '../types/index.js';
 
@@ -13,16 +13,41 @@ function topicToAddress(topic: `0x${string}`): string {
   return getAddress(`0x${topic.slice(26)}`);
 }
 
+const CHAIN_ALIASES: Record<string, string> = {
+  eth: 'ethereum', mainnet: 'ethereum', 'ethereum-mainnet': 'ethereum',
+  'base-mainnet': 'base', 'x-layer': 'xlayer', okx: 'xlayer',
+  basesepolia: 'base-sepolia', 'base sepolia': 'base-sepolia', sepolia: 'base-sepolia',
+};
+
+export function normalizeChain(raw: unknown): string {
+  const s = String(raw ?? '').trim().toLowerCase();
+  return CHAIN_ALIASES[s] ?? s;
+}
+
+/** Chain display names used in composed answers */
+export const CHAIN_LABEL: Record<string, string> = {
+  base: 'Base', ethereum: 'Ethereum', xlayer: 'X Layer', 'base-sepolia': 'Base Sepolia',
+};
+
 export function validateTxLookupInput(raw: unknown): TxLookupInput {
   if (typeof raw !== 'object' || raw === null) {
     throw new IntentError('INVALID_INPUT', 'input must be an object');
   }
-  const { chain, txHash } = raw as Record<string, unknown>;
-  if (typeof chain !== 'string' || !isSupportedChain(chain)) {
-    throw new IntentError('CHAIN_UNSUPPORTED', `chain must be one of base|ethereum|xlayer, got ${String(chain)}`);
+  const body = raw as Record<string, unknown>;
+  // accept the aliases seen in live Telegraph traffic: hash / tx_hash / txHash
+  const hashRaw = body.txHash ?? body.tx_hash ?? body.hash;
+  // default to base (Telegraph's home chain) when chain is omitted, like top miners do
+  const chain = normalizeChain(body.chain ?? body.network ?? 'base');
+  if (!isSupportedChain(chain)) {
+    throw new IntentError('CHAIN_UNSUPPORTED', `chain must be one of base|ethereum|xlayer|base-sepolia, got ${String(body.chain)}`);
   }
-  if (typeof txHash !== 'string' || !isHex(txHash) || txHash.length !== 66) {
-    throw new IntentError('INVALID_INPUT', 'txHash must be a 32-byte 0x-hex string');
+  // a natural-language query may carry the hash inline — extract it
+  let txHash = typeof hashRaw === 'string' ? hashRaw.trim() : '';
+  if (!txHash && typeof body.query === 'string') {
+    txHash = body.query.match(/0x[0-9a-fA-F]{64}/)?.[0] ?? '';
+  }
+  if (!isHex(txHash) || txHash.length !== 66) {
+    throw new IntentError('INVALID_INPUT', 'txHash must be a 32-byte 0x-hex string (params: txHash | tx_hash | hash, or a query containing one)');
   }
   return { chain, txHash: txHash.toLowerCase() as `0x${string}` };
 }
@@ -64,7 +89,25 @@ export async function handleTxLookup(input: TxLookupInput): Promise<TxLookupResu
   const l1Fee = meta.isOpStack ? BigInt((receipt as any).l1Fee ?? 0) : 0n;
   const totalFee = receipt.gasUsed * receipt.effectiveGasPrice + l1Fee;
 
+  const chainLabel = CHAIN_LABEL[input.chain] ?? input.chain;
+  const statusWord = receipt.status === 'success' ? 'succeeded' : 'reverted';
+  const from = getAddress(receipt.from);
+  const to = receipt.to ? getAddress(receipt.to) : null;
+  const created = receipt.contractAddress ? getAddress(receipt.contractAddress) : null;
+  const answerParts = [
+    `Transaction ${receipt.transactionHash.toLowerCase()} on ${chainLabel} (chain id ${meta.chainId}) ${statusWord} in block ${receipt.blockNumber}.`,
+    to
+      ? `It was sent from ${from} to ${to} with a value of ${formatEther(tx.value)} ETH (${tx.value} wei).`
+      : `It was sent from ${from} and created contract ${created} with a value of ${formatEther(tx.value)} ETH (${tx.value} wei).`,
+    `Gas used was ${receipt.gasUsed} at an effective gas price of ${receipt.effectiveGasPrice} wei, for a total fee of ${formatEther(totalFee)} ETH (${totalFee} wei${l1Fee > 0n ? `, including ${l1Fee} wei L1 data fee` : ''}).`,
+    `The transaction emitted ${receipt.logs.length} log${receipt.logs.length === 1 ? '' : 's'}${erc20Transfers.length > 0 ? ` including ${erc20Transfers.length} ERC-20 transfer${erc20Transfers.length === 1 ? '' : 's'}` : ''}.`,
+  ];
+
   return {
+    answer: answerParts.join(' '),
+    signal: statusWord,
+    source: `${chainLabel} JSON-RPC eth_getTransactionReceipt + eth_getTransactionByHash`,
+    confidence: 0.99,
     chain: input.chain,
     chainId: meta.chainId,
     txHash: receipt.transactionHash.toLowerCase(),

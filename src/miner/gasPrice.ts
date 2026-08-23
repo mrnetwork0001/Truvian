@@ -2,8 +2,10 @@
  * GAS_PRICE intent handler.
  * Snapshot anchored to an explicit block number so any answer is verifiable.
  */
+import { formatGwei } from 'viem';
 import { chainMeta, getClient, isSupportedChain } from '../config/chains.js';
 import { IntentError, type GasPriceInput, type GasPriceResult } from '../types/index.js';
+import { CHAIN_LABEL, normalizeChain } from './txLookup.js';
 
 /** OP-stack GasPriceOracle predeploy, same address on every OP-stack chain. */
 const GAS_PRICE_ORACLE = '0x420000000000000000000000000000000000000F' as const;
@@ -15,9 +17,19 @@ export function validateGasPriceInput(raw: unknown): GasPriceInput {
   if (typeof raw !== 'object' || raw === null) {
     throw new IntentError('INVALID_INPUT', 'input must be an object');
   }
-  const { chain } = raw as Record<string, unknown>;
-  if (typeof chain !== 'string' || !isSupportedChain(chain)) {
-    throw new IntentError('CHAIN_UNSUPPORTED', `chain must be one of base|ethereum|xlayer, got ${String(chain)}`);
+  const body = raw as Record<string, unknown>;
+  // accept chain/network params or a natural-language query naming the chain
+  let chain = normalizeChain(body.chain ?? body.network ?? '');
+  if (!chain && typeof body.query === 'string') {
+    const q = body.query.toLowerCase();
+    chain = q.includes('sepolia') ? 'base-sepolia'
+      : q.includes('ethereum') || /\beth\b|mainnet/.test(q) ? 'ethereum'
+      : q.includes('xlayer') || q.includes('x layer') ? 'xlayer'
+      : 'base';
+  }
+  if (!chain) chain = 'base';
+  if (!isSupportedChain(chain)) {
+    throw new IntentError('CHAIN_UNSUPPORTED', `chain must be one of base|ethereum|xlayer|base-sepolia, got ${String(body.chain)}`);
   }
   return { chain };
 }
@@ -47,7 +59,21 @@ export async function handleGasPrice(input: GasPriceInput): Promise<GasPriceResu
       return vals[Math.floor(vals.length / 2)]!;
     };
 
+    const chainLabel = CHAIN_LABEL[input.chain] ?? input.chain;
+    const baseFee = block.baseFeePerGas ?? 0n;
+    const gwei = (v: bigint) => `${formatGwei(v)} gwei (${v} wei)`;
+    const answer = [
+      `The current gas price on ${chainLabel} (chain id ${meta.chainId}) is ${gwei(gasPrice)} at block ${block.number}.`,
+      `The base fee per gas is ${gwei(baseFee)} and the suggested priority fee is ${gwei(maxPriorityFee)}, so a standard EIP-1559 transaction can use max fee ${gwei(baseFee * 2n + maxPriorityFee)}.`,
+      `Recent priority fees over the last 5 blocks: 25th percentile ${formatGwei(median(0))} gwei, median ${formatGwei(median(1))} gwei, 75th percentile ${formatGwei(median(2))} gwei.`,
+      meta.isOpStack ? `The L1 base fee observed by ${chainLabel} is ${gwei(l1BaseFee)}.` : '',
+    ].filter(Boolean).join(' ');
+
     return {
+      answer,
+      signal: 'gas-price',
+      source: `${chainLabel} JSON-RPC eth_gasPrice + eth_feeHistory + latest block`,
+      confidence: 0.99,
       chain: input.chain,
       chainId: meta.chainId,
       blockNumber: block.number.toString(),

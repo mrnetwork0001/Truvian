@@ -7,7 +7,10 @@
 - **Track 3 (App, opens Aug 31):** *Truvian Shield* — an execution-safety agent/dashboard consuming live Telegraph miners (`CRYPTO_PRICE`, `GAS_PRICE`, `TVL_LOOKUP`, `ONCHAIN_TX_LOOKUP`) to decide whether an agent should sign a transaction.
 
 ## ✅ Verified Facts (do not trust marketing copy over these)
-- **Telegraph is built on Base** (chain 8453). Working RPCs: `https://mainnet.base.org`, `https://base-rpc.publicnode.com` (`base.llamarpc.com` is dead). Payments settle via x402.
+- **The live Telegraph deployment is on Base Sepolia (84532)**, not mainnet. Live Diamond contract: `0x5a2324aA18613FAD4e44bDF0d6c73Ec1f6D87ff8` (the `0xac683…` address in older READMEs is dead). Node: `https://devnode.telegraphprotocol.com`. Registration portal (auto-enters hackathon): `https://integrate.telegraphprotocol.com`. Live leaderboard JSON: `https://explorer.telegraphprotocol.com/api/leaderboard/miners`. Full mechanics in `telegraph/REGISTRATION.md`.
+- **Validators score miner responses against ground truth as TEXT** (WASM scorer gets question/ground_truth/miner_answer as strings). Miners returning bare JSON score ~0 on the live leaderboard; number-first natural-language answers score 0.83–0.88. Every intent response must lead with an `answer` field composed this way.
+- **A miner = any HTTP API + YAML descriptor + one `registerMiner` tx** (gas-only, permissionless). YAML schema is `additionalProperties:false` everywhere — see `telegraph/truvian-miner.yaml`. Track 2 = a Rust→WASM scoring module (`scorer/`), registered per-intent via `registerWasm`, which must beat the incumbent champion on a node-internal benchmark.
+- **Base mainnet data layer** (chain 8453). Working RPCs: `https://mainnet.base.org`, `https://base-rpc.publicnode.com` (`base.llamarpc.com` is dead). Payments settle via x402.
 - **Intents are finalized** — 40 total (18 Tier A deterministic/WASM-exact-match, 22 Tier B LLM-judge). A miner MUST serve a listed intent; there is no slippage/execution-verification intent.
 - **Timeline:** Tracks 1 & 2: Aug 17–31. Track 3: Aug 31–Sep 7. Winners: announced from Sep 19.
 - **Prizes (H1):** Miner $2,000 / $1,000 / $600 / $400 · Scripts $1,000 · Apps $2,000. Total $5,000. H2 (Oct): $10K. H3 (Dec): mainnet.

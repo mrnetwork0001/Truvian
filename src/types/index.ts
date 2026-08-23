@@ -32,6 +32,20 @@ export interface DecodedTransfer {
 }
 
 export interface TxLookupResult {
+  /**
+   * Number-first natural-language statement of the facts, FIRST field on
+   * purpose: Telegraph validators score miner responses against ground truth
+   * as text. Verified empirically (epoch 267): miners returning bare JSON
+   * score ~0; the two miners leading ONCHAIN_TX_LOOKUP (0.88 / 0.83) answer
+   * with concise exact-figure statements.
+   */
+  answer: string;
+  /** Short label for Telegraph signal_mapping.label_field */
+  signal: string;
+  /** Provenance for signal_mapping.reason_field */
+  source: string;
+  /** Static per-intent confidence for signal_mapping.confidence_field */
+  confidence: number;
   chain: SupportedChain;
   chainId: number;
   txHash: string;
@@ -66,6 +80,11 @@ export interface GasPriceInput {
 }
 
 export interface GasPriceResult {
+  /** Number-first natural-language answer — see TxLookupResult.answer */
+  answer: string;
+  signal: string;
+  source: string;
+  confidence: number;
   chain: SupportedChain;
   chainId: number;
   /** Block this snapshot is anchored to — makes the answer verifiable */

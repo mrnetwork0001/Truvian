@@ -1,5 +1,5 @@
 import { createPublicClient, fallback, http, type PublicClient } from 'viem';
-import { base, mainnet, xLayer } from 'viem/chains';
+import { base, baseSepolia, mainnet, xLayer } from 'viem/chains';
 
 /**
  * Chain registry. Base is primary (Telegraph is built on Base).
@@ -7,10 +7,10 @@ import { base, mainnet, xLayer } from 'viem/chains';
  *  - mainnet.base.org and base-rpc.publicnode.com respond (base.llamarpc.com is dead)
  *  - rpc.xlayer.tech responds; caps eth_getLogs at 100 blocks
  */
-export type SupportedChain = 'base' | 'ethereum' | 'xlayer';
+export type SupportedChain = 'base' | 'ethereum' | 'xlayer' | 'base-sepolia';
 
 interface ChainEntry {
-  chain: typeof base | typeof mainnet | typeof xLayer;
+  chain: typeof base | typeof mainnet | typeof xLayer | typeof baseSepolia;
   rpcUrls: string[];
   /** OP-stack chains carry l1Fee fields on receipts; total cost must include them. */
   isOpStack: boolean;
@@ -31,6 +31,12 @@ const REGISTRY: Record<SupportedChain, ChainEntry> = {
     chain: xLayer,
     rpcUrls: ['https://rpc.xlayer.tech'],
     isOpStack: false,
+  },
+  // Telegraph's own home chain — validators are likely to ask about it
+  'base-sepolia': {
+    chain: baseSepolia,
+    rpcUrls: ['https://sepolia.base.org', 'https://base-sepolia-rpc.publicnode.com'],
+    isOpStack: true,
   },
 };
 

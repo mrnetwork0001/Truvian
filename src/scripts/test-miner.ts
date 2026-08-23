@@ -54,6 +54,20 @@ async function main() {
     `${tx.erc20Transfers.length} transfers decoded`,
   );
 
+  // answer-first format: the composed answer must carry the exact figures
+  check('answer present and number-first', tx.answer.length > 50 && tx.answer.startsWith('Transaction 0x'));
+  check('answer contains tx hash', tx.answer.includes(tx.txHash));
+  check('answer contains block number', tx.answer.includes(`block ${tx.blockNumber}`));
+  check('answer contains from/to addresses', tx.answer.includes(tx.from) && (tx.to === null || tx.answer.includes(tx.to)));
+  check('answer contains exact total fee in wei', tx.answer.includes(`${tx.totalFeeWei} wei`));
+  check('answer states status word', /succeeded|reverted/.test(tx.answer));
+
+  // flexible input aliases
+  const viaAlias = validateTxLookupInput({ chain: 'BASE', tx_hash: sampleHash });
+  check('input aliases: tx_hash + case-insensitive chain', viaAlias.chain === 'base' && viaAlias.txHash === sampleHash.toLowerCase());
+  const viaQuery = validateTxLookupInput({ query: `look up ${sampleHash} on base please` });
+  check('input via natural-language query', viaQuery.txHash === sampleHash.toLowerCase());
+
   // determinism: same input twice -> identical scored payload (confirmations may differ)
   const tx2 = await handleTxLookup(txInput);
   const scrub = ({ confirmations, ...rest }: typeof tx) => rest;
@@ -82,6 +96,11 @@ async function main() {
       BigInt(gas.priorityFeePercentilesWei.p50) <= BigInt(gas.priorityFeePercentilesWei.p75),
   );
   check('OP-stack l1GasPrice present on Base', BigInt(gas.l1GasPriceWei) > 0n, gas.l1GasPriceWei);
+  check('gas answer present and number-first', gas.answer.startsWith('The current gas price on Base'));
+  check('gas answer contains gwei and wei forms', gas.answer.includes('gwei') && gas.answer.includes(`(${gas.gasPriceWei} wei)`));
+  check('gas answer anchored to block', gas.answer.includes(`block ${gas.blockNumber}`));
+  const gasViaQuery = validateGasPriceInput({ query: 'what is the current gas price on ethereum mainnet?' });
+  check('gas chain inferred from query', gasViaQuery.chain === 'ethereum');
 
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);
