@@ -23,3 +23,7 @@ npm-debug.log*
 # Next.js (Track 3 dashboard, added in Phase 3)
 .next/
 out/
+
+# Track 2 scorer build artifacts & vendored reference repos
+scorer/vendor/
+scorer/target/
