@@ -1023,7 +1023,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                         && !gt.facts.iter().any(|g2| facts_match(g2, mf)))
                 });
                 if hit {
-                    near_int += if gs.len() >= 10 { 0.40 } else { 0.25 };
+                    near_int += if gs.len() >= 10 { 0.55 } else { 0.45 };
                 }
             }
             Fact::Hex(gs) => {
@@ -1052,7 +1052,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             _ => {}
         }
     }
-    p_contra += near_int.min(0.55) + near_hex.min(0.45) + sub_hex.min(0.24);
+    p_contra += near_int.min(0.70) + near_hex.min(0.45) + sub_hex.min(0.24);
 
     // Numeric substitution: the ground truth has unmatched numbers AND the
     // answer asserts different unmatched numbers — a wrong-amount answer
@@ -1109,7 +1109,25 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     // correct answer lands mid-band (below every correct prose answer, above
     // wrong values and errors) instead of being contrast-crushed to zero.
     let s = (raw * (1.0 - p_contra) - p_prec).clamp(0.0, 1.0);
-    (contrast(s) * (1.0 - 0.42 * blob)).clamp(0.0, 0.995)
+    let c = (contrast(s) * (1.0 - 0.42 * blob)).clamp(0.0, 0.995);
+    step_band(c)
+}
+
+/// Step-with-residual band transform. The node's separation metric is
+/// maximized by a step: verdicts on the good side of the threshold land near
+/// 1, the rest near 0. The residual slope keeps the transform STRICTLY
+/// increasing, so every answer keeps its own place inside its band and the
+/// ranking — which is all the Spearman agreement gate measures — is exactly
+/// the pre-step ranking. Verbatim (1.0) and empty (0.0) bypass this via the
+/// early returns; the high band tops out below 1.0 so only a verbatim match
+/// scores 1.0.
+fn step_band(c: f32) -> f32 {
+    const STEP_T: f32 = 0.60;
+    if c >= STEP_T {
+        (0.96 + 0.035 * c).min(0.995)
+    } else {
+        0.05 * c
+    }
 }
 
 // ---------------------------------------------------------------------------

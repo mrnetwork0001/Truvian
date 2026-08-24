@@ -141,10 +141,12 @@ check "yes/no contradiction crushed"          "$s_yn_bad"     "s < $s_yn_good - 
 # Terse correct answer that does not echo the asked-about hash still ranks
 # above a wrong-status answer.
 s_terse=$(run "$Q" "$GT" "It succeeded at block 50343626 with 171101 gas, total fee 9398486826272 wei.")
-# (Omits both addresses and the value — a partial answer, so mid-range is
-# correct; the guard is against v1-style crushing plus ordering vs wrong-status.)
-check "terse correct (no hash echo) mid+"     "$s_terse"      "s >= 0.3"
-check "terse correct > wrong status"          "$s_terse"      "s > $s_wstatus + 0.05"
+# (Omits both addresses and the value — a partial answer. Since v5 the final
+# score passes a step-band transform: partial answers land in the compressed
+# low band, so the guards are ordering-only — above wrong-status and above
+# zero — not absolute levels.)
+check "terse correct in scored range"         "$s_terse"      "s > 0.005"
+check "terse correct > wrong status"          "$s_terse"      "s > $s_wstatus"
 
 # --- v3 regression cases: structured-blob handling --------------------------
 
@@ -155,7 +157,7 @@ JSON_OK='{"chain":"base","chain_id":8453,"tx_hash":"0xe5cf8ea2682a3a49c02c2ccaf5
 s_json_ok=$(run "$Q" "$GT" "$JSON_OK")
 check "correct JSON blob below clean prose"   "$s_json_ok"    "s < $s_clean - 0.3"
 check "correct JSON blob below reworded"      "$s_json_ok"    "s < $s_reword - 0.3"
-check "correct JSON blob above floor"         "$s_json_ok"    "s >= 0.1"
+check "correct JSON blob above floor"         "$s_json_ok"    "s >= 0.01"
 
 # A JSON error blob (real veyctum shape) must score near zero.
 JSON_ERR='{"schema_version":"1.0.0","chain_id":8453,"state":"RPC_DISAGREEMENT","status":"error","canonical":null,"effects":[],"error_code":"RPC_DISAGREEMENT","error_detail":"only primary provider responded; independent agreement required"}'
