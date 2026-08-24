@@ -68,6 +68,21 @@ make a good visual.)*
 *(Attach: dashboard screenshot of the ACTIVE/champion card + the two
 rejection cards above it — the arc is the story.)*
 
+## Post 5 — the title war (draft; the current end of the story)
+
+> The championship lasted 90 minutes. A challenger (reg 551) took it with a
+> better margin. So we did what you do to a public binary: downloaded it and
+> ran it through the official harness.
+>
+> Findings: the new judge scored "reverted" and "succeeded" identically
+> (0.998), gave answer-stuffing a perfect 1.0, and broke on Chinese.
+>
+> v4 fixes what it gets wrong and beats it at what it gets right: margin
+> 0.619 vs 0.597, agreement 0.731. Crown retaken. 🏆
+>
+> Five submissions. Two championships. One defense. All in day one, all
+> reproducible: github.com/mrnetwork0001/Truvian @Telegraphprotoc
+
 ### Cadence plan
 - Day of registration: post 2
 - Each hardening milestone (fallback RPCs, eval script submitted, latency work): short update
