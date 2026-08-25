@@ -152,6 +152,21 @@ const ZH_POLARITY: &[(&str, usize, bool)] = &[
 ];
 const ZH_NEGATORS: &[char] = &['未', '没', '沒', '不', '无', '無', '别', '別'];
 
+/// Common number words normalize to digit strings, so "two" matches "2",
+/// word-form scores become typed facts, and quantifier words stop consuming
+/// the negation window ("rather than one central party").
+fn word_number(w: &str) -> Option<&'static str> {
+    Some(match w {
+        "zero" => "0", "one" => "1", "two" => "2", "three" => "3",
+        "four" => "4", "five" => "5", "six" => "6", "seven" => "7",
+        "eight" => "8", "nine" => "9", "ten" => "10", "eleven" => "11",
+        "twelve" => "12", "thirteen" => "13", "fourteen" => "14",
+        "fifteen" => "15", "sixteen" => "16", "seventeen" => "17",
+        "eighteen" => "18", "nineteen" => "19", "twenty" => "20",
+        _ => return None,
+    })
+}
+
 fn in_list(list: &[&str], w: &str) -> bool {
     list.iter().any(|x| *x == w)
 }
@@ -517,6 +532,18 @@ fn analyze(text: &str) -> Analysis {
                 continue;
             }
 
+            // Number words become numeric tokens/facts and do not consume
+            // the negation windows (like digit tokens).
+            if let Some(d) = word_number(&word) {
+                facts.push(Fact::Int(d.to_string()));
+                toks.push(Tok { text: d.to_string(), kind: Kind::Num, negated: false, proper: false });
+                if let Some((f, dd)) = marker {
+                    marker = Some((f, dd + 1));
+                }
+                i = j;
+                continue;
+            }
+
             let strong_neg = in_list(NEG_STRONG, &word);
             let weak_neg = in_list(NEG_WEAK, &word);
             if strong_neg || weak_neg {
@@ -543,7 +570,19 @@ fn analyze(text: &str) -> Analysis {
             }
 
             let flipped = neg_active > 0;
-            if let Some((g, positive)) = polarity_word(&word) {
+            // "defeated"/"beaten" are win-group words in the active voice
+            // ("A defeated B") but flip meaning in the passive ("A was
+            // defeated") — only the active form asserts a win.
+            let mut pol_hit = polarity_word(&word);
+            if pol_hit.is_none() && (word == "defeated" || word == "beaten") {
+                let passive = toks.iter().rev().find(|t| t.kind == Kind::Word).map_or(false, |t| {
+                    matches!(t.text.as_str(), "was" | "were" | "been" | "being" | "is" | "are" | "got" | "getting" | "get")
+                });
+                if !passive {
+                    pol_hit = Some((G_WINLOSE, true));
+                }
+            }
+            if let Some((g, positive)) = pol_hit {
                 let effective = positive != flipped;
                 pol[g] |= if effective { 1 } else { 2 };
                 if g == G_STATUS {
@@ -598,15 +637,46 @@ fn analyze(text: &str) -> Analysis {
 // Text similarity: weighted unigram F1 + bigram Dice
 // ---------------------------------------------------------------------------
 
-/// Canonical form for matching: strip one common inflection suffix (when at
-/// least 4 chars remain), then keep a 5-char prefix — so "succeeded" and
-/// "succeed" both canonicalize to "succe", "clearing" and "clears" to
-/// "clear". Deterministic, applied identically to both texts.
+/// Synonym groups: frequent answer verbs and qualifiers collapse to a group
+/// token, so "won"/"beat"/"defeated" (or "about"/"roughly"/"around") match
+/// across paraphrases. Groups never merge opposites — win/lose and rise/fall
+/// stay distinct, and the polarity machinery uses the raw words anyway.
+const SYN_GROUPS: &[(&str, &[&str])] = &[
+    ("~win", &["won", "win", "wins", "winning", "victory", "victorious", "beat", "defeated", "triumphed", "prevailed"]),
+    ("~lose", &["lost", "lose", "loses", "losing"]),
+    ("~rise", &["rose", "risen", "rise", "rises", "rising", "climbed", "climbs", "climbing", "increased", "increases", "increasing", "gained", "gains", "surged", "jumped", "higher"]),
+    ("~fall", &["fell", "fallen", "fall", "falls", "falling", "dropped", "drops", "dropping", "declined", "declines", "declining", "decreased", "decreases", "decreasing", "lower", "plunged", "sank"]),
+    ("~success", &["succeeded", "succeeds", "succeed", "successful", "successfully", "success", "confirmed", "executed", "completed", "mined", "landed"]),
+    ("~fail", &["failed", "fails", "fail", "failing", "failure", "reverted", "reverts", "revert", "unsuccessful", "rejected"]),
+    ("~about", &["about", "approximately", "around", "roughly", "near", "nearly", "circa"]),
+    ("~large", &["largest", "biggest", "large", "big"]),
+    ("~tie", &["tied", "tie", "ties", "level", "deadlocked", "square"]),
+    ("~each", &["each", "apiece"]),
+    ("~keep", &["kept", "keep", "keeps", "keeping", "maintain", "maintains", "maintained"]),
+];
+
+fn synonym_group(w: &str) -> Option<&'static str> {
+    for (label, words) in SYN_GROUPS {
+        if words.iter().any(|x| *x == w) {
+            return Some(label);
+        }
+    }
+    None
+}
+
+/// Canonical form for matching: synonym-group token when the word belongs to
+/// one; otherwise strip one common inflection suffix (when at least 4 chars
+/// remain), then keep a 5-char prefix — so "succeeded" and "succeed" both
+/// canonicalize alike, "clearing" and "clears" to "clear". Deterministic,
+/// applied identically to both texts.
 fn canon(t: &Tok) -> String {
     if t.kind != Kind::Word {
         return t.text.clone();
     }
     let w = t.text.as_str();
+    if let Some(g) = synonym_group(w) {
+        return g.to_string();
+    }
     let mut stem = w;
     for suf in ["ing", "ed", "ly", "es", "s"] {
         if let Some(rest) = w.strip_suffix(suf) {
@@ -736,10 +806,61 @@ fn bigram_dice(gt: &[Tok], ma: &[Tok]) -> f32 {
     (2.0 * common as f32) / ((a.len() + b.len()) as f32)
 }
 
+/// Character-trigram Dice over normalized text (lowercased, punctuation runs
+/// collapsed to single spaces). Catches morphology ("clearing"/"clears") and
+/// partial-word overlap that token matching misses; order-insensitive.
+fn char_trigram_dice(a: &str, b: &str) -> f32 {
+    let norm = |s: &str| -> Vec<char> {
+        let mut v: Vec<char> = Vec::new();
+        let mut last_space = true;
+        for c in s.chars() {
+            let keep = c.is_alphanumeric() || is_cjk_or_symbol(c);
+            if keep {
+                for lc in c.to_lowercase() {
+                    v.push(lc);
+                }
+                last_space = false;
+            } else if !last_space {
+                v.push(' ');
+                last_space = true;
+            }
+        }
+        v
+    };
+    let grams = |cs: &[char]| -> Vec<String> {
+        if cs.len() < 3 {
+            return vec![cs.iter().collect()];
+        }
+        let mut v: Vec<String> = (0..cs.len() - 2)
+            .map(|i| cs[i..i + 3].iter().collect())
+            .collect();
+        v.sort();
+        v
+    };
+    let a = grams(&norm(a));
+    let b = grams(&norm(b));
+    if a.is_empty() || b.is_empty() {
+        return 0.0;
+    }
+    let (mut i, mut j, mut common) = (0usize, 0usize, 0usize);
+    while i < a.len() && j < b.len() {
+        match a[i].cmp(&b[j]) {
+            core::cmp::Ordering::Equal => {
+                common += 1;
+                i += 1;
+                j += 1;
+            }
+            core::cmp::Ordering::Less => i += 1,
+            core::cmp::Ordering::Greater => j += 1,
+        }
+    }
+    (2.0 * common as f32) / ((a.len() + b.len()) as f32)
+}
+
 fn text_similarity(gt: &[Tok], ma: &[Tok]) -> f32 {
     let f1 = weighted_f1(gt, ma);
     let bg = bigram_dice(gt, ma);
-    0.75 * f1 + 0.25 * bg
+    0.60 * f1 + 0.15 * bg
 }
 
 // ---------------------------------------------------------------------------
@@ -860,7 +981,11 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     let gt = analyze(gt_trim);
     let ma = analyze(ma_trim);
 
-    let text = text_similarity(&gt.toks, &ma.toks);
+    // Token-level similarity plus a character-trigram term: loose-but-correct
+    // paraphrases share word morphology even when exact tokens differ.
+    let text = (text_similarity(&gt.toks, &ma.toks)
+        + 0.25 * char_trigram_dice(gt_trim, ma_trim))
+        .clamp(0.0, 1.0);
 
     // Question-given facts are context the answer need not repeat: a hash or
     // block number already present in the question carries little answer
@@ -943,7 +1068,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                     p_clash += if is_proper(&gt.toks, c) && is_proper(&ma.toks, c) {
                         0.35
                     } else {
-                        0.12
+                        0.18
                     };
                 }
             }
@@ -1062,7 +1187,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             facts
                 .iter()
                 .filter(|f| match f {
-                    Fact::Int(v) => v.len() >= 2,
+                    Fact::Int(v) => v.len() >= 2 || matches!(v.as_str(), "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"),
                     Fact::Dec(_) => true,
                     _ => false,
                 })
@@ -1121,12 +1246,20 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
 /// the pre-step ranking. Verbatim (1.0) and empty (0.0) bypass this via the
 /// early returns; the high band tops out below 1.0 so only a verbatim match
 /// scores 1.0.
+/// Piecewise order-preserving band map. High band: near-1 (the step that
+/// buys separation on clean pairs). Sloped middle: a misjudged good answer
+/// still contributes real margin instead of zero. Low band: wrong answers
+/// stay crushed. Strictly increasing everywhere (upward jumps at the
+/// breakpoints preserve ordering); verbatim/empty bypass via early returns.
 fn step_band(c: f32) -> f32 {
-    const STEP_T: f32 = 0.60;
-    if c >= STEP_T {
+    const T_HI: f32 = 0.60;
+    const T_MID: f32 = 0.40;
+    if c >= T_HI {
         (0.96 + 0.035 * c).min(0.995)
+    } else if c >= T_MID {
+        0.25 + 1.5 * (c - T_MID)
     } else {
-        0.05 * c
+        0.04 * c
     }
 }
 
