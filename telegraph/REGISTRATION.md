@@ -38,6 +38,21 @@ cast send $DIAMOND "registerMiner(string,bytes32,address,uint256,string[])" \
 Note: `0xac683bFa8F1C892E23e8300d14c20678C6FC0CA3` (in older READMEs) is a
 DEAD registry — it rejects every intent. Do not use it.
 
+## ⚠️ Hosting rule for WASM binaries (learned the hard way)
+The VPS uploads at ~130 KB/s. That is fine for the miner's small JSON
+responses (`/tx` and `/gas` answer in ~0.7s) but NOT for large scorer
+binaries: v8 (23 MB, MiniLM weights) took >4 minutes to fetch and the
+node's evaluation stalled in `pending` indefinitely (registration 947).
+
+**Host any scorer binary over ~1 MB on commit-pinned GitHub raw instead** —
+the repo is public, the URL is immutable, and it serves at ~3.6 MB/s
+(verified byte-identical by keccak):
+
+    https://raw.githubusercontent.com/mrnetwork0001/Truvian/<COMMIT_SHA>/telegraph/<binary>.wasm
+
+Get the SHA with `git rev-parse HEAD` after pushing. This is also how the
+competing champion hosts its 24 MB binary.
+
 ## Track 2 — Register the WASM scorer
 Built artifact: `telegraph/truvian_scorer.wasm` (112,236 bytes) —
 keccak256 `0x3b581da2712e2ad7f01b08919e646a44afebea944bdc7d13f65b58645dd22c16`.
