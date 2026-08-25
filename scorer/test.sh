@@ -191,6 +191,39 @@ check "population paraphrase good high"       "$s_pop_good"   "s >= 0.6"
 check "wrong population not rescued by sem"   "$s_pop_bad"    "s < 0.5"
 check "wrong population < good"               "$s_pop_bad"    "s < $s_pop_good - 0.3"
 
+# --- v8 SUBSTITUTION block: wrong values are false claims, not omissions ----
+# Realistic data: 66-char tx hash, 42-char addresses. Every substitution must
+# land under 0.15 AND below both the verbatim good and a terse-correct answer.
+SQ="What are the details of transaction 0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 on Base?"
+SGT="Transaction 0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 on Base succeeded in block 50343626, transferring 5 ETH from 0x76F68ADF3D4eCFDd0725b1320fB25B6772754Ae2 to 0xecec48Ec5A7B7F7B96460b0F4E2B99cf0dB94Cb1."
+s_sub_verb=$(run "$SQ" "$SGT" "$SGT")
+s_sub_terse=$(run "$SQ" "$SGT" "It succeeded in block 50343626, transferring 5 ETH.")
+check "substitution-gt verbatim == 1"         "$s_sub_verb"   "s >= 0.99"
+check "terse-correct (omission only) high"    "$s_sub_terse"  "s >= 0.6"
+
+sub_check() { # sub_check <name> <answer>
+  local sc; sc=$(run "$SQ" "$SGT" "$2")
+  check "SUB $1 < 0.15"                       "$sc"           "s < 0.15"
+  check "SUB $1 < verbatim"                   "$sc"           "s < $s_sub_verb"
+  check "SUB $1 < terse-correct"              "$sc"           "s < $s_sub_terse"
+}
+sub_check "wrong amount"   "Transaction 0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 on Base succeeded in block 50343626, transferring 9 ETH from 0x76F68ADF3D4eCFDd0725b1320fB25B6772754Ae2 to 0xecec48Ec5A7B7F7B96460b0F4E2B99cf0dB94Cb1."
+sub_check "wrong to-addr"  "Transaction 0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 on Base succeeded in block 50343626, transferring 5 ETH from 0x76F68ADF3D4eCFDd0725b1320fB25B6772754Ae2 to 0xdEAD000000000000000042069420694206942069."
+sub_check "wrong from-addr" "Transaction 0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 on Base succeeded in block 50343626, transferring 5 ETH from 0xdEAD000000000000000042069420694206942069 to 0xecec48Ec5A7B7F7B96460b0F4E2B99cf0dB94Cb1."
+sub_check "wrong tx hash"  "Transaction 0xabcd1234682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 on Base succeeded in block 50343626, transferring 5 ETH from 0x76F68ADF3D4eCFDd0725b1320fB25B6772754Ae2 to 0xecec48Ec5A7B7F7B96460b0F4E2B99cf0dB94Cb1."
+sub_check "wrong block"    "Transaction 0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 on Base succeeded in block 50343627, transferring 5 ETH from 0x76F68ADF3D4eCFDd0725b1320fB25B6772754Ae2 to 0xecec48Ec5A7B7F7B96460b0F4E2B99cf0dB94Cb1."
+sub_check "wrong chain"    "Transaction 0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 on Arbitrum succeeded in block 50343626, transferring 5 ETH from 0x76F68ADF3D4eCFDd0725b1320fB25B6772754Ae2 to 0xecec48Ec5A7B7F7B96460b0F4E2B99cf0dB94Cb1."
+sub_check "two facts wrong" "Transaction 0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 on Base succeeded in block 50343699, transferring 9 ETH from 0x76F68ADF3D4eCFDd0725b1320fB25B6772754Ae2 to 0xecec48Ec5A7B7F7B96460b0F4E2B99cf0dB94Cb1."
+
+# Gas-price-style ground truth: wrong gwei value is the same class of error.
+GQ="What is the current gas price on Ethereum?"
+GGT="The current gas price on Ethereum is 32 gwei (32000000000 wei), with a base fee of 30 gwei."
+s_gas_good=$(run "$GQ" "$GGT" "Gas is currently about 32 gwei on Ethereum (32000000000 wei), base fee 30 gwei.")
+s_gas_bad=$(run "$GQ" "$GGT" "The current gas price on Ethereum is 85 gwei (85000000000 wei), with a base fee of 81 gwei.")
+check "gas-price good high"                   "$s_gas_good"   "s >= 0.6"
+check "SUB wrong gwei < 0.15"                 "$s_gas_bad"    "s < 0.15"
+check "SUB wrong gwei < good"                 "$s_gas_bad"    "s < $s_gas_good"
+
 # Empty question must not trap and self-match must still be 1.0.
 s_noq=$(run "" "$GT" "$GT")
 check "empty question self-match == 1"        "$s_noq"        "s >= 0.99"

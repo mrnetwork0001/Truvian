@@ -403,6 +403,11 @@ fn analyze(text: &str) -> Analysis {
     // Stopwords / numbers / hex do not consume either window.
     let mut neg_active = 0i32;
     let mut flag_budget = 0i32;
+    // A capital letter at a sentence start is grammar, not evidence of a
+    // proper noun ("Bake the bread..." / "Give the loaf..."), so such tokens
+    // must never be treated as named entities by the substitution check.
+    let mut sentence_start = true;
+    let mut pending_initial_caps: Vec<usize> = Vec::new();
     // from/to orientation: which marker was last seen and how many tokens ago.
     let mut marker: Option<(bool, u32)> = None; // (is_from, tokens_since)
     let mut word_index = 0usize; // index among Word toks (for leading yes/no)
@@ -415,6 +420,9 @@ fn analyze(text: &str) -> Analysis {
         if c == '.' || c == ',' || c == ';' || c == '!' || c == '?' || c == ':' {
             neg_active = 0;
             flag_budget = 0;
+            if c != ',' {
+                sentence_start = true;
+            }
             i += 1;
             continue;
         }
@@ -501,7 +509,16 @@ fn analyze(text: &str) -> Analysis {
         // Alphabetic word (Latin, Cyrillic, ...). Contractions merge across
         // an apostrophe: "didn't" -> "didnt"; possessive "'s" is dropped.
         if c.is_alphabetic() {
-            let prop = c.is_uppercase();
+            // A sentence-initial capital is ambiguous: "Paris is the capital"
+            // (proper noun) vs "Bake the bread" (imperative verb). Defer the
+            // decision to a post-pass that looks at the following word — a
+            // determiner after it means the capitalized word governs an
+            // object, i.e. it is a verb, not a named entity.
+            if sentence_start && c.is_uppercase() {
+                pending_initial_caps.push(toks.len());
+            }
+            let prop = c.is_uppercase() && !sentence_start;
+            sentence_start = false;
             let mut j = i;
             while j < n && chars[j].is_alphabetic() && !is_cjk_or_symbol(chars[j]) {
                 j += 1;
@@ -629,6 +646,31 @@ fn analyze(text: &str) -> Analysis {
         }
 
         i += 1;
+    }
+
+    // Resolve deferred sentence-initial capitals (see the note at the word
+    // branch): proper-noun unless the next word is a determiner.
+    const DETERMINERS: &[&str] = &[
+        "the", "a", "an", "this", "that", "these", "those", "my", "your",
+        "his", "her", "its", "our", "their", "some", "any", "all", "each",
+        "every", "both", "another", "one", "two", "three", "it", "them",
+        "me", "us", "him", "you",
+    ];
+    for idx in pending_initial_caps {
+        let next_word = toks
+            .iter()
+            .skip(idx + 1)
+            .find(|t| t.kind == Kind::Word)
+            .map(|t| t.text.clone());
+        let governs_object = match next_word {
+            Some(w) => in_list(DETERMINERS, &w),
+            None => false,
+        };
+        if !governs_object {
+            if let Some(t) = toks.get_mut(idx) {
+                t.proper = true;
+            }
+        }
     }
 
     // Chinese polarity: substring scan with a 2-char negator look-behind.
@@ -1211,6 +1253,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
         p_contra += hits.min(0.80);
     }
 
+    let mut veto_proper = false;
     // Proper-noun substitution: the answer replaces a named entity from the
     // ground truth with a novel one in the same lexical slot
     // ("Paris is the capital" -> "Marseille is the capital").
@@ -1223,7 +1266,13 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             let next = if k + 1 >= toks.len() { "$".to_string() } else { canon(&toks[k + 1]) };
             (prev, next)
         };
-        let candidate = |t: &Tok, own: &[String], other: &[String]| -> bool {
+        // `from_question` gates only the ANSWER side: an entity the question
+        // itself names is not a novel claim, so it cannot be a substitution.
+        // The ground-truth side must NOT be gated — "on Base" is named by the
+        // question AND by the ground truth, and an answer that says
+        // "on Arbitrum" in its slot has substituted it, which is exactly the
+        // wrong-chain case this must catch.
+        let candidate = |t: &Tok, own: &[String], other: &[String], from_question: bool| -> bool {
             t.kind == Kind::Word
                 && t.proper
                 && t.text.len() >= 3
@@ -1233,16 +1282,16 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                 && polarity_word(&t.text).is_none()
                 && set_has(own, &canon(t))
                 && !set_has(other, &canon(t))
-                && !set_has(&q_set, &canon(t))
+                && (!from_question || !set_has(&q_set, &canon(t)))
         };
         let mut fired = false;
         'outer: for (gi, gtok) in gt.toks.iter().enumerate() {
-            if !candidate(gtok, &gt_set, &ma_set) {
+            if !candidate(gtok, &gt_set, &ma_set, false) {
                 continue;
             }
             let (gp, gn) = slot(&gt.toks, gi);
             for (mi, mtok) in ma.toks.iter().enumerate() {
-                if !candidate(mtok, &ma_set, &gt_set) {
+                if !candidate(mtok, &ma_set, &gt_set, true) {
                     continue;
                 }
                 let (mp, mn) = slot(&ma.toks, mi);
@@ -1255,6 +1304,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
         }
         if fired {
             p_contra += 0.55;
+            veto_proper = true;
         }
     }
 
@@ -1266,6 +1316,16 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             p_contra += 0.55;
         }
     }
+
+    // --- Value-substitution veto ------------------------------------------
+    // A ground-truth typed fact with NO match in the answer, where the answer
+    // asserts a DIFFERENT value of the same type and comparable magnitude, is
+    // a contradiction (wrong amount / wrong address / wrong hash), not a mere
+    // omission. Omitting a fact is incompleteness; replacing it with a wrong
+    // one is a false claim, and one such claim is disqualifying — so this
+    // sets a veto that forces the crushed band regardless of how well the
+    // rest of the answer matches lexically or semantically.
+    let mut veto = 0.0f32;
 
     // Near-miss numerics / corrupted hex: actively wrong assertions.
     let mut near_int = 0.0f32;
@@ -1284,6 +1344,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                 });
                 if hit {
                     near_int += if gs.len() >= 10 { 0.55 } else { 0.45 };
+                    veto += 1.0;
                 }
             }
             Fact::Hex(gs) => {
@@ -1297,6 +1358,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                 });
                 if near {
                     near_hex += 0.30;
+                    veto += 1.0;
                 } else {
                     let sub = ma.facts.iter().any(|mf| {
                         matches!(mf, Fact::Hex(ms)
@@ -1305,7 +1367,11 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                             && !gt.facts.iter().any(|g2| facts_match(g2, mf)))
                     });
                     if sub {
+                        // Wholesale substitution of a critical identifier.
                         sub_hex += if gs.len() == 66 { 0.20 } else { 0.12 };
+                        if gs.len() == 66 || gs.len() == 42 {
+                            veto += 1.0;
+                        }
                     }
                 }
             }
@@ -1314,24 +1380,52 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     }
     p_contra += near_int.min(0.70) + near_hex.min(0.45) + sub_hex.min(0.24);
 
-    // Numeric substitution: the ground truth has unmatched numbers AND the
-    // answer asserts different unmatched numbers — a wrong-amount answer
-    // (balance 0.3 ETH instead of 12.5 ETH), not merely an omission.
+    // Numeric substitution: an unmatched ground-truth number answered with a
+    // different unmatched number of COMPARABLE MAGNITUDE (same digit count
+    // +-1 for integers, same decade for decimals). The magnitude test is what
+    // separates a substituted value ("5 ETH" -> "9 ETH", "14 million" ->
+    // "4 million") from an incidental extra number a fuller answer mentions
+    // (a confirmation count alongside an omitted 13-digit fee).
     {
-        let unmatched_num = |facts: &[Fact], other: &[Fact]| -> u32 {
-            facts
-                .iter()
-                .filter(|f| match f {
-                    Fact::Int(v) => v.len() >= 2 || matches!(v.as_str(), "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"),
-                    Fact::Dec(_) => true,
-                    _ => false,
-                })
-                .filter(|f| !other.iter().any(|o| facts_match(f, o)))
-                .count() as u32
+        let magnitude = |f: &Fact| -> Option<i32> {
+            match f {
+                Fact::Int(v) => Some(v.len() as i32),
+                Fact::Dec(v) => {
+                    let a = if *v < 0.0 { -*v } else { *v };
+                    let mut m = 0i32;
+                    let mut x = a;
+                    while x >= 10.0 && m < 40 {
+                        x /= 10.0;
+                        m += 1;
+                    }
+                    Some(m + 1)
+                }
+                _ => None,
+            }
         };
-        let g_open = unmatched_num(&gt.facts, &ma.facts);
-        let m_open = unmatched_num(&ma.facts, &gt.facts);
-        p_contra += 0.10 * g_open.min(m_open).min(2) as f32;
+        let numeric_unmatched = |f: &&Fact, other: &[Fact]| -> bool {
+            matches!(f, Fact::Int(_) | Fact::Dec(_))
+                && !other.iter().any(|o| facts_match(f, o))
+        };
+        let mut hits = 0u32;
+        for gf in gt.facts.iter().filter(|f| numeric_unmatched(f, &ma.facts)) {
+            let gm = match magnitude(gf) {
+                Some(m) => m,
+                None => continue,
+            };
+            let substituted = ma
+                .facts
+                .iter()
+                .filter(|f| numeric_unmatched(f, &gt.facts))
+                .any(|mf| matches!(magnitude(mf), Some(mm) if (mm - gm).abs() <= 1));
+            if substituted {
+                hits += 1;
+            }
+        }
+        if hits > 0 {
+            p_contra += 0.10 * hits.min(2) as f32;
+            veto += hits as f32;
+        }
     }
 
     // Negation asymmetry: strong negators the answer adds over the ground
@@ -1368,8 +1462,34 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     // The blob factor scales AFTER the contrast curve: a serialized-but-
     // correct answer lands mid-band (below every correct prose answer, above
     // wrong values and errors) instead of being contrast-crushed to zero.
+    // Omission-only cushion. An answer that contradicts NOTHING — every value
+    // it asserts is right, it is merely incomplete — is a partially correct
+    // answer, not a wrong one, and must stay ordered above any answer that
+    // substitutes a wrong value. Gated on real coverage (so unrelated text,
+    // which matches nothing, gets no lift), on a fact-bearing ground truth,
+    // and on zero penalties of any kind (so a value dump cannot buy it).
+    // `gt_weight_raw >= 3.0` keeps the cushion off ground truths whose only
+    // typed fact is a status word, where "recall" would be 1.0 for any answer
+    // that merely repeats the verdict while explaining it wrongly; the text
+    // floor requires the answer to actually resemble the truth it omits from.
+    let clean = p_contra <= 0.0 && veto <= 0.0 && !veto_proper && p_prec < 0.05;
+    let raw = if clean && gt_weight_raw >= 3.0 && recall >= 0.35 && text >= 0.35 {
+        raw.max(0.45 + 0.5 * recall)
+    } else {
+        raw
+    };
+
     let s = (raw * (1.0 - p_contra) - p_prec).clamp(0.0, 1.0);
     let c = (contrast(s) * (1.0 - 0.42 * blob)).clamp(0.0, 0.995);
+
+    // A substituted value is a false claim: force the crushed band whatever
+    // the lexical/semantic score says. Kept strictly increasing in c so
+    // ordering inside the vetoed class is preserved, and capped far below
+    // the low band's reachable range so a vetoed answer can never outrank a
+    // merely incomplete one.
+    if veto > 0.0 || veto_proper {
+        return (0.012 * c).clamp(0.0, 0.995);
+    }
     step_band(c)
 }
 
