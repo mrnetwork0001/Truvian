@@ -7,7 +7,12 @@ description = "Truvian ONCHAIN_TX_LOOKUP scoring module for Telegraph Protocol (
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+default = ["real_weights"]
+real_weights = []
+
 [dependencies]
+libm = { version = "0.2", default-features = false }
 
 [profile.release]
 opt-level = 3

@@ -172,6 +172,25 @@ MA_JSON='{"tx":"0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e96
 s_jsongt=$(run "$Q" "$GT_JSON" "$MA_JSON")
 check "JSON gt neutralizes blob penalty"      "$s_jsongt"     "s >= 0.6"
 
+# --- v7 regression cases: semantic fusion ------------------------------------
+
+# Distant-but-correct paraphrase (near-zero token overlap) must clear the
+# high band via the MiniLM channel...
+DIST_GT="A blockchain is a distributed ledger maintained by a network of nodes without a central authority."
+s_dist_good=$(run "What is a blockchain?" "$DIST_GT" "Blockchains are decentralized ledgers kept in sync by many independent nodes rather than one central party.")
+check "distant paraphrase good high"          "$s_dist_good"  "s >= 0.6"
+# ...while embeddings must NEVER rescue a same-topic wrong answer.
+s_dist_bad=$(run "What is a blockchain?" "$DIST_GT" "A blockchain is a centralized database controlled by a single administrator.")
+check "distant topic-match wrong below good"  "$s_dist_bad"   "s < $s_dist_good - 0.3"
+
+# Wrong-value answer with near-perfect semantic topicality stays low.
+POP_GT="Tokyo has a population of about 14 million people."
+s_pop_good=$(run "What is the population of Tokyo?" "$POP_GT" "Around 14 million people live in Tokyo.")
+s_pop_bad=$(run "What is the population of Tokyo?" "$POP_GT" "Tokyo has a population of about 4 million people.")
+check "population paraphrase good high"       "$s_pop_good"   "s >= 0.6"
+check "wrong population not rescued by sem"   "$s_pop_bad"    "s < 0.5"
+check "wrong population < good"               "$s_pop_bad"    "s < $s_pop_good - 0.3"
+
 # Empty question must not trap and self-match must still be 1.0.
 s_noq=$(run "" "$GT" "$GT")
 check "empty question self-match == 1"        "$s_noq"        "s >= 0.99"

@@ -37,6 +37,18 @@
 
 use std::alloc::{alloc as raw_alloc, dealloc as raw_dealloc, Layout};
 
+mod embed;
+mod math;
+mod tokenizer;
+
+/// MiniLM-L6-v2 INT8 semantic cosine between two texts, in [0,1].
+/// Deterministic: INT8 weights + pure-Rust libm float math, no host calls.
+fn semantic_cosine(a: &str, b: &str) -> f32 {
+    let ea = embed::run(&tokenizer::tokenize(a));
+    let eb = embed::run(&tokenizer::tokenize(b));
+    math::cosine(&ea, &eb)
+}
+
 // ---------------------------------------------------------------------------
 // Host memory contract
 // ---------------------------------------------------------------------------
@@ -118,21 +130,21 @@ const STATUS_POS: &[&str] = &[
 const STATUS_NEG: &[&str] = &[
     "fail", "fails", "failed", "failing", "failure", "unsuccessful",
     "unsuccessfully", "revert", "reverts", "reverted", "reverting",
-    "rejected", "invalid",
+    "rejected", "invalid", "bounced", "bounce",
 ];
 const UPDOWN_POS: &[&str] = &[
     "increase", "increases", "increased", "increasing", "rise", "rises",
     "rose", "risen", "rising", "climb", "climbs", "climbed", "climbing",
     "gain", "gains", "gained", "surge", "surged", "jump", "jumps", "jumped",
     "rally", "rallied", "grew", "grow", "grows", "growing", "up", "higher",
-    "appreciated",
+    "appreciated", "raise", "raises", "raised", "raising",
 ];
 const UPDOWN_NEG: &[&str] = &[
     "decrease", "decreases", "decreased", "decreasing", "fall", "falls",
     "fell", "fallen", "falling", "drop", "drops", "dropped", "dropping",
     "decline", "declines", "declined", "declining", "dip", "dips", "dipped",
     "plunge", "plunged", "sank", "sink", "slumped", "slid", "down", "lower",
-    "depreciated", "shrank",
+    "depreciated", "shrank", "lowers", "lowered", "lowering",
 ];
 const WINLOSE_POS: &[&str] = &["won", "win", "wins", "winning", "victory", "victorious", "beat"];
 const WINLOSE_NEG: &[&str] = &["lost", "lose", "loses", "losing"];
@@ -163,6 +175,7 @@ fn word_number(w: &str) -> Option<&'static str> {
         "twelve" => "12", "thirteen" => "13", "fourteen" => "14",
         "fifteen" => "15", "sixteen" => "16", "seventeen" => "17",
         "eighteen" => "18", "nineteen" => "19", "twenty" => "20",
+        "trio" => "3", "couple" => "2", "pair" => "2", "dozen" => "12",
         _ => return None,
     })
 }
@@ -551,7 +564,9 @@ fn analyze(text: &str) -> Analysis {
                     neg_strong += 1;
                 }
                 neg_active = 3;
-                flag_budget = 1;
+                // "instead of X", "rather than X", "without X" disclaim the
+                // whole following phrase, not just its first word.
+                flag_budget = if matches!(word.as_str(), "instead" | "rather" | "without") { 3 } else { 1 };
                 toks.push(Tok { text: word, kind: Kind::Word, negated: false, proper: prop });
                 if let Some((f, d)) = marker {
                     marker = Some((f, d + 1));
@@ -570,10 +585,17 @@ fn analyze(text: &str) -> Analysis {
             }
 
             let flipped = neg_active > 0;
+            // Bare directional adverbs right after a count noun are position
+            // descriptions ("ten points down"), not direction-of-change
+            // claims — they must not arm the up/down contradiction group.
+            let positional = matches!(word.as_str(), "up" | "down" | "higher" | "lower")
+                && toks.iter().rev().find(|t| t.kind == Kind::Word).map_or(false, |t| {
+                    matches!(t.text.as_str(), "points" | "point" | "goals" | "goal" | "games" | "game" | "sets" | "set" | "runs" | "run")
+                });
             // "defeated"/"beaten" are win-group words in the active voice
             // ("A defeated B") but flip meaning in the passive ("A was
             // defeated") — only the active form asserts a win.
-            let mut pol_hit = polarity_word(&word);
+            let mut pol_hit = if positional { None } else { polarity_word(&word) };
             if pol_hit.is_none() && (word == "defeated" || word == "beaten") {
                 let passive = toks.iter().rev().find(|t| t.kind == Kind::Word).map_or(false, |t| {
                     matches!(t.text.as_str(), "was" | "were" | "been" | "being" | "is" | "are" | "got" | "getting" | "get")
@@ -643,7 +665,7 @@ fn analyze(text: &str) -> Analysis {
 /// stay distinct, and the polarity machinery uses the raw words anyway.
 const SYN_GROUPS: &[(&str, &[&str])] = &[
     ("~win", &["won", "win", "wins", "winning", "victory", "victorious", "beat", "defeated", "triumphed", "prevailed"]),
-    ("~lose", &["lost", "lose", "loses", "losing"]),
+    ("~lose", &["lost", "lose", "loses", "losing", "squandered", "blew"]),
     ("~rise", &["rose", "risen", "rise", "rises", "rising", "climbed", "climbs", "climbing", "increased", "increases", "increasing", "gained", "gains", "surged", "jumped", "higher"]),
     ("~fall", &["fell", "fallen", "fall", "falls", "falling", "dropped", "drops", "dropping", "declined", "declines", "declining", "decreased", "decreases", "decreasing", "lower", "plunged", "sank"]),
     ("~success", &["succeeded", "succeeds", "succeed", "successful", "successfully", "success", "confirmed", "executed", "completed", "mined", "landed"]),
@@ -653,6 +675,23 @@ const SYN_GROUPS: &[(&str, &[&str])] = &[
     ("~tie", &["tied", "tie", "ties", "level", "deadlocked", "square"]),
     ("~each", &["each", "apiece"]),
     ("~keep", &["kept", "keep", "keeps", "keeping", "maintain", "maintains", "maintained"]),
+    ("~improve", &["improve", "improves", "improved", "improving", "lifts", "lifted", "boosts", "boosted", "enhances", "enhanced"]),
+    ("~worsen", &["worsen", "worsens", "worsened", "worsening", "degrades", "degraded", "deteriorates", "deteriorated"]),
+    ("~strengthen", &["strengthen", "strengthens", "strengthened", "bolsters", "bolstered"]),
+    ("~weaken", &["weaken", "weakens", "weakened", "erode", "erodes", "eroded", "undermines", "undermined"]),
+    ("~north", &["north", "northward", "northwards", "northern"]),
+    ("~south", &["south", "southward", "southwards", "southern"]),
+    ("~loose", &["relaxes", "relaxed", "relax", "softens", "softened", "loosens", "loosened"]),
+    ("~tight", &["tightens", "tightened", "tighten", "stiffens", "stiffened"]),
+    ("~more", &["more", "greater"]),
+    ("~less", &["less", "fewer", "lesser"]),
+    ("~sunny", &["sunny", "sunshine", "cloudless", "clear", "clearing", "clears"]),
+    ("~cloudy", &["cloudy", "overcast"]),
+    ("~rain", &["rain", "rains", "rainy", "raining", "showers"]),
+    ("~snow", &["snow", "snowy", "snowfall"]),
+    ("~storm", &["storm", "storms", "stormy", "thunderstorms", "thunderstorm"]),
+    ("~calm", &["calm", "gentle", "mild"]),
+    ("~lead", &["leads", "leading", "ahead"]),
 ];
 
 fn synonym_group(w: &str) -> Option<&'static str> {
@@ -981,10 +1020,71 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     let gt = analyze(gt_trim);
     let ma = analyze(ma_trim);
 
+    // Question-discounted fact recall is needed up front: the semantic
+    // channel is gated by it below.
+    let eff_weight_early = |gf: &Fact| -> f32 {
+        let w = gf.weight();
+        match gf {
+            Fact::Status(_) => w,
+            _ => {
+                if q.facts.iter().any(|qf| facts_match(gf, qf)) {
+                    w * 0.15
+                } else {
+                    w
+                }
+            }
+        }
+    };
+    let gtw_disc: f32 = gt.facts.iter().map(&eff_weight_early).sum();
+    let gtw_raw: f32 = gt.facts.iter().map(|f| f.weight()).sum();
+    let recall_early = if gtw_disc > 0.0 {
+        gt.facts
+            .iter()
+            .map(|gf| match_credit(gf, &ma.facts) * eff_weight_early(gf))
+            .sum::<f32>()
+            / gtw_disc
+    } else {
+        1.0
+    };
+
     // Token-level similarity plus a character-trigram term: loose-but-correct
     // paraphrases share word morphology even when exact tokens differ.
-    let text = (text_similarity(&gt.toks, &ma.toks)
+    let lex = (text_similarity(&gt.toks, &ma.toks)
         + 0.25 * char_trigram_dice(gt_trim, ma_trim))
+        .clamp(0.0, 1.0);
+
+    // MiniLM semantic similarity carries the meaning signal that lexical
+    // overlap misses on distant paraphrases. Calibrated so unrelated text
+    // (cosine ~0.3) maps to 0 and a solid paraphrase (~0.95) maps to ~1.
+    let cjk_frac = |t: &str| -> f32 {
+        let mut cjk = 0u32;
+        let mut total = 0u32;
+        for c in t.chars() {
+            if c.is_whitespace() {
+                continue;
+            }
+            total += 1;
+            if is_cjk_or_symbol(c) {
+                cjk += 1;
+            }
+        }
+        if total == 0 { 0.0 } else { cjk as f32 / total as f32 }
+    };
+    let cjk_heavy = cjk_frac(gt_trim) > 0.25 || cjk_frac(ma_trim) > 0.25;
+    let sem = if cjk_heavy { 0.0 } else { semantic_cosine(gt_trim, ma_trim) };
+    let sem_cal_topical = ((sem - 0.35) / 0.60).clamp(0.0, 1.0);
+    // Recall gate: semantic topicality must not lift an answer that failed
+    // the ground truth's typed facts (wrong population, wrong score...).
+    let alpha_gate = gtw_raw / (gtw_raw + 3.0);
+    let sem_cal = sem_cal_topical * (1.0 - alpha_gate * (1.0 - recall_early));
+    // Fusion: a weighted blend, with a semantic floor so a distant-but-true
+    // paraphrase (high cosine, low token overlap) is not starved by lexical
+    // similarity. All correctness penalties apply multiplicatively AFTER
+    // this, so embeddings can never rescue a wrong-status / wrong-value /
+    // entity-swapped answer.
+    let text = lex
+        .max(0.55 * lex + 0.45 * sem_cal)
+        .max(sem_cal - 0.08)
         .clamp(0.0, 1.0);
 
     // Question-given facts are context the answer need not repeat: a hash or
@@ -1074,6 +1174,41 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             }
         }
         p_contra += p_clash.min(0.60);
+    }
+
+    // Antonym substitution at the synonym-group level: the ground truth
+    // asserts one member of an antonym pair, the answer asserts the opposite
+    // member and not the original ("lowers risk, improves mood" answered
+    // with "raises risk, worsens mood"). Works even when a sentence carries
+    // several direction words, where the coarse group bits neutralize.
+    {
+        const ANTONYMS: &[(&str, &str)] = &[
+            ("~rise", "~fall"),
+            ("~win", "~lose"),
+            ("~improve", "~worsen"),
+            ("~strengthen", "~weaken"),
+            ("~north", "~south"),
+            ("~loose", "~tight"),
+            ("~more", "~less"),
+            ("~sunny", "~rain"),
+            ("~sunny", "~cloudy"),
+            ("~sunny", "~storm"),
+            ("~rain", "~snow"),
+            ("~calm", "~storm"),
+            ("~tie", "~lead"),
+        ];
+        let affirmed = |toks: &[Tok], label: &str| -> bool {
+            toks.iter().any(|t| t.kind == Kind::Word && !t.negated && canon(t) == label)
+        };
+        let mut hits = 0.0f32;
+        for (a, b) in ANTONYMS {
+            for (x, y) in [(a, b), (b, a)] {
+                if affirmed(&gt.toks, x) && affirmed(&ma.toks, y) && !affirmed(&ma.toks, x) {
+                    hits += 0.40;
+                }
+            }
+        }
+        p_contra += hits.min(0.80);
     }
 
     // Proper-noun substitution: the answer replaces a named entity from the
