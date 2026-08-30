@@ -1886,7 +1886,7 @@ pub extern "C" fn rank_answer(
     // Build tag: gives each resubmission a distinct binary hash (the registry
     // refuses a duplicate author+hash) with zero behavioural effect; black_box
     // keeps the optimizer from stripping it.
-    static BUILD_TAG: [u8; 8] = *b"truv-9b\0";
+    static BUILD_TAG: [u8; 8] = *b"truv10b\0";
     core::hint::black_box(&BUILD_TAG);
     let s = score(&question, &ground_truth, &miner_answer);
     if s.is_finite() {
