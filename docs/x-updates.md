@@ -5,6 +5,40 @@ same day, tagged **@Telegraphprotoc**. This file logs drafts and what was posted
 
 ---
 
+## FINAL THREAD — the whole arc, Aug 23 → 30 (post this one; supersedes posts 1–4 below)
+
+Enter the same handle on submissions.telegraphprotocol.com — the judges'
+table counts tweets mentioning @Telegraphprotoc from that handle.
+
+**1/** *(attach: submissions dashboard or explorer WASM leaderboard showing #544/#617 as former champions)*
+> Day 8 of building on @Telegraphprotoc. Final update before Tracks 1 & 2 close:
+> → miner live on Base, serving ONCHAIN_TX_LOOKUP + GAS_PRICE
+> → our WASM judge took the ONCHAIN_TX_LOOKUP championship — twice
+> → 10 gauntlet submissions, every rejection reverse-engineered
+> Thread 🧵
+
+**2/** *(attach: miner.truvian.xyz landing page)*
+> The miner: exact on-chain answers read live from JSON-RPC — Base, Ethereum, Base Sepolia. Tx lookups include the OP-stack L1 data fee most implementations silently drop. Live at miner.truvian.xyz, ~0.8s median — faster than the intent's rank-1 miner.
+
+**3/**
+> Track 2: each intent's judge is a WASM module anyone can challenge; the node promotes you only if you separate good answers from bad more clearly than the incumbent. Rejected twice, then promoted. Dethroned. Promoted again. Dethroned by a step-function scorer.
+
+**4/**
+> What we learned about judging on-chain answers: text similarity can't tell "reverted" from "succeeded" when the numbers match. The incumbent scored a wrong-status answer 0.998 and a value-dump 0.998. Ours: 0.006 and 0.49. Facts, not vocabulary.
+
+**5/**
+> Then the arms race went meta: a champion with a hard step function maxed the benchmark's margin metric while scoring every REAL answer near zero — the live leaderboard collapsed to ≤0.013 for everyone. We documented it, told the team, and kept challenging.
+
+**6/**
+> v8 beat that champion's margin 0.857 vs 0.693 — then lost to a 10-minute evaluation clock. v9: same logic at 171 KB. Then one fixture, one ordering short. We hunted it with six adversarial fixture generators against the champion's own binary. v11 is next.
+
+**7/**
+> Everything is public and reproducible — fixtures, comparison harness, every binary, every rejection reason: github.com/mrnetwork0001/Truvian
+>
+> Track 3 opens tomorrow: Truvian Shield, an execution-safety agent that consumes live Telegraph miners before an agent signs. @Telegraphprotoc
+
+---
+
 ## Post 1 — entry announcement (draft, ready to post)
 
 > Building for the @Telegraphprotoc Season I hackathon: Truvian — an exact
