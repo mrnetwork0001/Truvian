@@ -37,6 +37,11 @@
 
 use std::alloc::{alloc as raw_alloc, dealloc as raw_dealloc, Layout};
 
+/// Build tag embedded in the binary (kept alive so each release hashes uniquely).
+#[used]
+#[no_mangle]
+pub static TRUVIAN_BUILD_TAG: [u8; 8] = *b"truv-11\0";
+
 // v9: the MiniLM INT8 embedding path was removed. It bought a handful of
 // distant-paraphrase cases but cost ~23 MB of module load plus two
 // transformer forward passes per call, which blew the validator's evaluation
@@ -119,13 +124,44 @@ const G_YESNO: usize = 3;
 
 const STATUS_POS: &[&str] = &[
     "succeed", "succeeds", "succeeded", "succeeding", "success", "successful",
-    "successfully", "confirmed", "executed", "completed", "mined", "included",
-    "landed", "found", "exists", "exist",
+    "successfully", "completed",
+];
+/// Inclusion words: true of reverted transactions too ("included in block N
+/// but reverted"), so they assert nothing about success. Negated
+/// ("not included", "never mined", "doesn't exist") they mean the tx is
+/// absent/indeterminate — not that it reverted.
+const INCLUSION_WORDS: &[&str] = &[
+    "included", "mined", "landed", "found", "exists", "exist", "finalized",
+    "finalised", "confirmed", "executed",
+];
+/// Soft success words: "was confirmed in block N" means it succeeded — unless
+/// the answer also carries a hard failure word ("confirmed but reverted",
+/// "confirmed_revert"), in which case the failure word is the verdict.
+const SOFT_POS: &[&str] = &["confirmed", "executed"];
+/// Indeterminate status: an answer asserting these contradicts a ground
+/// truth with a definite status (succeeded OR reverted).
+const STATUS_INDET: &[&str] = &[
+    "pending", "unconfirmed", "awaiting", "unknown", "unfinalized", "queued",
+    "mempool", "replaced", "stuck", "unmined", "dropped",
+];
+/// Capitalized common nouns / key:value labels that are never named
+/// entities: "Receipt 0x…", "TxHash: …", "Status: success".
+const DOMAIN_LABELS: &[&str] = &[
+    "receipt", "transaction", "tx", "txn", "txhash", "hash", "status", "block",
+    "from", "to", "value", "amount", "chain", "network", "result", "sender",
+    "recipient", "gas", "fee", "nonce", "timestamp", "summary", "details",
+    "detail", "note", "answer", "transfer", "address", "contract", "token",
+    "height", "number", "index", "data", "input", "output", "logs", "log",
+    "time", "date", "price", "total", "cost", "confirmations", "source",
+    "method", "function", "type", "kind", "id", "blocknumber", "blockhash",
+    "gasused", "gasprice", "success", "failed", "reverted", "yes", "no", "ok",
+    "error", "info", "response", "reply", "verdict", "reason",
 ];
 const STATUS_NEG: &[&str] = &[
     "fail", "fails", "failed", "failing", "failure", "unsuccessful",
     "unsuccessfully", "revert", "reverts", "reverted", "reverting",
-    "rejected", "invalid", "bounced", "bounce",
+    "rejected", "invalid", "bounced", "bounce", "error", "errored", "exception",
+    "halted",
 ];
 const UPDOWN_POS: &[&str] = &[
     "increase", "increases", "increased", "increasing", "rise", "rises",
@@ -175,57 +211,27 @@ fn word_number(w: &str) -> Option<&'static str> {
     })
 }
 
-/// Numbers that are components of a clock time (hh:mm or hh:mm:ss), as
-/// normalized digit strings. Used to exempt time-format paraphrases from the
-/// numeric substitution veto.
+/// Components of clock times as normalized digit strings, for the numeric
+/// substitution exemption.
 fn clock_numbers(text: &str) -> Vec<String> {
-    let chars: Vec<char> = text.chars().collect();
-    let n = chars.len();
     let mut out: Vec<String> = Vec::new();
-    let mut i = 0usize;
-    while i < n {
-        if chars[i].is_ascii_digit() {
-            let mut j = i;
-            while j < n && chars[j].is_ascii_digit() {
-                j += 1;
-            }
-            let first: String = chars[i..j].iter().collect();
-            // hh:mm[:ss]
-            if j + 2 < n + 0 && j < n && chars[j] == ':' && j + 2 < n && chars[j + 1].is_ascii_digit() && chars[j + 2].is_ascii_digit() && (j - i) <= 2 {
-                let mut parts: Vec<String> = vec![first];
-                let mut k = j;
-                while k < n && chars[k] == ':' && k + 2 < n + 0 && k + 2 <= n - 1 + 1 && k + 1 < n && chars[k + 1].is_ascii_digit() {
-                    let mut e = k + 1;
-                    while e < n && chars[e].is_ascii_digit() {
-                        e += 1;
-                    }
-                    if e - (k + 1) != 2 {
-                        break;
-                    }
-                    parts.push(chars[k + 1..e].iter().collect());
-                    k = e;
-                }
-                if parts.len() >= 2 {
-                    for p in parts {
-                        let t = p.trim_start_matches('0');
-                        out.push(if t.is_empty() { "0".to_string() } else { t.to_string() });
-                    }
-                }
-                i = k;
-                continue;
-            }
-            i = j;
-            continue;
+    for (h, m, sec) in clock_times(text) {
+        out.push(h.to_string());
+        if let Some(m) = m {
+            out.push(m.to_string());
         }
-        i += 1;
+        if let Some(sc) = sec {
+            out.push(sc.to_string());
+        }
     }
     out.sort();
     out.dedup();
     out
 }
 
-/// Parsed clock times (hour, minute, optional second) found in a text.
-fn clock_times(text: &str) -> Vec<(u32, u32, Option<u32>)> {
+/// Parsed clock times found in a text: (hour, minutes if given, seconds if
+/// given). Accepts "14:03", "14:03:11" and "2 PM" / "2pm" / "2 p.m.".
+fn clock_times(text: &str) -> Vec<(u32, Option<u32>, Option<u32>)> {
     let chars: Vec<char> = text.chars().collect();
     let n = chars.len();
     let mut out = Vec::new();
@@ -250,9 +256,26 @@ fn clock_times(text: &str) -> Vec<(u32, u32, Option<u32>)> {
                     sec = chars[k + 1..k + 3].iter().collect::<String>().parse().ok();
                     k += 3;
                 }
-                out.push((h, m, sec));
+                out.push((h, Some(m), sec));
                 i = k;
                 continue;
+            }
+            if hlen <= 2 {
+                // "2 PM", "2pm", "11 a.m."
+                let mut k = j;
+                while k < n && chars[k] == ' ' {
+                    k += 1;
+                }
+                let rest: String = chars[k..(k + 4).min(n)].iter().collect::<String>().to_lowercase();
+                let dotted = rest.starts_with("a.m") || rest.starts_with("p.m");
+                let plain = (rest.starts_with("am") || rest.starts_with("pm"))
+                    && !rest.chars().nth(2).map_or(false, |c| c.is_alphanumeric());
+                if dotted || plain {
+                    let h: u32 = chars[i..j].iter().collect::<String>().parse().unwrap_or(0);
+                    out.push((h, None, None));
+                    i = k + 2;
+                    continue;
+                }
             }
             i = j;
             continue;
@@ -260,6 +283,184 @@ fn clock_times(text: &str) -> Vec<(u32, u32, Option<u32>)> {
         i += 1;
     }
     out
+}
+
+/// Asset/unit family and scale to a base unit. ETH-family units convert to
+/// wei so "0.25 ETH" == "250000000 gwei" == "250000000000000000 wei".
+fn unit_family(w: &str) -> Option<(&'static str, f64)> {
+    Some(match w {
+        "eth" | "ether" => ("eth", 1e18),
+        "gwei" => ("eth", 1e9),
+        "wei" => ("eth", 1.0),
+        "weth" => ("weth", 1.0),
+        "usdc" => ("usdc", 1.0),
+        "usdt" => ("usdt", 1.0),
+        "dai" => ("dai", 1.0),
+        "matic" => ("matic", 1.0),
+        "bnb" => ("bnb", 1.0),
+        "avax" => ("avax", 1.0),
+        "sol" => ("sol", 1.0),
+        "btc" => ("btc", 1.0),
+        "wbtc" => ("wbtc", 1.0),
+        "usd" | "dollars" => ("usd", 1.0),
+        "link" => ("link", 1.0),
+        "uni" => ("uni", 1.0),
+        _ => return None,
+    })
+}
+
+/// A number immediately followed by an asset/unit word. Value is held as an
+/// exact integer: `mantissa × 10^exp` base units (wei for the ETH family),
+/// so 18-digit wei amounts compare exactly — f64 cannot represent them.
+struct Amount {
+    key: String,
+    mantissa: u128,
+    exp: i32,
+    family: &'static str,
+}
+
+fn amounts(toks: &[Tok]) -> Vec<Amount> {
+    let mut out = Vec::new();
+    if toks.len() < 2 {
+        return out;
+    }
+    for i in 0..toks.len() - 1 {
+        let (a, b) = (&toks[i], &toks[i + 1]);
+        if a.kind != Kind::Num || b.kind != Kind::Word {
+            continue;
+        }
+        if let Some((family, scale)) = unit_family(&b.text) {
+            let shift: i32 = if scale >= 1e18 { 18 } else if scale >= 1e9 { 9 } else { 0 };
+            let decimals = a.text.find('.').map_or(0, |p| (a.text.len() - p - 1) as i32);
+            let digits: String = a.text.chars().filter(|c| c.is_ascii_digit()).collect();
+            let digits = digits.trim_start_matches('0');
+            let digits = if digits.is_empty() { "0" } else { digits };
+            if digits.len() > 36 {
+                continue;
+            }
+            if let Ok(mantissa) = digits.parse::<u128>() {
+                let key = if a.text.contains('.') {
+                    match a.text.parse::<f64>() {
+                        Ok(v) => Fact::Dec(v).key(),
+                        Err(_) => continue,
+                    }
+                } else {
+                    Fact::Int(a.text.clone()).key()
+                };
+                out.push(Amount { key, mantissa, exp: shift - decimals, family });
+            }
+        }
+    }
+    out
+}
+
+/// Equal after unit conversion. The answer may ROUND the truth (fewer
+/// decimals than the ground truth => tolerance of half a unit in its last
+/// place); an answer more precise than the truth must match exactly.
+fn amounts_equal(gt: &Amount, ma: &Amount) -> bool {
+    if gt.family != ma.family {
+        return false;
+    }
+    // Align both to the finer exponent and compare as integers.
+    let e = gt.exp.min(ma.exp);
+    let pow = |k: i32| -> Option<u128> { 10u128.checked_pow(k as u32) };
+    let (gx, mx) = match (pow(gt.exp - e), pow(ma.exp - e)) {
+        (Some(a), Some(b)) => match (gt.mantissa.checked_mul(a), ma.mantissa.checked_mul(b)) {
+            (Some(x), Some(y)) => (x, y),
+            _ => return false,
+        },
+        _ => return false,
+    };
+    if ma.exp <= gt.exp {
+        // the answer is at least as precise as the truth: exact
+        gx == mx
+    } else {
+        // the answer rounds the truth: within half a unit of its last place.
+        // A zero can never be "a rounding" of a nonzero amount ("value 0 ETH"
+        // is not the fee 9398486826272 wei), and a rounding must keep at
+        // least one significant digit of the truth.
+        if ma.mantissa == 0 || gt.mantissa == 0 {
+            return gt.mantissa == ma.mantissa;
+        }
+        let ulp = match pow(ma.exp - e) {
+            Some(u) => u,
+            None => return false,
+        };
+        if gx < ulp {
+            return false; // truth is below the answer's resolution entirely
+        }
+        let diff = if gx > mx { gx - mx } else { mx - gx };
+        diff.checked_mul(2).map_or(false, |d| d <= ulp)
+    }
+}
+
+/// Syntactic role of a hex token: which slot of the answer it occupies.
+fn hex_role(toks: &[Tok], hex: &str) -> &'static str {
+    let idx = match toks.iter().position(|t| t.kind == Kind::Hex && t.text == hex) {
+        Some(i) => i,
+        None => return "",
+    };
+    let prev: Vec<&str> = toks[idx.saturating_sub(3)..idx].iter().rev().map(|t| t.text.as_str()).collect();
+    let next: Vec<&str> = toks[idx + 1..(idx + 3).min(toks.len())].iter().map(|t| t.text.as_str()).collect();
+    if prev.iter().any(|w| *w == "block") {
+        return "blockhash";
+    }
+    for w in prev.iter().take(2) {
+        match *w {
+            "transaction" | "tx" | "txn" | "hash" | "txhash" | "receipt" => return "txhash",
+            "from" | "sender" | "by" => return "from",
+            "to" | "recipient" | "receiver" | "delivered" => return "to",
+            "contract" | "token" | "router" | "pool" | "factory" | "via" | "through" | "at" | "on" => return "contract",
+            _ => {}
+        }
+    }
+    for w in next.iter().take(2) {
+        match *w {
+            "received" | "receives" | "got" => return "to",
+            "sent" | "deployed" | "called" | "swapped" | "invoked" | "transferred" => return "from",
+            _ => {}
+        }
+    }
+    ""
+}
+
+/// Chain-name groups named right after "on" ("on Base", "on OP Mainnet",
+/// "on the Optimism-based Base chain"), plus whether a testnet is named.
+fn chains_after_on(toks: &[Tok]) -> (Vec<&'static str>, bool) {
+    let group = |w: &str| -> Option<&'static str> {
+        Some(match w {
+            "base" => "base",
+            "ethereum" | "eth" => "eth",
+            "arbitrum" | "arb" => "arb",
+            "optimism" | "op" => "op",
+            "polygon" | "matic" => "polygon",
+            "bsc" | "binance" | "bnb" => "bsc",
+            "avalanche" | "avax" => "avax",
+            "solana" | "sol" => "sol",
+            _ => return None,
+        })
+    };
+    let mut groups: Vec<&'static str> = Vec::new();
+    let mut testnet = false;
+    for (i, t) in toks.iter().enumerate() {
+        if t.kind != Kind::Word || t.text != "on" {
+            continue;
+        }
+        for u in toks.iter().skip(i + 1).take(4) {
+            if u.kind != Kind::Word {
+                break;
+            }
+            if let Some(g) = group(&u.text) {
+                if !groups.contains(&g) {
+                    groups.push(g);
+                }
+            }
+            if matches!(u.text.as_str(), "sepolia" | "goerli" | "holesky" | "testnet") {
+                testnet = true;
+            }
+        }
+    }
+    (groups, testnet)
 }
 
 fn in_list(list: &[&str], w: &str) -> bool {
@@ -298,6 +499,12 @@ enum Fact {
     Dec(f64),
     /// Transaction status after negation flipping: true = success group.
     Status(bool),
+    /// Indeterminate / absent status: pending, unconfirmed, not included,
+    /// dropped from the mempool. Contradicts any definite status.
+    Indet,
+    /// Called function name: "calling transfer(address,uint256)",
+    /// "invoked approve". A different name in that slot is a substitution.
+    Func(String),
 }
 
 impl Fact {
@@ -317,6 +524,8 @@ impl Fact {
             }
             Fact::Dec(_) => 1.5,
             Fact::Status(_) => 2.0,
+            Fact::Indet => 2.0,
+            Fact::Func(_) => 2.0,
         }
     }
 
@@ -327,6 +536,8 @@ impl Fact {
             Fact::Int(s) => format!("i:{s}"),
             Fact::Dec(v) => format!("d:{:016x}", v.to_bits()),
             Fact::Status(s) => format!("s:{}", if *s { 1 } else { 0 }),
+            Fact::Indet => "s:indet".to_string(),
+            Fact::Func(f) => format!("f:{f}"),
         }
     }
 
@@ -344,6 +555,8 @@ impl Fact {
             }
             Fact::Dec(_) => 0.3,
             Fact::Status(_) => 0.0, // handled by the contradiction penalty
+            Fact::Indet => 0.0,
+            Fact::Func(_) => 0.5,
         }
     }
 }
@@ -369,6 +582,8 @@ fn facts_match(gt: &Fact, ma: &Fact) -> bool {
     match (gt, ma) {
         (Fact::Hex(a), Fact::Hex(b)) => a == b,
         (Fact::Status(a), Fact::Status(b)) => a == b,
+        (Fact::Indet, Fact::Indet) => true,
+        (Fact::Func(a), Fact::Func(b)) => a == b,
         (Fact::Int(a), Fact::Int(b)) => a == b,
         (Fact::Int(a), Fact::Dec(b)) | (Fact::Dec(b), Fact::Int(a)) => {
             matches!(int_to_f64(a), Some(av) if num_eq(av, *b))
@@ -389,7 +604,11 @@ fn match_credit(gt: &Fact, ma_facts: &[Fact]) -> f32 {
         }
         if let (Fact::Hex(a), Fact::Hex(b)) = (gt, mf) {
             let (short, long) = if a.len() <= b.len() { (a, b) } else { (b, a) };
-            if short.len() >= 12 && long.starts_with(short.as_str()) && best < 0.75 {
+            // Display-truncated identifiers ("0xd8dA…6045", "0xe5cf…9668")
+            // leave a short prefix; 4+ hex chars of prefix on a full-length
+            // ground-truth identifier is credited as a truncated reference.
+            let min_prefix = if long.len() >= 42 { 6 } else { 12 };
+            if short.len() >= min_prefix && short.len() < long.len() && long.starts_with(short.as_str()) && best < 0.75 {
                 best = 0.75;
             }
         }
@@ -451,6 +670,9 @@ struct Tok {
     negated: bool,
     /// Original text had a leading uppercase letter (proper-noun heuristic).
     proper: bool,
+    /// Word is a key:value label — immediately followed by ':' (markdown
+    /// emphasis allowed in between): "Status:", "**Hash**:".
+    label: bool,
 }
 
 struct Analysis {
@@ -490,6 +712,7 @@ fn analyze(text: &str) -> Analysis {
     // must never be treated as named entities by the substitution check.
     let mut sentence_start = true;
     let mut pending_initial_caps: Vec<usize> = Vec::new();
+    let mut soft_pos = false;
     // from/to orientation: which marker was last seen and how many tokens ago.
     let mut marker: Option<(bool, u32)> = None; // (is_from, tokens_since)
     let mut word_index = 0usize; // index among Word toks (for leading yes/no)
@@ -522,7 +745,7 @@ fn analyze(text: &str) -> Analysis {
             let tok: String = chars[i..j].iter().collect::<String>().to_ascii_lowercase();
             if tok.len() == 42 {
                 if let Some((is_from, dist)) = marker {
-                    if dist <= 3 {
+                    if dist <= 6 {
                         if is_from {
                             if from_addr.is_none() {
                                 from_addr = Some(tok.clone());
@@ -537,7 +760,7 @@ fn analyze(text: &str) -> Analysis {
                 marker = Some((f, d + 1));
             }
             facts.push(Fact::Hex(tok.clone()));
-            toks.push(Tok { text: tok, kind: Kind::Hex, negated: false, proper: false });
+            toks.push(Tok { text: tok, kind: Kind::Hex, negated: false, proper: false, label: false });
             i = j;
             continue;
         }
@@ -567,12 +790,12 @@ fn analyze(text: &str) -> Analysis {
                 if let Ok(v) = raw.parse::<f64>() {
                     facts.push(Fact::Dec(v));
                 }
-                toks.push(Tok { text: raw, kind: Kind::Num, negated: false, proper: false });
+                toks.push(Tok { text: raw, kind: Kind::Num, negated: false, proper: false, label: false });
             } else {
                 let trimmed = raw.trim_start_matches('0');
                 let norm = if trimmed.is_empty() { "0" } else { trimmed };
                 facts.push(Fact::Int(norm.to_string()));
-                toks.push(Tok { text: norm.to_string(), kind: Kind::Num, negated: false, proper: false });
+                toks.push(Tok { text: norm.to_string(), kind: Kind::Num, negated: false, proper: false, label: false });
             }
             if let Some((f, d)) = marker {
                 marker = Some((f, d + 1));
@@ -583,7 +806,7 @@ fn analyze(text: &str) -> Analysis {
 
         // CJK / emoji: one char = one similarity token
         if is_cjk_or_symbol(c) {
-            toks.push(Tok { text: c.to_string(), kind: Kind::Cjk, negated: false, proper: false });
+            toks.push(Tok { text: c.to_string(), kind: Kind::Cjk, negated: false, proper: false, label: false });
             i += 1;
             continue;
         }
@@ -617,6 +840,13 @@ fn analyze(text: &str) -> Analysis {
                 }
             }
 
+            let lab = {
+                let mut k = j;
+                while k < n && (chars[k] == '*' || chars[k] == '`') {
+                    k += 1;
+                }
+                k < n && chars[k] == ':'
+            };
             let is_first_word = word_index == 0;
             word_index += 1;
 
@@ -639,7 +869,7 @@ fn analyze(text: &str) -> Analysis {
                         flag_budget = 1;
                     }
                 }
-                toks.push(Tok { text: word, kind: Kind::Word, negated: false, proper: prop });
+                toks.push(Tok { text: word, kind: Kind::Word, negated: false, proper: prop, label: lab });
                 i = j;
                 continue;
             }
@@ -648,7 +878,7 @@ fn analyze(text: &str) -> Analysis {
             // the negation windows (like digit tokens).
             if let Some(d) = word_number(&word) {
                 facts.push(Fact::Int(d.to_string()));
-                toks.push(Tok { text: d.to_string(), kind: Kind::Num, negated: false, proper: false });
+                toks.push(Tok { text: d.to_string(), kind: Kind::Num, negated: false, proper: false, label: false });
                 if let Some((f, dd)) = marker {
                     marker = Some((f, dd + 1));
                 }
@@ -666,7 +896,7 @@ fn analyze(text: &str) -> Analysis {
                 // "instead of X", "rather than X", "without X" disclaim the
                 // whole following phrase, not just its first word.
                 flag_budget = if matches!(word.as_str(), "instead" | "rather" | "without") { 3 } else { 1 };
-                toks.push(Tok { text: word, kind: Kind::Word, negated: false, proper: prop });
+                toks.push(Tok { text: word, kind: Kind::Word, negated: false, proper: prop, label: lab });
                 if let Some((f, d)) = marker {
                     marker = Some((f, d + 1));
                 }
@@ -675,10 +905,17 @@ fn analyze(text: &str) -> Analysis {
             }
 
             // from/to orientation markers
-            if word == "from" || word == "sender" {
+            if word == "from" || word == "sender" || word == "by" {
                 marker = Some((true, 0));
             } else if word == "to" || word == "recipient" || word == "receiver" {
                 marker = Some((false, 0));
+            } else if word == "received" || word == "receives" || word == "got" {
+                // "<addr> received X from <addr2>": the subject is the recipient.
+                if to_addr.is_none() {
+                    if let Some(t) = toks.iter().rev().find(|t| t.kind == Kind::Hex && t.text.len() == 42) {
+                        to_addr = Some(t.text.clone());
+                    }
+                }
             } else if let Some((f, d)) = marker {
                 marker = Some((f, d + 1));
             }
@@ -703,17 +940,43 @@ fn analyze(text: &str) -> Analysis {
                     pol_hit = Some((G_WINLOSE, true));
                 }
             }
+            // "0 reverts" / "after 0 failures": a zero count negates the noun.
+            let prev_zero = toks.last().map_or(false, |t| t.kind == Kind::Num && t.text == "0")
+                && word.ends_with('s')
+                && !(toks.len() >= 2 && toks[toks.len() - 2].text == "status");
             if let Some((g, positive)) = pol_hit {
-                let effective = positive != flipped;
+                let effective = if g == G_STATUS && !positive && prev_zero { true } else { positive != flipped };
                 pol[g] |= if effective { 1 } else { 2 };
                 if g == G_STATUS {
                     facts.push(Fact::Status(effective));
                 }
             }
+            if in_list(INCLUSION_WORDS, &word) && flipped {
+                facts.push(Fact::Indet);
+            }
+            if in_list(INCLUSION_WORDS, &word) && !flipped {
+                soft_pos = true;
+            }
+            if in_list(STATUS_INDET, &word) && !flipped {
+                facts.push(Fact::Indet);
+            }
 
+            // Function-call slot: "calling transfer(...)", "invoked approve".
+            {
+                let call_trigger = toks.iter().rev().find(|t| t.kind == Kind::Word).map_or(false, |t| {
+                    matches!(t.text.as_str(), "calling" | "called" | "calls" | "invoked" | "invoking" | "invokes" | "invoke" | "function" | "method")
+                });
+                let paren_follows = j < n && chars[j] == '(';
+                let stopish = in_list(STOPWORDS, &word) || word.len() < 3
+                    || in_list(DOMAIN_LABELS, &word)
+                    || matches!(word.as_str(), "calling" | "called" | "calls" | "invoked" | "invoking" | "invokes" | "invoke" | "function" | "method" | "selector" | "address" | "uint" | "bytes" | "bool" | "string");
+                if (call_trigger || paren_follows) && !stopish && polarity_word(&word).is_none() {
+                    facts.push(Fact::Func(word.clone()));
+                }
+            }
             let stop = in_list(STOPWORDS, &word);
             let flag = flag_budget > 0 && !stop;
-            toks.push(Tok { text: word, kind: Kind::Word, negated: flag, proper: prop });
+            toks.push(Tok { text: word, kind: Kind::Word, negated: flag, proper: prop, label: lab });
             if !stop {
                 // content words consume both negation windows
                 if neg_active > 0 {
@@ -750,9 +1013,63 @@ fn analyze(text: &str) -> Analysis {
         };
         if !governs_object {
             if let Some(t) = toks.get_mut(idx) {
-                t.proper = true;
+                if !t.label && !in_list(DOMAIN_LABELS, &t.text) {
+                    t.proper = true;
+                }
             }
         }
+    }
+
+    // Phrase-level status: "out of gas" is a failure; "status 0"/"status 1"
+    // are the receipt's own encoding.
+    {
+        let lower: String = chars.iter().collect::<String>().to_lowercase();
+        if lower.contains("out of gas") {
+            facts.push(Fact::Status(false));
+            pol[G_STATUS] |= 2;
+        }
+        for w in toks.windows(2) {
+            if w[0].kind == Kind::Word && w[0].text == "status" && w[1].kind == Kind::Num {
+                if w[1].text == "0" {
+                    facts.push(Fact::Status(false));
+                    pol[G_STATUS] |= 2;
+                } else if w[1].text == "1" {
+                    facts.push(Fact::Status(true));
+                    pol[G_STATUS] |= 1;
+                }
+            }
+        }
+    }
+    // Function selectors written without 0x ("selector 095ea7b3") become the
+    // same fact as their 0x form.
+    {
+        let lc: Vec<char> = chars.iter().flat_map(|c| c.to_lowercase()).collect();
+        let pat: Vec<char> = "selector".chars().collect();
+        let mut i = 0usize;
+        while i + pat.len() <= lc.len() {
+            if lc[i..i + pat.len()] != pat[..] {
+                i += 1;
+                continue;
+            }
+            let mut q = i + pat.len();
+            while q < lc.len() && (lc[q] == ' ' || lc[q] == ':' || lc[q] == '=') {
+                q += 1;
+            }
+            if q + 1 < lc.len() && lc[q] == '0' && lc[q + 1] == 'x' {
+                q += 2;
+            }
+            let hexs: String = lc[q..].iter().take_while(|c| c.is_ascii_hexdigit()).collect();
+            if hexs.len() == 8 && (q + 8 >= lc.len() || !lc[q + 8].is_alphanumeric()) {
+                facts.push(Fact::Hex(format!("0x{hexs}")));
+            }
+            i = q + hexs.len().max(1);
+        }
+    }
+    // Soft success ("confirmed", "executed") counts as success only when no
+    // hard failure word is present.
+    if soft_pos && !facts.iter().any(|f| matches!(f, Fact::Status(false))) {
+        facts.push(Fact::Status(true));
+        pol[G_STATUS] |= 1;
     }
 
     // Chinese polarity: substring scan with a 2-char negator look-behind.
@@ -816,6 +1133,8 @@ const SYN_GROUPS: &[(&str, &[&str])] = &[
     ("~storm", &["storm", "storms", "stormy", "thunderstorms", "thunderstorm"]),
     ("~calm", &["calm", "gentle", "mild"]),
     ("~lead", &["leads", "leading", "ahead"]),
+    ("~xfer", &["transferring", "transferred", "transfers", "sending", "sent", "moving", "moved"]),
+    ("~deploy", &["deployed", "deploying", "deploys", "created", "creating", "creation"]),
 ];
 
 fn synonym_group(w: &str) -> Option<&'static str> {
@@ -1241,12 +1560,41 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     let gt = analyze(gt_trim);
     let ma = analyze(ma_trim);
 
+    // Amounts equal after unit conversion / rounding ("0.25 ETH" answered as
+    // "250000000 gwei" or "≈0.1235 ETH" for 0.123456789) count as matched
+    // facts on both sides.
+    let gt_amounts = amounts(&gt.toks);
+    let ma_amounts = amounts(&ma.toks);
+    let mut conv_gt_keys: Vec<String> = Vec::new();
+    let mut conv_ma_keys: Vec<String> = Vec::new();
+    for ga in &gt_amounts {
+        for mb in &ma_amounts {
+            if amounts_equal(ga, mb) {
+                conv_gt_keys.push(ga.key.clone());
+                conv_ma_keys.push(mb.key.clone());
+            }
+        }
+    }
+    let credit_of = |gf: &Fact| -> f32 {
+        if conv_gt_keys.iter().any(|k| *k == gf.key()) {
+            1.0
+        } else {
+            match_credit(gf, &ma.facts)
+        }
+    };
+    let ma_matched_any = |mf: &Fact| -> bool {
+        gt.facts.iter().any(|gf| facts_match(gf, mf))
+            || conv_ma_keys.iter().any(|k| *k == mf.key())
+            || matches!(mf, Fact::Hex(ms) if ms.len() >= 6 && ms.len() < 42
+                && gt.facts.iter().any(|gf| matches!(gf, Fact::Hex(gs) if gs.len() >= 42 && gs.starts_with(ms.as_str()))))
+    };
+
     // Question-discounted fact recall is needed up front: the semantic
     // channel is gated by it below.
     let eff_weight_early = |gf: &Fact| -> f32 {
         let w = gf.weight();
         match gf {
-            Fact::Status(_) => w,
+            Fact::Status(_) | Fact::Indet | Fact::Func(_) => w,
             _ => {
                 if q.facts.iter().any(|qf| facts_match(gf, qf)) {
                     w * 0.15
@@ -1261,7 +1609,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     let recall_early = if gtw_disc > 0.0 {
         gt.facts
             .iter()
-            .map(|gf| match_credit(gf, &ma.facts) * eff_weight_early(gf))
+            .map(|gf| credit_of(gf) * eff_weight_early(gf))
             .sum::<f32>()
             / gtw_disc
     } else {
@@ -1319,7 +1667,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     let eff_weight = |gf: &Fact| -> f32 {
         let w = gf.weight();
         match gf {
-            Fact::Status(_) => w,
+            Fact::Status(_) | Fact::Indet | Fact::Func(_) => w,
             _ => {
                 if q.facts.iter().any(|qf| facts_match(gf, qf)) {
                     w * 0.15
@@ -1342,7 +1690,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     if gt_weight_total > 0.0 {
         let mut matched_weight = 0.0f32;
         for gf in &gt.facts {
-            matched_weight += match_credit(gf, &ma.facts) * eff_weight(gf);
+            matched_weight += credit_of(gf) * eff_weight(gf);
         }
         recall = matched_weight / gt_weight_total;
     }
@@ -1427,6 +1775,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             ("~rain", "~snow"),
             ("~calm", "~storm"),
             ("~tie", "~lead"),
+            ("~xfer", "~deploy"),
         ];
         let affirmed = |toks: &[Tok], label: &str| -> bool {
             toks.iter().any(|t| t.kind == Kind::Word && !t.negated && canon(t) == label)
@@ -1468,6 +1817,8 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
         let candidate = |t: &Tok, own: &[String], other: &[String], from_question: bool| -> bool {
             t.kind == Kind::Word
                 && t.proper
+                && !t.label
+                && !in_list(DOMAIN_LABELS, &t.text)
                 && t.text.len() >= 3
                 && !in_list(STOPWORDS, &t.text)
                 && !in_list(NEG_STRONG, &t.text)
@@ -1522,12 +1873,14 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
         }
     }
 
+    let mut veto_swap = false;
     // Swapped from/to orientation: same two addresses, reversed direction.
     if let (Some(gf), Some(gt_to), Some(mf), Some(mt)) =
         (&gt.from_addr, &gt.to_addr, &ma.from_addr, &ma.to_addr)
     {
         if gf != gt_to && mf == gt_to && mt == gf {
             p_contra += 0.55;
+            veto_swap = true;
         }
     }
 
@@ -1546,7 +1899,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     let mut near_hex = 0.0f32;
     let mut sub_hex = 0.0f32;
     for gf in &gt.facts {
-        if match_credit(gf, &ma.facts) >= 1.0 {
+        if credit_of(gf) >= 1.0 {
             continue;
         }
         match gf {
@@ -1559,6 +1912,13 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                 if hit {
                     near_int += if gs.len() >= 10 { 0.55 } else { 0.45 };
                     veto += 1.0;
+                }
+            }
+            Fact::Func(gname) => {
+                let other = ma.facts.iter().any(|mf| matches!(mf, Fact::Func(m) if m != gname));
+                if other {
+                    veto += 1.0;
+                    p_contra += 0.20;
                 }
             }
             Fact::Hex(gs) => {
@@ -1574,18 +1934,42 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                     near_hex += 0.30;
                     veto += 1.0;
                 } else {
-                    let sub = ma.facts.iter().any(|mf| {
-                        matches!(mf, Fact::Hex(ms)
-                            if ms.len() == gs.len()
-                            && (ms.len() == 42 || ms.len() == 66)
-                            && !gt.facts.iter().any(|g2| facts_match(g2, mf)))
+                    // A different identifier in the SAME ROLE is a substitution
+                    // (wrong recipient, wrong subject hash). A hex in another
+                    // role — the block hash, a token contract, an earlier
+                    // "approval tx" — is extra detail, not a false claim.
+                    let g_role = hex_role(&gt.toks, gs);
+                    let first_hex = ma.toks.iter().find(|t| t.kind == Kind::Hex && t.text.len() >= 40).map(|t| t.text.clone());
+                    let sub = ma.facts.iter().any(|mf| match mf {
+                        // A display-truncated fragment in the same role that is
+                        // NOT a prefix of the ground-truth identifier is a
+                        // substituted (wrong) identifier too: "to 0x1F98…F984".
+                        Fact::Hex(ms) if gs.len() == 42 && ms.len() >= 6 && ms.len() < 42
+                            && !gs.starts_with(ms.as_str())
+                            && !gt.facts.iter().any(|g2| matches!(g2, Fact::Hex(x) if x.starts_with(ms.as_str()))) =>
+                        {
+                            let m_role = hex_role(&ma.toks, ms);
+                            !g_role.is_empty() && g_role == m_role && g_role != "contract"
+                        }
+                        Fact::Hex(ms) if ms.len() == gs.len()
+                            && (ms.len() == 42 || ms.len() == 66 || ms.len() == 10)
+                            && !gt.facts.iter().any(|g2| facts_match(g2, mf)) =>
+                        {
+                            let m_role = hex_role(&ma.toks, ms);
+                            if ms.len() == 10 {
+                                true // a different function selector
+                            } else if ms.len() == 66 {
+                                // the SUBJECT hash: first identifier in the answer, in a tx slot
+                                g_role == "txhash" && m_role == "txhash" && first_hex.as_deref() == Some(ms.as_str())
+                            } else {
+                                !g_role.is_empty() && g_role == m_role && g_role != "contract"
+                            }
+                        }
+                        _ => false,
                     });
                     if sub {
-                        // Wholesale substitution of a critical identifier.
                         sub_hex += if gs.len() == 66 { 0.20 } else { 0.12 };
-                        if gs.len() == 66 || gs.len() == 42 {
-                            veto += 1.0;
-                        }
+                        veto += 1.0;
                     }
                 }
             }
@@ -1594,6 +1978,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     }
     p_contra += near_int.min(0.70) + near_hex.min(0.45) + sub_hex.min(0.24);
 
+    let mut p_mild = 0.0f32;
     // Numeric substitution: an unmatched ground-truth number answered with a
     // different unmatched number of COMPARABLE MAGNITUDE (same digit count
     // +-1 for integers, same decade for decimals). The magnitude test is what
@@ -1634,19 +2019,27 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             && !ma_times.is_empty()
             && gt_times.iter().all(|(h, m, sec)| {
                 ma_times.iter().any(|(h2, m2, s2)| {
-                    m == m2
-                        && (h == h2 || h % 12 == h2 % 12)
+                    (h == h2 || h % 12 == h2 % 12)
+                        && match (m, m2) {
+                            (Some(a), Some(b)) => a == b,
+                            _ => true,
+                        }
                         && match (sec, s2) {
                             (Some(a), Some(b)) => a == b,
                             _ => true,
                         }
                 })
             });
-        let (gt_clock, ma_clock) = if clocks_consistent {
-            (clock_numbers(gt_trim), clock_numbers(ma_trim))
-        } else {
-            (Vec::new(), Vec::new())
-        };
+        let gt_clock = if ma_times.is_empty() || clocks_consistent { clock_numbers(gt_trim) } else { Vec::new() };
+        let ma_clock = if clocks_consistent { clock_numbers(ma_trim) } else { Vec::new() };
+        // A clock that shares the hour but not the minutes (or vice versa)
+        // with a ground-truth clock is a wrong time, not a format variant.
+        let clock_conflict = gt_times.iter().any(|(h, m, _)| {
+            ma_times.iter().any(|(h2, m2, _)| match (m, m2) {
+                (Some(a), Some(b)) => (h % 12 == h2 % 12 && a != b) || (a == b && h % 12 != h2 % 12),
+                _ => false,
+            })
+        });
         let is_clock = |f: &Fact, set: &[String]| -> bool {
             matches!(f, Fact::Int(v) if set.iter().any(|c| c == v))
         };
@@ -1655,20 +2048,50 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
         // "9 ETH", "14 million" -> "4 million"), so the two numbers must
         // share a neighbor. Different slots ("12 confirmations" omitted,
         // "2 logs" added) are an omission plus an unrelated detail.
+        // Slot context of a number: the nearest content word on each side.
+        // Another number or a hex token is a hard boundary (it starts its own
+        // slot), so "block 49988123; 1 log" does not lend "block" to the "1".
+        let neighbors = |toks: &[Tok], i: usize| -> Vec<String> {
+            let mut out: Vec<String> = Vec::new();
+            let mut k = i;
+            while k > 0 {
+                k -= 1;
+                let t = &toks[k];
+                if t.kind == Kind::Num || t.kind == Kind::Hex {
+                    break;
+                }
+                if t.kind == Kind::Word && !in_list(STOPWORDS, &t.text) {
+                    out.push(match unit_family(&t.text) { Some((f, _)) => format!("~u:{f}"), None => canon(t) });
+                    break;
+                }
+                if i - k >= 4 {
+                    break;
+                }
+            }
+            let mut k = i + 1;
+            while k < toks.len() {
+                let t = &toks[k];
+                if t.kind == Kind::Num || t.kind == Kind::Hex {
+                    break;
+                }
+                if t.kind == Kind::Word && !in_list(STOPWORDS, &t.text) {
+                    out.push(match unit_family(&t.text) { Some((f, _)) => format!("~u:{f}"), None => canon(t) });
+                    break;
+                }
+                if k - i >= 4 {
+                    break;
+                }
+                k += 1;
+            }
+            out.sort();
+            out.dedup();
+            out
+        };
         let ctx_of = |toks: &[Tok], value: &str| -> Vec<String> {
             let mut out: Vec<String> = Vec::new();
             for (i, t) in toks.iter().enumerate() {
-                if t.kind != Kind::Num || t.text != value {
-                    continue;
-                }
-                for j in (i.saturating_sub(3))..(i + 4).min(toks.len()) {
-                    if j == i {
-                        continue;
-                    }
-                    let n = &toks[j];
-                    if n.kind == Kind::Word && !in_list(STOPWORDS, &n.text) {
-                        out.push(canon(n));
-                    }
+                if t.kind == Kind::Num && t.text == value {
+                    out.extend(neighbors(toks, i));
                 }
             }
             out.sort();
@@ -1694,17 +2117,8 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                         continue;
                     }
                     if let Ok(tv) = t.text.parse::<f64>() {
-                        if !num_eq(tv, *v) {
-                            continue;
-                        }
-                        for j in (i.saturating_sub(3))..(i + 4).min(toks.len()) {
-                            if j == i {
-                                continue;
-                            }
-                            let n = &toks[j];
-                            if n.kind == Kind::Word && !in_list(STOPWORDS, &n.text) {
-                                out.push(canon(n));
-                            }
+                        if num_eq(tv, *v) {
+                            out.extend(neighbors(toks, i));
                         }
                     }
                 }
@@ -1738,9 +2152,50 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                 w[0].kind == Kind::Num && w[0].text == want && w[1].kind == Kind::Word && in_list(TIME_UNITS, &w[1].text)
             })
         };
+        let is_conv_gt = |f: &Fact| conv_gt_keys.iter().any(|k| *k == f.key());
+        let is_conv_ma = |f: &Fact| conv_ma_keys.iter().any(|k| *k == f.key());
+        let amount_of = |am: &[Amount], f: &Fact| -> Option<&'static str> { am.iter().find(|a| a.key == f.key()).map(|a| a.family) };
+        // Slot-defining neighbors: a different number next to one of these is
+        // a wrong value in that slot whatever its magnitude ("block 503436").
+        // Unit-less numbers next to these labels are that slot's value; a
+        // different number there is a wrong value whatever its magnitude
+        // ("using 2100000 gas"). Fee-type AMOUNTS (with units) are handled by
+        // the qualifier rule above instead.
+        let strong_slot = |c: &str| -> bool {
+            c.starts_with("block") || c == "value" || c == "amoun" || c == "nonce" || c == "confi"
+                || c == "~xfer" || c == "worth" || c == "sendi" || c == "sent" || c == "moved" || c == "movin"
+                || c.starts_with("gas") || c == "fee" || c == "fees" || c == "price"
+        };
+        // Fee-type slots come in flavors ("total fee", "L1 data fee", "gas
+        // price", "priority fee"): two fee amounts only conflict when their
+        // qualifier (the word before the slot label) also agrees.
+        let fee_qualifier = |toks: &[Tok], key: &str| -> Option<(String, String)> {
+            let idx = toks.iter().position(|t| t.kind == Kind::Num && {
+                let k = if t.text.contains('.') { t.text.parse::<f64>().ok().map(|v| Fact::Dec(v).key()) } else { Some(Fact::Int(t.text.clone()).key()) };
+                k.as_deref() == Some(key)
+            })?;
+            let mut words: Vec<String> = Vec::new();
+            let mut k = idx;
+            while k > 0 && words.len() < 2 {
+                k -= 1;
+                let t = &toks[k];
+                if t.kind == Kind::Num || t.kind == Kind::Hex {
+                    break;
+                }
+                if t.kind == Kind::Word && !in_list(STOPWORDS, &t.text) {
+                    words.push(t.text.clone());
+                }
+            }
+            let label = words.first()?.clone();
+            if matches!(label.as_str(), "fee" | "fees" | "price" | "gas" | "cost" | "costing" | "paid") {
+                Some((label, words.get(1).cloned().unwrap_or_default()))
+            } else {
+                None
+            }
+        };
         let mut hits = 0u32;
         for gf in gt.facts.iter().filter(|f| numeric_unmatched(f, &ma.facts)) {
-            if is_clock(gf, &gt_clock) || is_duration(&gt.toks, gf) {
+            if is_conv_gt(gf) || is_clock(gf, &gt_clock) || is_duration(&gt.toks, gf) {
                 continue;
             }
             let gm = match magnitude(gf) {
@@ -1748,34 +2203,99 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                 None => continue,
             };
             let gctx = dec_ctx(&gt.toks, gf);
+            let g_amt = amount_of(&gt_amounts, gf);
             let substituted = ma
                 .facts
                 .iter()
                 .filter(|f| numeric_unmatched(f, &gt.facts))
-                .filter(|f| !is_clock(f, &ma_clock) && !is_duration(&ma.toks, f))
+                .filter(|f| !is_conv_ma(f) && !is_clock(f, &ma_clock) && !is_duration(&ma.toks, f))
                 .any(|mf| {
-                    let same_mag = matches!(magnitude(mf), Some(mm) if (mm - gm).abs() <= 1);
-                    if !same_mag {
-                        return false;
-                    }
                     let mctx = dec_ctx(&ma.toks, mf);
-                    // shared neighbor => same slot
-                    gctx.iter().any(|c| mctx.iter().any(|d| d == c))
+                    let shared: Vec<&String> = gctx.iter().filter(|c| mctx.iter().any(|d| d == *c)).collect();
+                    if shared.is_empty() {
+                        return false; // different slot: an omission plus an unrelated detail
+                    }
+                    let m_amt = amount_of(&ma_amounts, mf);
+                    if let (Some(gfam), Some(mfam)) = (g_amt, m_amt) {
+                        if gfam == mfam {
+                            // two same-family amounts in one slot that do not
+                            // agree — unless differently-qualified fee-type ones
+                            let gq = fee_qualifier(&gt.toks, &gf.key());
+                            let mq = fee_qualifier(&ma.toks, &mf.key());
+                            return match (gq, mq) {
+                                (Some(a), Some(b)) => a == b,
+                                (None, None) => true,
+                                _ => false,
+                            };
+                        }
+                        // different asset in the TRANSFER slot is a substitution
+                        // ("250 USDC" for 0.25 ETH); elsewhere it is incidental
+                        return shared.iter().any(|c| strong_slot(c));
+                    }
+                    let same_mag = matches!(magnitude(mf), Some(mm) if (mm - gm).abs() <= 1);
+                    same_mag || shared.iter().any(|c| strong_slot(c))
                 });
             if substituted {
                 hits += 1;
             }
         }
+        if clock_conflict {
+            hits += 1;
+        }
         if hits > 0 {
             p_contra += 0.10 * hits.min(2) as f32;
             veto += hits as f32;
         }
+        // Mild, veto-free penalty for unmatched numbers on both sides that no
+        // slot rule tied together (applied after the cushion decision below).
+        let g_open = gt.facts.iter().filter(|f| numeric_unmatched(f, &ma.facts) && !is_conv_gt(f) && !is_clock(f, &gt_clock) && !is_duration(&gt.toks, f)).count() as u32;
+        let m_open = ma.facts.iter().filter(|f| numeric_unmatched(f, &gt.facts) && !is_conv_ma(f) && !is_clock(f, &ma_clock) && !is_duration(&ma.toks, f)).count() as u32;
+        p_mild = 0.10 * g_open.min(m_open).min(2) as f32;
     }
 
     // Negation asymmetry: strong negators the answer adds over the ground
     // truth (mild — the polarity groups carry the real contradiction signal).
     // Skipped when the ground truth is itself a negative statement, where a
     // correct answer legitimately negates too ("no transaction was found").
+    // Status verdict: a ground truth with one definite status is contradicted
+    // by ANY opposite status claim in the answer (even alongside a matching
+    // one — "included but failed") and by any indeterminate claim (pending,
+    // not mined, replaced). An indeterminate ground truth is contradicted by
+    // a definite claim. These are false claims: veto.
+    let mut veto_status = false;
+    {
+        let has = |facts: &[Fact], want: &Fact| facts.iter().any(|f| facts_match(f, want));
+        let gt_t = has(&gt.facts, &Fact::Status(true));
+        let gt_f = has(&gt.facts, &Fact::Status(false));
+        let gt_i = has(&gt.facts, &Fact::Indet);
+        let ma_t = has(&ma.facts, &Fact::Status(true));
+        let ma_f = has(&ma.facts, &Fact::Status(false));
+        let ma_i = has(&ma.facts, &Fact::Indet);
+        if gt_t != gt_f {
+            if (gt_t && ma_f) || (gt_f && ma_t) || ma_i {
+                veto_status = true;
+                p_contra += 0.60;
+            }
+        } else if gt_i && !gt_t && !gt_f && (ma_t || ma_f) {
+            veto_status = true;
+            p_contra += 0.60;
+        }
+    }
+    // Chain named after "on": a different network (or a testnet variant) in
+    // the answer is a substituted chain.
+    let mut veto_chain = false;
+    {
+        let (gc, gtest) = chains_after_on(&gt.toks);
+        let (mc, mtest) = chains_after_on(&ma.toks);
+        if !gc.is_empty() && !mc.is_empty() {
+            let overlap = gc.iter().any(|g| mc.contains(g));
+            if !overlap || gtest != mtest {
+                veto_chain = true;
+                p_contra += 0.55;
+            }
+        }
+    }
+
     let gt_negative = gt.neg_strong > 0 || gt.pol.iter().any(|p| p & 2 != 0);
     if !gt_negative {
         let extra_neg = ma.neg_strong.saturating_sub(gt.neg_strong).min(2);
@@ -1787,7 +2307,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     // --- Anti-gaming precision penalty (value dumping) ---------------------
     let mut extra_units = 0.0f32;
     for mf in &ma.facts {
-        if !gt.facts.iter().any(|gf| facts_match(gf, mf)) {
+        if !ma_matched_any(mf) {
             extra_units += mf.extra_units();
         }
     }
@@ -1816,14 +2336,17 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     // typed fact is a status word, where "recall" would be 1.0 for any answer
     // that merely repeats the verdict while explaining it wrongly; the text
     // floor requires the answer to actually resemble the truth it omits from.
-    let clean = p_contra <= 0.0 && veto <= 0.0 && !veto_proper && !veto_antonym && !veto_clash && p_prec < 0.05;
-    let raw = if clean && gt_weight_raw >= 3.0 && recall >= 0.35 && text >= 0.35 {
+    let clean = p_contra <= 0.0 && veto <= 0.0 && !veto_proper && !veto_antonym && !veto_clash && !veto_status && !veto_chain && !veto_swap && p_prec < 0.05;
+    // (0.30: a terse "Tx <hash> was confirmed in block N" covers hash + block +
+    // status = 0.32 of a five-fact truth once the question-given hash is
+    // discounted; it contradicts nothing and must keep the cushion.)
+    let raw = if clean && gt_weight_raw >= 3.0 && recall >= 0.30 && text >= 0.35 {
         raw.max(0.45 + 0.5 * recall)
     } else {
         raw
     };
 
-    let s = (raw * (1.0 - p_contra) - p_prec).clamp(0.0, 1.0);
+    let s = (raw * (1.0 - p_contra) - p_prec - p_mild).clamp(0.0, 1.0);
     let c = (contrast(s) * (1.0 - 0.42 * blob)).clamp(0.0, 0.995);
 
     // A substituted value is a false claim: force the crushed band whatever
@@ -1831,10 +2354,10 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     // ordering inside the vetoed class is preserved, and capped far below
     // the low band's reachable range so a vetoed answer can never outrank a
     // merely incomplete one.
-    if veto > 0.0 || veto_proper || veto_antonym || veto_clash {
+    if veto > 0.0 || veto_proper || veto_antonym || veto_clash || veto_status || veto_chain || veto_swap {
         return (0.012 * c).clamp(0.0, 0.995);
     }
-    step_band(c)
+    step_band(c, recall)
 }
 
 /// Step-with-residual band transform. The node's separation metric is
@@ -1850,11 +2373,13 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
 /// still contributes real margin instead of zero. Low band: wrong answers
 /// stay crushed. Strictly increasing everywhere (upward jumps at the
 /// breakpoints preserve ordering); verbatim/empty bypass via early returns.
-fn step_band(c: f32) -> f32 {
+fn step_band(c: f32, recall: f32) -> f32 {
     const T_HI: f32 = 0.60;
     const T_MID: f32 = 0.40;
     if c >= T_HI {
-        (0.96 + 0.035 * c).min(0.995)
+        // slight recall slope: an omission-only answer sits strictly below a
+        // complete one instead of tying it at the cap
+        (0.96 + 0.035 * c - 0.01 * (1.0 - recall.clamp(0.0, 1.0))).min(0.995)
     } else if c >= T_MID {
         0.25 + 1.5 * (c - T_MID)
     } else {
