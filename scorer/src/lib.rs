@@ -175,6 +175,93 @@ fn word_number(w: &str) -> Option<&'static str> {
     })
 }
 
+/// Numbers that are components of a clock time (hh:mm or hh:mm:ss), as
+/// normalized digit strings. Used to exempt time-format paraphrases from the
+/// numeric substitution veto.
+fn clock_numbers(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    let mut out: Vec<String> = Vec::new();
+    let mut i = 0usize;
+    while i < n {
+        if chars[i].is_ascii_digit() {
+            let mut j = i;
+            while j < n && chars[j].is_ascii_digit() {
+                j += 1;
+            }
+            let first: String = chars[i..j].iter().collect();
+            // hh:mm[:ss]
+            if j + 2 < n + 0 && j < n && chars[j] == ':' && j + 2 < n && chars[j + 1].is_ascii_digit() && chars[j + 2].is_ascii_digit() && (j - i) <= 2 {
+                let mut parts: Vec<String> = vec![first];
+                let mut k = j;
+                while k < n && chars[k] == ':' && k + 2 < n + 0 && k + 2 <= n - 1 + 1 && k + 1 < n && chars[k + 1].is_ascii_digit() {
+                    let mut e = k + 1;
+                    while e < n && chars[e].is_ascii_digit() {
+                        e += 1;
+                    }
+                    if e - (k + 1) != 2 {
+                        break;
+                    }
+                    parts.push(chars[k + 1..e].iter().collect());
+                    k = e;
+                }
+                if parts.len() >= 2 {
+                    for p in parts {
+                        let t = p.trim_start_matches('0');
+                        out.push(if t.is_empty() { "0".to_string() } else { t.to_string() });
+                    }
+                }
+                i = k;
+                continue;
+            }
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Parsed clock times (hour, minute, optional second) found in a text.
+fn clock_times(text: &str) -> Vec<(u32, u32, Option<u32>)> {
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i < n {
+        if chars[i].is_ascii_digit() {
+            let mut j = i;
+            while j < n && chars[j].is_ascii_digit() {
+                j += 1;
+            }
+            let hlen = j - i;
+            if hlen <= 2 && j + 2 < n && chars[j] == ':' && chars[j + 1].is_ascii_digit() && chars[j + 2].is_ascii_digit()
+                && (j + 3 >= n || !chars[j + 3].is_ascii_digit())
+            {
+                let h: u32 = chars[i..j].iter().collect::<String>().parse().unwrap_or(0);
+                let m: u32 = chars[j + 1..j + 3].iter().collect::<String>().parse().unwrap_or(0);
+                let mut k = j + 3;
+                let mut sec = None;
+                if k + 2 < n && chars[k] == ':' && chars[k + 1].is_ascii_digit() && chars[k + 2].is_ascii_digit()
+                    && (k + 3 >= n || !chars[k + 3].is_ascii_digit())
+                {
+                    sec = chars[k + 1..k + 3].iter().collect::<String>().parse().ok();
+                    k += 3;
+                }
+                out.push((h, m, sec));
+                i = k;
+                continue;
+            }
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    out
+}
+
 fn in_list(list: &[&str], w: &str) -> bool {
     list.iter().any(|x| *x == w)
 }
@@ -1282,6 +1369,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
         }
     }
 
+    let mut veto_clash = false;
     // Affirm/deny clash on content words: the answer denies something the
     // ground truth asserts ("was never included" vs "included in block N"),
     // or affirms something the ground truth explicitly negates ("is Sydney"
@@ -1302,11 +1390,16 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                     // A named entity explicitly negated on one side and
                     // asserted on the other is decisive; generic words get a
                     // mild nudge (polarity groups carry the strong signal).
-                    p_clash += if is_proper(&gt.toks, c) && is_proper(&ma.toks, c) {
-                        0.35
+                    if is_proper(&gt.toks, c) && is_proper(&ma.toks, c) {
+                        p_clash += 0.35;
+                        // Affirming an entity the ground truth denies ("not
+                        // Sydney" -> "is Sydney") is a false claim of the same
+                        // class as a substituted value: force the crushed band
+                        // so no similarity floor can rescue it.
+                        veto_clash = true;
                     } else {
-                        0.18
-                    };
+                        p_clash += 0.18;
+                    }
                 }
             }
         }
@@ -1384,6 +1477,24 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                 && !set_has(other, &canon(t))
                 && (!from_question || !set_has(&q_set, &canon(t)))
         };
+        // Known aliases are the same entity, not a substitution: chain
+        // nicknames, currency tickers, and abbreviations of the noun the
+        // question itself uses.
+        const ALIASES: &[&[&str]] = &[
+            &["ethereum", "eth", "ether", "mainnet"],
+            &["base"],
+            &["arbitrum", "arb"],
+            &["optimism", "op"],
+            &["polygon", "matic"],
+            &["binance", "bsc", "bnb"],
+            &["avalanche", "avax"],
+            &["solana", "sol"],
+            &["transaction", "tx", "txn"],
+            &["usdc", "usd"],
+        ];
+        let same_alias = |a: &str, b: &str| -> bool {
+            ALIASES.iter().any(|g| g.contains(&a) && g.contains(&b))
+        };
         let mut fired = false;
         'outer: for (gi, gtok) in gt.toks.iter().enumerate() {
             if !candidate(gtok, &gt_set, &ma_set, false) {
@@ -1392,6 +1503,9 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             let (gp, gn) = slot(&gt.toks, gi);
             for (mi, mtok) in ma.toks.iter().enumerate() {
                 if !candidate(mtok, &ma_set, &gt_set, true) {
+                    continue;
+                }
+                if same_alias(&gtok.text, &mtok.text) {
                     continue;
                 }
                 let (mp, mn) = slot(&ma.toks, mi);
@@ -1507,17 +1621,147 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             matches!(f, Fact::Int(_) | Fact::Dec(_))
                 && !other.iter().any(|o| facts_match(f, o))
         };
+        // Components of clock times ("14:32:11", "2:32") are format, not
+        // values: "14:32" and "2:32 PM" describe the same instant. They are
+        // exempt from the substitution test on both sides.
+        // Only exempt clock components when the two texts describe the same
+        // instant(s) (minutes equal, hours equal modulo 12, seconds equal if
+        // both given). "14:32" vs "2:32 PM" is a format difference; "14:32"
+        // vs "14:45" is a wrong value and keeps the normal veto path.
+        let gt_times = clock_times(gt_trim);
+        let ma_times = clock_times(ma_trim);
+        let clocks_consistent = !gt_times.is_empty()
+            && !ma_times.is_empty()
+            && gt_times.iter().all(|(h, m, sec)| {
+                ma_times.iter().any(|(h2, m2, s2)| {
+                    m == m2
+                        && (h == h2 || h % 12 == h2 % 12)
+                        && match (sec, s2) {
+                            (Some(a), Some(b)) => a == b,
+                            _ => true,
+                        }
+                })
+            });
+        let (gt_clock, ma_clock) = if clocks_consistent {
+            (clock_numbers(gt_trim), clock_numbers(ma_trim))
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        let is_clock = |f: &Fact, set: &[String]| -> bool {
+            matches!(f, Fact::Int(v) if set.iter().any(|c| c == v))
+        };
+        // Lexical context of a number: the nearest content words on either
+        // side. A substitution is a wrong value in the SAME slot ("5 ETH" ->
+        // "9 ETH", "14 million" -> "4 million"), so the two numbers must
+        // share a neighbor. Different slots ("12 confirmations" omitted,
+        // "2 logs" added) are an omission plus an unrelated detail.
+        let ctx_of = |toks: &[Tok], value: &str| -> Vec<String> {
+            let mut out: Vec<String> = Vec::new();
+            for (i, t) in toks.iter().enumerate() {
+                if t.kind != Kind::Num || t.text != value {
+                    continue;
+                }
+                for j in (i.saturating_sub(3))..(i + 4).min(toks.len()) {
+                    if j == i {
+                        continue;
+                    }
+                    let n = &toks[j];
+                    if n.kind == Kind::Word && !in_list(STOPWORDS, &n.text) {
+                        out.push(canon(n));
+                    }
+                }
+            }
+            out.sort();
+            out.dedup();
+            out
+        };
+        let value_str = |f: &Fact| -> Option<String> {
+            match f {
+                Fact::Int(v) => Some(v.clone()),
+                Fact::Dec(v) => {
+                    // Dec tokens keep their raw text; find it by numeric equality.
+                    Some(format!("{}", v))
+                }
+                _ => None,
+            }
+        };
+        let dec_ctx = |toks: &[Tok], f: &Fact| -> Vec<String> {
+            // For decimals, match the token whose parsed value equals the fact.
+            if let Fact::Dec(v) = f {
+                let mut out: Vec<String> = Vec::new();
+                for (i, t) in toks.iter().enumerate() {
+                    if t.kind != Kind::Num {
+                        continue;
+                    }
+                    if let Ok(tv) = t.text.parse::<f64>() {
+                        if !num_eq(tv, *v) {
+                            continue;
+                        }
+                        for j in (i.saturating_sub(3))..(i + 4).min(toks.len()) {
+                            if j == i {
+                                continue;
+                            }
+                            let n = &toks[j];
+                            if n.kind == Kind::Word && !in_list(STOPWORDS, &n.text) {
+                                out.push(canon(n));
+                            }
+                        }
+                    }
+                }
+                out.sort();
+                out.dedup();
+                return out;
+            }
+            match value_str(f) {
+                Some(v) => ctx_of(toks, &v),
+                None => Vec::new(),
+            }
+        };
+        const TIME_UNITS: &[&str] = &[
+            "second", "seconds", "sec", "secs", "minute", "minutes", "min", "mins",
+            "hour", "hours", "hr", "hrs", "day", "days", "week", "weeks",
+            "month", "months", "year", "years",
+        ];
+        // A number immediately followed by a time unit is a duration; "24
+        // hours" and "1 day" are the same duration in different units, so
+        // duration numbers never count as substituted values.
+        let is_duration = |toks: &[Tok], f: &Fact| -> bool {
+            let want: Option<String> = match f {
+                Fact::Int(v) => Some(v.clone()),
+                _ => None,
+            };
+            let want = match want {
+                Some(w) => w,
+                None => return false,
+            };
+            toks.windows(2).any(|w| {
+                w[0].kind == Kind::Num && w[0].text == want && w[1].kind == Kind::Word && in_list(TIME_UNITS, &w[1].text)
+            })
+        };
         let mut hits = 0u32;
         for gf in gt.facts.iter().filter(|f| numeric_unmatched(f, &ma.facts)) {
+            if is_clock(gf, &gt_clock) || is_duration(&gt.toks, gf) {
+                continue;
+            }
             let gm = match magnitude(gf) {
                 Some(m) => m,
                 None => continue,
             };
+            let gctx = dec_ctx(&gt.toks, gf);
             let substituted = ma
                 .facts
                 .iter()
                 .filter(|f| numeric_unmatched(f, &gt.facts))
-                .any(|mf| matches!(magnitude(mf), Some(mm) if (mm - gm).abs() <= 1));
+                .filter(|f| !is_clock(f, &ma_clock) && !is_duration(&ma.toks, f))
+                .any(|mf| {
+                    let same_mag = matches!(magnitude(mf), Some(mm) if (mm - gm).abs() <= 1);
+                    if !same_mag {
+                        return false;
+                    }
+                    let mctx = dec_ctx(&ma.toks, mf);
+                    // shared neighbor => same slot
+                    gctx.iter().any(|c| mctx.iter().any(|d| d == c))
+                });
             if substituted {
                 hits += 1;
             }
@@ -1572,7 +1816,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     // typed fact is a status word, where "recall" would be 1.0 for any answer
     // that merely repeats the verdict while explaining it wrongly; the text
     // floor requires the answer to actually resemble the truth it omits from.
-    let clean = p_contra <= 0.0 && veto <= 0.0 && !veto_proper && !veto_antonym && p_prec < 0.05;
+    let clean = p_contra <= 0.0 && veto <= 0.0 && !veto_proper && !veto_antonym && !veto_clash && p_prec < 0.05;
     let raw = if clean && gt_weight_raw >= 3.0 && recall >= 0.35 && text >= 0.35 {
         raw.max(0.45 + 0.5 * recall)
     } else {
@@ -1587,7 +1831,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     // ordering inside the vetoed class is preserved, and capped far below
     // the low band's reachable range so a vetoed answer can never outrank a
     // merely incomplete one.
-    if veto > 0.0 || veto_proper || veto_antonym {
+    if veto > 0.0 || veto_proper || veto_antonym || veto_clash {
         return (0.012 * c).clamp(0.0, 0.995);
     }
     step_band(c)

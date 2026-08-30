@@ -225,6 +225,36 @@ check "gas-price good high"                   "$s_gas_good"   "s >= 0.6"
 check "SUB wrong gwei < 0.15"                 "$s_gas_bad"    "s < 0.15"
 check "SUB wrong gwei < good"                 "$s_gas_bad"    "s < $s_gas_good"
 
+# --- v10 regression block: substitution veto must respect SLOT CONTEXT -------
+# These are correct answers that v9b wrongly vetoed (magnitude-only match).
+VH=0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668
+VF=0x76F68ADF3D4eCFDd0725b1320fB25B6772754Ae2; VT=0xecec48Ec5A7B7F7B96460b0F4E2B99cf0dB94Cb1
+VQ="What are the details of transaction $VH on Base?"
+VGT="Transaction $VH on Base succeeded in block 50343626, transferring 5 ETH from $VF to $VT."
+s_v_ether=$(run "$VQ" "$VGT" "Transaction $VH on Base succeeded in block 50343626, transferring 5 Ether from $VF to $VT.")
+check "alias ETH->Ether not vetoed"           "$s_v_ether"    "s >= 0.9"
+s_v_mainnet=$(run "What are the details of transaction $VH on Ethereum?" "Transaction $VH on Ethereum succeeded in block 19284756, transferring 5 ETH from $VF to $VT." "Transaction $VH on Mainnet succeeded in block 19284756, transferring 5 ETH from $VF to $VT.")
+check "alias Ethereum->Mainnet not vetoed"    "$s_v_mainnet"  "s >= 0.9"
+VGTT="Transaction $VH on Base succeeded in block 50343626 at 14:32:11 UTC, transferring 5 ETH from $VF to $VT."
+s_v_clock=$(run "$VQ" "$VGTT" "Transaction $VH on Base succeeded in block 50343626 at 2:32 PM UTC, transferring 5 ETH from $VF to $VT.")
+check "clock 14:32 -> 2:32 PM not vetoed"     "$s_v_clock"    "s >= 0.9"
+s_v_clockbad=$(run "$VQ" "$VGTT" "Transaction $VH on Base succeeded in block 50343626 at 14:45:11 UTC, transferring 5 ETH from $VF to $VT.")
+check "clock 14:32 -> 14:45 still crushed"    "$s_v_clockbad" "s < 0.15"
+VGTD="Transaction $VH on Base succeeded in block 50343626 about 24 hours ago, transferring 5 ETH from $VF to $VT."
+s_v_dur=$(run "$VQ" "$VGTD" "Transaction $VH on Base succeeded in block 50343626 about 1 day ago, transferring 5 ETH from $VF to $VT.")
+check "duration 24 hours -> 1 day not vetoed" "$s_v_dur"      "s >= 0.9"
+VGTC="Transaction $VH on Base succeeded in block 50343626 with 12 confirmations, transferring 5 ETH from $VF to $VT."
+s_v_omit=$(run "$VQ" "$VGTC" "Transaction $VH on Base succeeded in block 50343626, transferring 5 ETH from $VF to $VT; it has 2 logs.")
+check "omitted fact + unrelated number ok"    "$s_v_omit"     "s >= 0.9"
+s_v_slot=$(run "$VQ" "$VGTC" "Transaction $VH on Base succeeded in block 50343626 with 2 confirmations, transferring 5 ETH from $VF to $VT.")
+check "same-slot 12 -> 2 confirmations crushed" "$s_v_slot"   "s < 0.15"
+# Proper-noun affirm/deny clash is a veto: asserting an entity the ground
+# truth denies must be crushed, while the correct answer stays high.
+s_v_cd_good=$(run "What is the capital of Australia?" "The capital of Australia is Canberra, not Sydney." "Canberra is Australia's capital city.")
+s_v_cd_bad=$(run "What is the capital of Australia?" "The capital of Australia is Canberra, not Sydney." "The capital of Australia is Sydney.")
+check "denied-entity good high"               "$s_v_cd_good"  "s >= 0.9"
+check "denied-entity asserted crushed"        "$s_v_cd_bad"   "s < 0.15"
+
 # Empty question must not trap and self-match must still be 1.0.
 s_noq=$(run "" "$GT" "$GT")
 check "empty question self-match == 1"        "$s_noq"        "s >= 0.99"
