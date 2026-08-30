@@ -17,7 +17,8 @@ import type { SupportedChain } from '../config/chains.js';
 // ---------- ONCHAIN_TX_LOOKUP ----------
 
 export interface TxLookupInput {
-  chain: SupportedChain;
+  /** null = caller did not specify a chain; resolve by searching all chains */
+  chain: SupportedChain | null;
   txHash: `0x${string}`;
 }
 
@@ -118,5 +119,23 @@ export class IntentError extends Error {
   ) {
     super(message);
     this.name = 'IntentError';
+  }
+
+  /**
+   * Plain-language statement of the outcome, used as the `answer` on intent
+   * routes so a failed lookup still returns scoreable text rather than an
+   * empty error body.
+   */
+  get answerText(): string {
+    switch (this.code) {
+      case 'TX_NOT_FOUND':
+        return `${this.message.charAt(0).toUpperCase()}${this.message.slice(1)}. The transaction hash is well formed but no matching transaction exists on the chains searched, so it was never mined there or belongs to a chain this miner does not serve.`;
+      case 'CHAIN_UNSUPPORTED':
+        return `This miner serves Base, Ethereum, Base Sepolia and X Layer. ${this.message}.`;
+      case 'INVALID_INPUT':
+        return `The request did not identify a transaction to look up. ${this.message}.`;
+      default:
+        return this.message;
+    }
   }
 }

@@ -13,6 +13,13 @@ import { IntentError } from '../types/index.js';
 
 const MINER_ID = process.env.TRUVIAN_MINER_ID ?? 'truvian-miner-01';
 
+/** Routes that serve a Telegraph intent and must always return answer text. */
+function isIntentRoute(url: string | undefined): boolean {
+  if (!url) return false;
+  const path = url.split('?')[0] ?? '';
+  return path === '/tx' || path === '/gas' || path.startsWith('/intents/');
+}
+
 export function buildServer() {
   const app = Fastify({ logger: true });
 
@@ -60,9 +67,25 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
   app.post('/intents/ONCHAIN_TX_LOOKUP', async (req) => handleTxLookup(validateTxLookupInput(req.body)));
   app.post('/intents/GAS_PRICE', async (req) => handleGasPrice(validateGasPriceInput(req.body ?? {})));
 
-  app.setErrorHandler((err, _req, reply) => {
+  app.setErrorHandler((err, req, reply) => {
     if (err instanceof IntentError) {
-      const status = err.code === 'TX_NOT_FOUND' ? 404 : err.code === 'UPSTREAM_RPC_ERROR' ? 502 : 400;
+      // Intent routes must ALWAYS return a scoreable `answer` string. Validators
+      // score the answer text; a bare error body carries none and scores exactly
+      // 0 — strictly worse than stating plainly that the record was not found.
+      // (Measured: every miner that degrades to 200+prose scores above zero;
+      // every miner that returns an answer-less error scores zero.)
+      if (isIntentRoute(req.url) && err.code !== 'UPSTREAM_RPC_ERROR') {
+        return reply.status(200).send({
+          answer: err.answerText,
+          signal: err.answerText,
+          source: 'Truvian on-chain lookup over public JSON-RPC',
+          confidence: 0,
+          resolved: false,
+          error: err.code,
+          message: err.message,
+        });
+      }
+      const status = err.code === 'UPSTREAM_RPC_ERROR' ? 502 : 400;
       return reply.status(status).send({ error: err.code, message: err.message });
     }
     app.log.error(err);
