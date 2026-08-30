@@ -37,17 +37,12 @@
 
 use std::alloc::{alloc as raw_alloc, dealloc as raw_dealloc, Layout};
 
-mod embed;
-mod math;
-mod tokenizer;
-
-/// MiniLM-L6-v2 INT8 semantic cosine between two texts, in [0,1].
-/// Deterministic: INT8 weights + pure-Rust libm float math, no host calls.
-fn semantic_cosine(a: &str, b: &str) -> f32 {
-    let ea = embed::run(&tokenizer::tokenize(a));
-    let eb = embed::run(&tokenizer::tokenize(b));
-    math::cosine(&ea, &eb)
-}
+// v9: the MiniLM INT8 embedding path was removed. It bought a handful of
+// distant-paraphrase cases but cost ~23 MB of module load plus two
+// transformer forward passes per call, which blew the validator's evaluation
+// time budget. The semantic channel is now a cheap deterministic proxy
+// (character-trigram COSINE, tf-weighted) — no weights, no imports, and
+// microseconds per call. See `semantic_proxy`.
 
 // ---------------------------------------------------------------------------
 // Host memory contract
@@ -938,6 +933,103 @@ fn char_trigram_dice(a: &str, b: &str) -> f32 {
     (2.0 * common as f32) / ((a.len() + b.len()) as f32)
 }
 
+/// Character-trigram COSINE (term-frequency weighted) over normalized text.
+/// Cosine (rather than Dice) normalizes away length differences, so a terse
+/// paraphrase of a long ground truth is not punished for brevity.
+fn char_trigram_cosine(a: &str, b: &str) -> f32 {
+    let grams = |s: &str| -> Vec<String> {
+        let mut v: Vec<char> = Vec::new();
+        let mut last_space = true;
+        for c in s.chars() {
+            if c.is_alphanumeric() || is_cjk_or_symbol(c) {
+                for lc in c.to_lowercase() {
+                    v.push(lc);
+                }
+                last_space = false;
+            } else if !last_space {
+                v.push(' ');
+                last_space = true;
+            }
+        }
+        if v.len() < 3 {
+            return vec![v.iter().collect()];
+        }
+        let mut g: Vec<String> = (0..v.len() - 2).map(|i| v[i..i + 3].iter().collect()).collect();
+        g.sort();
+        g
+    };
+    let a = grams(a);
+    let b = grams(b);
+    if a.is_empty() || b.is_empty() {
+        return 0.0;
+    }
+    // Counted run-length form: (gram, tf) pairs, both sorted.
+    fn counted(v: &[String]) -> Vec<(&str, f32)> {
+        let mut out: Vec<(&str, f32)> = Vec::new();
+        for g in v {
+            match out.last_mut() {
+                Some(l) if l.0 == g.as_str() => l.1 += 1.0,
+                _ => out.push((g.as_str(), 1.0)),
+            }
+        }
+        out
+    }
+    let ca = counted(&a);
+    let cb = counted(&b);
+    let (mut i, mut j, mut dot) = (0usize, 0usize, 0.0f32);
+    while i < ca.len() && j < cb.len() {
+        match ca[i].0.cmp(cb[j].0) {
+            core::cmp::Ordering::Equal => {
+                dot += ca[i].1 * cb[j].1;
+                i += 1;
+                j += 1;
+            }
+            core::cmp::Ordering::Less => i += 1,
+            core::cmp::Ordering::Greater => j += 1,
+        }
+    }
+    let na: f32 = ca.iter().map(|x| x.1 * x.1).sum::<f32>().sqrt();
+    let nb: f32 = cb.iter().map(|x| x.1 * x.1).sum::<f32>().sqrt();
+    if na <= 0.0 || nb <= 0.0 {
+        0.0
+    } else {
+        (dot / (na * nb)).clamp(0.0, 1.0)
+    }
+}
+
+/// Cheap deterministic stand-in for the removed embedding channel: the max of
+/// a tf-weighted character-trigram cosine (morphology, word order-insensitive)
+/// and a stemmed/synonym-canonical token-set overlap (paraphrase vocabulary).
+/// Both are order-insensitive and length-normalized, which is what let the
+/// MiniLM channel lift correct-but-differently-worded answers.
+fn semantic_proxy(gt_raw: &str, ma_raw: &str, gt: &[Tok], ma: &[Tok]) -> f32 {
+    let tri = char_trigram_cosine(gt_raw, ma_raw);
+    let set_sim = {
+        let a = canon_set(gt);
+        let b = canon_set(ma);
+        if a.is_empty() || b.is_empty() {
+            0.0
+        } else {
+            let (mut i, mut j, mut common) = (0usize, 0usize, 0usize);
+            while i < a.len() && j < b.len() {
+                match a[i].cmp(&b[j]) {
+                    core::cmp::Ordering::Equal => {
+                        common += 1;
+                        i += 1;
+                        j += 1;
+                    }
+                    core::cmp::Ordering::Less => i += 1,
+                    core::cmp::Ordering::Greater => j += 1,
+                }
+            }
+            // Cosine over sets: |A n B| / sqrt(|A| |B|) — length-normalized,
+            // so a short correct paraphrase is not penalized for brevity.
+            common as f32 / ((a.len() as f32) * (b.len() as f32)).sqrt()
+        }
+    };
+    tri.max(set_sim)
+}
+
 fn text_similarity(gt: &[Tok], ma: &[Tok]) -> f32 {
     let f1 = weighted_f1(gt, ma);
     let bg = bigram_dice(gt, ma);
@@ -1113,8 +1205,11 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
         if total == 0 { 0.0 } else { cjk as f32 / total as f32 }
     };
     let cjk_heavy = cjk_frac(gt_trim) > 0.25 || cjk_frac(ma_trim) > 0.25;
-    let sem = if cjk_heavy { 0.0 } else { semantic_cosine(gt_trim, ma_trim) };
-    let sem_cal_topical = ((sem - 0.35) / 0.60).clamp(0.0, 1.0);
+    let sem = if cjk_heavy { 0.0 } else { semantic_proxy(gt_trim, ma_trim, &gt.toks, &ma.toks) };
+    // The proxy is already on a 0..1 similarity scale (unlike a MiniLM
+    // cosine, whose useful range starts around 0.35), so it needs only a
+    // gentle floor rather than the old (sem-0.35)/0.60 recentring.
+    let sem_cal_topical = ((sem - 0.12) / 0.70).clamp(0.0, 1.0);
     // Recall gate: semantic topicality must not lift an answer that failed
     // the ground truth's typed facts (wrong population, wrong score...).
     let alpha_gate = gtw_raw / (gtw_raw + 3.0);
@@ -1218,6 +1313,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
         p_contra += p_clash.min(0.60);
     }
 
+    let mut veto_antonym = false;
     // Antonym substitution at the synonym-group level: the ground truth
     // asserts one member of an antonym pair, the answer asserts the opposite
     // member and not the original ("lowers risk, improves mood" answered
@@ -1247,6 +1343,10 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             for (x, y) in [(a, b), (b, a)] {
                 if affirmed(&gt.toks, x) && affirmed(&ma.toks, y) && !affirmed(&ma.toks, x) {
                     hits += 0.40;
+                    // Asserting the opposite of the ground truth is the same
+                    // class of error as substituting a wrong value: a false
+                    // claim, not an omission. Force the crushed band.
+                    veto_antonym = true;
                 }
             }
         }
@@ -1472,7 +1572,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     // typed fact is a status word, where "recall" would be 1.0 for any answer
     // that merely repeats the verdict while explaining it wrongly; the text
     // floor requires the answer to actually resemble the truth it omits from.
-    let clean = p_contra <= 0.0 && veto <= 0.0 && !veto_proper && p_prec < 0.05;
+    let clean = p_contra <= 0.0 && veto <= 0.0 && !veto_proper && !veto_antonym && p_prec < 0.05;
     let raw = if clean && gt_weight_raw >= 3.0 && recall >= 0.35 && text >= 0.35 {
         raw.max(0.45 + 0.5 * recall)
     } else {
@@ -1487,7 +1587,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     // ordering inside the vetoed class is preserved, and capped far below
     // the low band's reachable range so a vetoed answer can never outrank a
     // merely incomplete one.
-    if veto > 0.0 || veto_proper {
+    if veto > 0.0 || veto_proper || veto_antonym {
         return (0.012 * c).clamp(0.0, 0.995);
     }
     step_band(c)

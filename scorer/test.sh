@@ -174,14 +174,15 @@ check "JSON gt neutralizes blob penalty"      "$s_jsongt"     "s >= 0.6"
 
 # --- v7 regression cases: semantic fusion ------------------------------------
 
-# Distant-but-correct paraphrase (near-zero token overlap) must clear the
-# high band via the MiniLM channel...
+# Distant-but-correct paraphrase (near-zero token overlap). v9 dropped the
+# MiniLM channel for latency, so this class is no longer LIFTED into the high
+# band — the honest requirement is that it still ORDERS above a same-topic
+# wrong answer, which the fact/contradiction machinery must deliver on its own.
 DIST_GT="A blockchain is a distributed ledger maintained by a network of nodes without a central authority."
 s_dist_good=$(run "What is a blockchain?" "$DIST_GT" "Blockchains are decentralized ledgers kept in sync by many independent nodes rather than one central party.")
-check "distant paraphrase good high"          "$s_dist_good"  "s >= 0.6"
-# ...while embeddings must NEVER rescue a same-topic wrong answer.
 s_dist_bad=$(run "What is a blockchain?" "$DIST_GT" "A blockchain is a centralized database controlled by a single administrator.")
-check "distant topic-match wrong below good"  "$s_dist_bad"   "s < $s_dist_good - 0.3"
+check "distant paraphrase good > wrong"       "$s_dist_good"  "s > $s_dist_bad"
+check "distant topic-match wrong stays low"   "$s_dist_bad"   "s < 0.15"
 
 # Wrong-value answer with near-perfect semantic topicality stays low.
 POP_GT="Tokyo has a population of about 14 million people."
