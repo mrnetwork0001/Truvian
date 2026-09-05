@@ -55,7 +55,7 @@
         </div>
 
         <figure class="fig hero-fig">
-          <svg viewBox="36 0 328 352" role="img" aria-labelledby="hero-svg-t hero-svg-d">
+          <svg class="hero-svg" viewBox="36 0 328 352" role="img" aria-labelledby="hero-svg-t hero-svg-d">
             <title id="hero-svg-t">The Shield checkpoint</title>
             <desc id="hero-svg-d">An agent's proposed transaction passes through Shield, which runs four paid checks against live miners and returns sign when the score is 80 or more, or hold for CAUTION and BLOCK.</desc>
             <defs>
@@ -71,35 +71,42 @@
             <text x="168" y="35" font-size="14" font-weight="700" fill="#e8e8e8">AGENT</text>
             <text x="168" y="51" font-size="12" fill="#9a9a9a">about to sign</text>
             <!-- proposed tx -->
-            <line x1="200" y1="64" x2="200" y2="102" stroke="#caa53d" stroke-width="1.6" marker-end="url(#h-arr)"/>
+            <line class="flow" x1="200" y1="64" x2="200" y2="102" stroke="#caa53d" stroke-width="1.6" marker-end="url(#h-arr)"/>
             <text x="210" y="88" font-size="12" fill="#9a9a9a">proposed tx</text>
             <!-- shield -->
-            <path d="M200 106 L258 128 V172 C258 204 232 230 200 240 C168 230 142 204 142 172 V128 Z" fill="#161616" stroke="#caa53d" stroke-width="2"/>
+            <path class="shield-glow" d="M200 106 L258 128 V172 C258 204 232 230 200 240 C168 230 142 204 142 172 V128 Z" fill="none" stroke="#caa53d" stroke-width="8"/>
+            <path class="shield-body" d="M200 106 L258 128 V172 C258 204 232 230 200 240 C168 230 142 204 142 172 V128 Z" fill="#161616" stroke="#caa53d" stroke-width="2"/>
             <text x="200" y="150" text-anchor="middle" font-size="15" font-weight="700" fill="#caa53d">SHIELD</text>
-            <circle cx="166" cy="172" r="5" fill="#caa53d"/><circle cx="189" cy="172" r="5" fill="#caa53d"/>
-            <circle cx="211" cy="172" r="5" fill="#caa53d"/><circle cx="234" cy="172" r="5" fill="#caa53d"/>
+            <circle class="dot" style="--i:0" cx="166" cy="172" r="5" fill="#caa53d"/><circle class="dot" style="--i:1" cx="189" cy="172" r="5" fill="#caa53d"/>
+            <circle class="dot" style="--i:2" cx="211" cy="172" r="5" fill="#caa53d"/><circle class="dot" style="--i:3" cx="234" cy="172" r="5" fill="#caa53d"/>
             <text x="200" y="196" text-anchor="middle" font-size="12" fill="#e8e8e8">4 paid checks</text>
             <text x="200" y="212" text-anchor="middle" font-size="12" fill="#9a9a9a">live miners · x402</text>
             <!-- fork -->
-            <path d="M200 240 V262 H120 V284" fill="none" stroke="#4ade80" stroke-width="1.6" marker-end="url(#h-arr-g)"/>
-            <path d="M200 262 H280 V284" fill="none" stroke="#f87171" stroke-width="1.6" marker-end="url(#h-arr-r)"/>
+            <path class="flow" d="M200 240 V262 H120 V284" fill="none" stroke="#4ade80" stroke-width="1.6" marker-end="url(#h-arr-g)"/>
+            <path class="flow" d="M200 262 H280 V284" fill="none" stroke="#f87171" stroke-width="1.6" marker-end="url(#h-arr-r)"/>
             <text x="112" y="278" text-anchor="end" font-size="12" fill="#4ade80">score ≥ 80</text>
             <text x="288" y="278" font-size="12" fill="#f87171">score &lt; 80</text>
             <!-- sign -->
-            <rect x="60" y="286" width="120" height="48" rx="10" fill="rgba(74,222,128,.08)" stroke="#4ade80" stroke-width="1.5"/>
-            <path d="M80 310 l7 7 l13 -14" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect class="sign-box" x="60" y="286" width="120" height="48" rx="10" fill="rgba(74,222,128,.08)" stroke="#4ade80" stroke-width="1.5"/>
+            <path class="sign-check" d="M80 310 l7 7 l13 -14" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
             <text x="110" y="315" font-size="15" font-weight="700" fill="#4ade80">SIGN</text>
             <!-- hold -->
-            <rect x="220" y="286" width="120" height="48" rx="10" fill="rgba(248,113,113,.08)" stroke="#f87171" stroke-width="1.5"/>
+            <rect class="hold-box" x="220" y="286" width="120" height="48" rx="10" fill="rgba(248,113,113,.08)" stroke="#f87171" stroke-width="1.5"/>
+            <g class="hand">
             <rect x="238" y="306" width="18" height="14" rx="4" fill="#f87171"/>
             <rect x="238" y="296" width="4" height="12" rx="2" fill="#f87171"/>
             <rect x="243" y="293" width="4" height="15" rx="2" fill="#f87171"/>
             <rect x="248" y="294" width="4" height="14" rx="2" fill="#f87171"/>
             <rect x="253" y="297" width="4" height="11" rx="2" fill="#f87171"/>
             <rect x="231" y="305" width="4" height="10" rx="2" fill="#f87171" transform="rotate(-32 233 310)"/>
+            </g>
             <text x="268" y="315" font-size="15" font-weight="700" fill="#f87171">HOLD</text>
             <text x="120" y="348" text-anchor="middle" font-size="12" fill="#9a9a9a">SAFE</text>
             <text x="280" y="348" text-anchor="middle" font-size="12" fill="#9a9a9a">CAUTION · BLOCK</text>
+            <!-- moving packets (CSS motion paths; hidden when motion is reduced or unsupported) -->
+            <g class="pkt pkt-tx" aria-hidden="true"><circle r="9" fill="#caa53d" opacity=".22"/><circle r="4" fill="#ffe9a3"/></g>
+            <g class="pkt pkt-sign" aria-hidden="true"><circle r="9" fill="#4ade80" opacity=".22"/><circle r="4" fill="#d9ffe6"/></g>
+            <g class="pkt pkt-hold" aria-hidden="true"><circle r="9" fill="#f87171" opacity=".22"/><circle r="4" fill="#ffdada"/></g>
           </svg>
           <figcaption>The checkpoint sits between "decided" and "signed". Verdicts are advisory.</figcaption>
         </figure>
