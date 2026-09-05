@@ -17,7 +17,9 @@
 
   var ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
   var TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
-  var EXPLORER_URL = 'https://explorer.telegraphprotocol.com';
+  // The node's own signal endpoint resolves a signal hash to its recorded
+  // payload — a verification anyone can perform, which is the whole point.
+  var SIGNAL_VERIFY_URL = 'https://devnode.telegraphprotocol.com/engine/v1/signal/';
 
   function el(tag, className, text) {
     var node = document.createElement(tag);
@@ -224,11 +226,11 @@
     }
     if (check.signalHash) {
       var hash = String(check.signalHash);
-      var link = el('a', 'signal-link', 'signal ' + hash.slice(0, 10) + '…');
-      link.href = EXPLORER_URL;
+      var link = el('a', 'signal-link', 'verify signal ' + hash.slice(0, 10) + '…');
+      link.href = SIGNAL_VERIFY_URL + encodeURIComponent(hash);
       link.target = '_blank';
       link.rel = 'noopener';
-      link.title = hash;
+      link.title = 'Verify on the Telegraph node: ' + hash;
       meta.appendChild(link);
     }
     if (meta.childNodes.length) card.appendChild(meta);
