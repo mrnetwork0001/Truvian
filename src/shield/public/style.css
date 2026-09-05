@@ -416,18 +416,6 @@ select:focus-visible {
 .foot-col a { color: var(--muted); }
 .foot-col a:hover { color: var(--text); text-decoration: none; }
 
-.foot-bottom {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: .4rem 1.5rem;
-  margin-top: 2.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--edge-soft);
-  font-size: .75rem;
-  color: var(--faint);
-}
-
 @media (max-width: 860px) {
   .foot-grid { grid-template-columns: 1fr 1fr; }
   .foot-brand-col { grid-column: 1 / -1; }
