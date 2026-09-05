@@ -137,6 +137,49 @@
     return body;
   }
 
+  /* ---- one-click examples ----
+     Real mined Base transactions, so a first-time visitor sees a verdict
+     without owning a transaction hash. SAFE: a succeeded 4.78 ETH transfer.
+     BLOCK: a reverted transaction plus a value above the $100k fail line, so
+     two checks fail and the verdict engine blocks. */
+
+  var PRESETS = {
+    safe: {
+      chain: 'base',
+      to: '0x4cd00e387622c35bddb9b4c962c136462338bc31',
+      valueEth: '0.05',
+      txHash: '0x772e04669ec9ad56635d998be5638c5eae6f2897cb28192bdb8e1bdedad3c769',
+      protocol: '',
+    },
+    block: {
+      chain: 'base',
+      to: '0x83d55acdc72027ed339d267eebaf9a41e47490d5',
+      valueEth: '60',
+      txHash: '0xef26d7918abb2ba7cbe6a121507a3f2a4f54bb9c31f3e568643501e2394c9863',
+      protocol: '',
+    },
+  };
+
+  function applyPreset(name) {
+    var preset = PRESETS[name];
+    if (!preset) return;
+    document.getElementById('chain').value = preset.chain;
+    document.getElementById('to').value = preset.to;
+    document.getElementById('valueEth').value = preset.valueEth;
+    document.getElementById('txHash').value = preset.txHash;
+    document.getElementById('protocol').value = preset.protocol;
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-preset]'), function (btn) {
+    btn.addEventListener('click', function () {
+      applyPreset(btn.getAttribute('data-preset'));
+      clearFormError();
+      // Run it straight away: one click from landing on the page to a verdict.
+      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+      else form.dispatchEvent(new Event('submit', { cancelable: true }));
+    });
+  });
+
   /* ---- x402: pay for a check when the free allowance is used ---- */
 
   function postCheck(body, paymentHeader) {

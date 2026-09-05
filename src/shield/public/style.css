@@ -174,6 +174,35 @@ select:focus-visible {
   margin: 0 0 1.5rem;
 }
 
+/* ---- one-click examples ---- */
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem .75rem;
+  margin: 0 0 1.5rem;
+}
+
+.presets-label { font-size: .78rem; color: var(--muted); }
+.presets-note { font-size: .74rem; color: var(--faint); }
+
+.preset-btn {
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 600;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  padding: .35rem .7rem;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.preset-btn:hover { border-color: currentColor; }
+.preset-safe { color: var(--safe); }
+.preset-block { color: var(--block); }
+
 /* ---- form ---- */
 
 #check-form {

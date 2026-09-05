@@ -46,6 +46,13 @@
         transaction hash to verify it instead. Shield queries live Telegraph miners and returns a
         go/no-go verdict with per-check evidence.</p>
 
+      <div class="presets" aria-label="Example checks">
+        <span class="presets-label">Try one:</span>
+        <button type="button" class="preset-btn preset-safe" data-preset="safe">A normal transfer &rarr; SAFE</button>
+        <button type="button" class="preset-btn preset-block" data-preset="block">A reverted counterparty &rarr; BLOCK</button>
+        <span class="presets-note">real transactions on Base, checked live</span>
+      </div>
+
       <form id="check-form" novalidate>
         <div class="field">
           <label for="chain">chain</label>
