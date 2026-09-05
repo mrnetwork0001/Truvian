@@ -469,7 +469,24 @@ interface X402FetchResult {
  * header, sign an exact-scheme EIP-3009 authorization, retry once with the
  * PAYMENT-SIGNATURE header, and surface the PAYMENT-RESPONSE settlement.
  */
+// The facilitator rejects overlapping authorizations from one payer
+// ("batch_send_failed: missing_or_invalid_parameters…" — observed when four
+// checks paid at once), so payments are serialized per process. A check with
+// four paid intents costs ~4 sequential round-trips (~10 s), well inside the
+// proxy timeout, and nothing is lost to a rejected batch.
+let paymentQueue: Promise<unknown> = Promise.resolve();
+const PAYMENT_RETRY_DELAY_MS = 800;
+
 async function x402Fetch(url: string, init: RequestInit, account: PrivateKeyAccount): Promise<X402FetchResult> {
+  const run = paymentQueue.then(() => x402FetchUnlocked(url, init, account));
+  paymentQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+async function x402FetchUnlocked(url: string, init: RequestInit, account: PrivateKeyAccount): Promise<X402FetchResult> {
   const first = await fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (first.status !== 402) return { res: first };
 
@@ -483,10 +500,18 @@ async function x402Fetch(url: string, init: RequestInit, account: PrivateKeyAcco
   const cap = maxPaymentAtomic();
   if (amount > cap) throw new Error(`x402 price ${amount} exceeds cap ${cap} atomic USDC`);
 
-  const paymentHeader = await buildPaymentSignature(account, challenge, requirement);
-  const headers = new Headers(init.headers);
-  headers.set('PAYMENT-SIGNATURE', paymentHeader);
-  const res = await fetch(url, { ...init, headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  // A fresh authorization (new nonce) per attempt; one retry if the
+  // facilitator rejects the first.
+  let res: Response | undefined;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, PAYMENT_RETRY_DELAY_MS));
+    const paymentHeader = await buildPaymentSignature(account, challenge, requirement);
+    const headers = new Headers(init.headers);
+    headers.set('PAYMENT-SIGNATURE', paymentHeader);
+    res = await fetch(url, { ...init, headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    if (res.status !== 402) break;
+  }
+  if (!res) throw new Error('x402: no response');
 
   let settlement: unknown;
   const settleHeader = res.headers.get('payment-response') ?? res.headers.get('x-payment-response');
@@ -634,7 +659,27 @@ async function executeCall(
   let settlement: unknown;
   if (transport === 'x402') {
     if (!account) throw new Error('TELEGRAPH_PAYER_KEY is not set or invalid');
-    const paid = await x402Fetch(url, init, account);
+    // The engine's direct-ask route wraps the miner's answer in the node
+    // envelope ({miner_id, result, cost_usd, signal_hash, …}); the dispatcher
+    // route returns bare miner JSON with no signal hash. Prefer the engine and
+    // fall back to the dispatcher if the engine refuses the call shape.
+    const route = process.env.SHIELD_X402_ROUTE === 'dispatcher' ? 'dispatcher' : 'engine';
+    let paid: X402FetchResult | undefined;
+    if (route === 'engine') {
+      const engineUrl = `${NODE_URL}/engine/v1/ask/${call.minerId}`;
+      const engineInit: RequestInit = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          method: call.method,
+          endpoint: call.path,
+          payload: call.method === 'GET' ? call.query : (call.body ?? {}),
+        }),
+      };
+      paid = await x402Fetch(engineUrl, engineInit, account);
+      if (paid.res.status >= 400 && paid.res.status !== 402) paid = undefined; // shape refused: use dispatcher
+    }
+    if (!paid) paid = await x402Fetch(url, init, account);
     res = paid.res;
     paidAtomic = paid.paidAtomic;
     settlement = paid.settlement;
