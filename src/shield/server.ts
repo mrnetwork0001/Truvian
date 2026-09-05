@@ -12,6 +12,9 @@
  *   GET  /api/stats            {checksRun, telegraphRequests, byIntent}
  *   GET  /, /*                 static dashboard from src/shield/public/
  */
+// Load /opt/truvian/.env (or the repo's .env) so pm2 gets TELEGRAPH_PAYER_KEY
+// and SHIELD_* without duplicating secrets in the ecosystem file.
+import 'dotenv/config';
 import Fastify from 'fastify';
 import { readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
