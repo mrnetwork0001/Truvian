@@ -82,4 +82,8 @@ export interface ShieldStats {
   byIntent: Record<ShieldIntent, number>;
   /** Real USD paid to live miners over x402, all-time. */
   paidUsd: number;
+  /** Real USD collected from callers who paid Shield over x402, all-time. */
+  earnedUsd: number;
+  /** Checks that were paid for (as opposed to run on the free allowance). */
+  paidChecks: number;
 }

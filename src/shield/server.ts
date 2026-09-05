@@ -30,6 +30,19 @@ import {
 } from './verdict.js';
 import { createLimiter, type Limiter, type LimiterState } from './limits.js';
 import { payerAddress, payerUsdcBalance } from './payer.js';
+import {
+  buildRequirements,
+  challengeBody,
+  encodeSettlement,
+  paymentsEnabled,
+  payToAddress,
+  priceUsd,
+  readPaymentHeader,
+  settlePayment,
+  verifyPayment,
+  type PaymentPayload,
+  type PaymentRequirements,
+} from './x402server.js';
 import type { CheckReport, CheckRequest, ShieldIntent, ShieldStats, ShieldTransport } from './types.js';
 
 const PUBLIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'public');
@@ -56,6 +69,8 @@ function emptyStats(): ShieldStats {
     telegraphRequests: 0,
     byIntent: { GAS_PRICE: 0, ONCHAIN_TX_LOOKUP: 0, CRYPTO_PRICE: 0, TVL_LOOKUP: 0 },
     paidUsd: 0,
+    earnedUsd: 0,
+    paidChecks: 0,
   };
 }
 
@@ -66,6 +81,8 @@ function loadStats(): { stats: ShieldStats; limits?: LimiterState } {
     stats.checksRun = Number(parsed.checksRun) || 0;
     stats.telegraphRequests = Number(parsed.telegraphRequests) || 0;
     stats.paidUsd = Number(parsed.paidUsd) || 0;
+    stats.earnedUsd = Number(parsed.earnedUsd) || 0;
+    stats.paidChecks = Number(parsed.paidChecks) || 0;
     const by = parsed.byIntent;
     if (typeof by === 'object' && by !== null) {
       for (const key of Object.keys(stats.byIntent) as ShieldIntent[]) {
@@ -166,6 +183,84 @@ export function buildShieldServer() {
 
   const save = (): void => persistStats(stats, limiter.serialize());
 
+  /** Public origin used in the x402 `resource` field. */
+  const resourceUrl = (req: { protocol: string; hostname: string; url: string }): string => {
+    const base = (process.env.SHIELD_PUBLIC_URL ?? `${req.protocol}://${req.hostname}`).replace(/\/+$/, '');
+    return `${base}${req.url.split('?')[0]}`;
+  };
+
+  interface Admission {
+    admitted: boolean;
+    /** Present when the caller paid: settle this after the work succeeds. */
+    paid?: { payment: PaymentPayload; requirements: PaymentRequirements };
+  }
+
+  /**
+   * Decide whether a paid endpoint may run. Two ways in:
+   *   1. a valid x402 payment - bypasses the free caps, because the payment
+   *      more than covers the miner queries it triggers;
+   *   2. the free daily allowance - rate limited per IP and globally.
+   * When the free allowance is gone and payments are on, the answer is 402
+   * with a price rather than a flat refusal, so a caller can simply pay.
+   * Returns admitted:false only after a response has been sent.
+   */
+  const admit = async (
+    req: { ip: string; headers: Record<string, unknown>; protocol: string; hostname: string; url: string },
+    reply: { status: (c: number) => { send: (b: unknown) => unknown }; header: (k: string, v: string) => unknown },
+  ): Promise<Admission> => {
+    const payTo = payToAddress(payerAddress());
+    const charging = paymentsEnabled(payerAddress()) && payTo !== null;
+    const requirements = charging && payTo ? buildRequirements(resourceUrl(req), payTo) : null;
+
+    if (requirements) {
+      const payment = readPaymentHeader(req.headers);
+      if (payment) {
+        const verdict = await verifyPayment(payment, requirements);
+        if (verdict.valid) return { admitted: true, paid: { payment, requirements } };
+        reply.status(402).send(challengeBody(requirements, `payment rejected: ${verdict.reason ?? 'unknown reason'}`));
+        return { admitted: false };
+      }
+    }
+
+    const gate = limiter.consume(req.ip);
+    if (gate.allowed) return { admitted: true };
+
+    if (gate.retryAfterSec !== undefined) reply.header('Retry-After', String(gate.retryAfterSec));
+    if (requirements) {
+      // Out of free checks, but payment is open: quote the price.
+      reply.status(402).send({
+        ...challengeBody(requirements, `${gate.reason ?? 'free allowance used'} Pay $${priceUsd().toFixed(2)} in USDC to run this check now.`),
+        freeTier: { scope: gate.scope, retryAfterSec: gate.retryAfterSec, checksLeftToday: gate.remainingForIp },
+      });
+      return { admitted: false };
+    }
+    reply.status(429).send({
+      error: 'RATE_LIMITED',
+      scope: gate.scope,
+      message: gate.reason,
+      retryAfterSec: gate.retryAfterSec,
+      checksLeftToday: gate.remainingForIp,
+    });
+    return { admitted: false };
+  };
+
+  /** Collect a verified payment after the work succeeded. Never throws. */
+  const collect = async (
+    admission: Admission,
+    reply: { header: (k: string, v: string) => unknown },
+  ): Promise<void> => {
+    if (!admission.paid) return;
+    const settlement = await settlePayment(admission.paid.payment, admission.paid.requirements);
+    reply.header('X-PAYMENT-RESPONSE', encodeSettlement(settlement));
+    if (!settlement.success) {
+      app.log.warn({ reason: settlement.reason }, 'x402 settlement failed after work was delivered');
+      return;
+    }
+    const collected = Number(admission.paid.requirements.maxAmountRequired) / 1_000_000;
+    stats.earnedUsd = Number((stats.earnedUsd + collected).toFixed(6));
+    stats.paidChecks += 1;
+  };
+
   /** Refresh the payer balance in the background; never blocks a request. */
   const refreshBalance = (): void => {
     void payerUsdcBalance()
@@ -201,34 +296,29 @@ export function buildShieldServer() {
     refreshBalance(); // cached 60s inside payerUsdcBalance
     const budget = limiter.snapshot();
     const you = limiter.peek(req.ip);
+    const payTo = payToAddress(payerAddress());
     return {
       ...stats,
       budget,
       payer: payerAddress(),
+      pricing: paymentsEnabled(payerAddress()) && payTo ? { priceUsd: priceUsd(), payTo, asset: 'USDC', network: 'base-sepolia' } : null,
       you: { checksLeftToday: you.remainingForIp, perDay: budget.perIpDailyCap },
     };
   });
 
   app.post('/api/check', async (req, reply) => {
     // Brakes BEFORE any miner is paid: one script must not be able to drain
-    // the payer wallet or take the service down.
-    const gate = limiter.consume(req.ip);
-    if (!gate.allowed) {
-      if (gate.retryAfterSec !== undefined) reply.header('Retry-After', String(gate.retryAfterSec));
-      return reply.status(429).send({
-        error: 'RATE_LIMITED',
-        scope: gate.scope,
-        message: gate.reason,
-        retryAfterSec: gate.retryAfterSec,
-        checksLeftToday: gate.remainingForIp,
-      });
-    }
+    // the payer wallet or take the service down. A caller who pays skips them.
+    const admission = await admit(req, reply);
+    if (!admission.admitted) return reply;
 
     let parsed: CheckRequest;
     try {
       parsed = normalizeCheckRequest(req.body ?? {});
     } catch (err) {
-      limiter.refund(req.ip); // nothing was paid for, so nothing is charged
+      // Nothing ran, so nothing is charged: give the free allowance back and
+      // never settle the payment.
+      if (!admission.paid) limiter.refund(req.ip);
       if (err instanceof ShieldInputError) {
         return reply.status(400).send({ error: 'INVALID_INPUT', message: err.message });
       }
@@ -263,8 +353,9 @@ export function buildShieldServer() {
     stats.checksRun++;
     stats.paidUsd = Number((stats.paidUsd + spent).toFixed(6));
     limiter.recordSpend(spent);
+    await collect(admission, reply);
     save();
-    reply.header('X-Shield-Checks-Left', String(gate.remainingForIp));
+    reply.header('X-Shield-Checks-Left', String(limiter.peek(req.ip).remainingForIp));
     return report;
   });
 
@@ -274,17 +365,8 @@ export function buildShieldServer() {
       return reply.status(400).send({ error: 'INVALID_INPUT', message: 'txHash must be a 32-byte 0x-hex string' });
     }
     // One paid ONCHAIN_TX_LOOKUP, so it draws on the same allowance as a check.
-    const gate = limiter.consume(req.ip);
-    if (!gate.allowed) {
-      if (gate.retryAfterSec !== undefined) reply.header('Retry-After', String(gate.retryAfterSec));
-      return reply.status(429).send({
-        error: 'RATE_LIMITED',
-        scope: gate.scope,
-        message: gate.reason,
-        retryAfterSec: gate.retryAfterSec,
-        checksLeftToday: gate.remainingForIp,
-      });
-    }
+    const admission = await admit(req, reply);
+    if (!admission.admitted) return reply;
     const q = (req.query ?? {}) as Record<string, unknown>;
     const chain = typeof q.chain === 'string' && q.chain.trim() !== '' ? q.chain.trim().toLowerCase() : 'base';
     const result = await ask('ONCHAIN_TX_LOOKUP', { chain, hash: txHash.toLowerCase() });
@@ -292,6 +374,7 @@ export function buildShieldServer() {
       stats.paidUsd = Number((stats.paidUsd + result.result.costUsd).toFixed(6));
       limiter.recordSpend(result.result.costUsd);
     }
+    await collect(admission, reply);
     save();
     return assessTxVerification(txHash, result);
   });

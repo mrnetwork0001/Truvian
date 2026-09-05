@@ -1,9 +1,10 @@
 /* Truvian Shield frontend - vanilla JS against the Shield API.
    Consumes: POST /api/check -> CheckReport, GET /api/stats.
+   Handles the x402 402 -> pay -> retry flow via wallet.js (TruvianWallet).
    All server strings are rendered via textContent (never innerHTML). */
 'use strict';
 
-(function () {
+(function (global) {
   var form = document.getElementById('check-form');
   var submitBtn = document.getElementById('submit-btn');
   var formError = document.getElementById('form-error');
@@ -14,6 +15,9 @@
   var checksEl = document.getElementById('checks');
   var statsMain = document.getElementById('stats-main');
   var statsDetail = document.getElementById('stats-detail');
+  var payNotice = document.getElementById('pay-notice');
+  var walletBtn = document.getElementById('wallet-btn');
+  var walletState = document.getElementById('wallet-state');
 
   var ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
   var TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
@@ -133,24 +137,67 @@
     return body;
   }
 
+  /* ---- x402: pay for a check when the free allowance is used ---- */
+
+  function postCheck(body, paymentHeader) {
+    var headers = { 'content-type': 'application/json' };
+    if (paymentHeader) headers['X-PAYMENT'] = paymentHeader;
+    return fetch('/api/check', { method: 'POST', headers: headers, body: JSON.stringify(body) }).then(function (res) {
+      return res
+        .json()
+        .catch(function () { return null; })
+        .then(function (data) { return { res: res, data: data }; });
+    });
+  }
+
+  function priceOf(requirements) {
+    var atomic = Number(requirements.maxAmountRequired);
+    return isFinite(atomic) ? '$' + (atomic / 1e6).toFixed(2) : 'the quoted price';
+  }
+
+  /**
+   * Run a check, paying if Shield asks. A 402 carries the price and the
+   * payment requirements; the wallet signs a gasless USDC authorization and
+   * the request is retried once with it.
+   */
+  function runCheck(body) {
+    return postCheck(body, null).then(function (result) {
+      if (result.res.status !== 402) return result;
+
+      var challenge = result.data || {};
+      var requirements = challenge.accepts && challenge.accepts[0];
+      if (!requirements) throw new Error(challenge.error || 'payment required, but no price was quoted');
+
+      if (!global.TruvianWallet || !global.TruvianWallet.isAvailable()) {
+        throw new Error(
+          'Free checks for today are used. Paying ' + priceOf(requirements) +
+          ' in USDC needs a browser wallet (MetaMask, Coinbase Wallet or Rabby).',
+        );
+      }
+      setPayNotice('Free checks used. Approve ' + priceOf(requirements) + ' in your wallet to run this check.');
+      return global.TruvianWallet.signPayment(requirements).then(function (header) {
+        setPayNotice('Payment signed. Querying live miners…');
+        return postCheck(body, header);
+      });
+    });
+  }
+
+  function setPayNotice(text) {
+    if (!payNotice) return;
+    payNotice.textContent = text || '';
+    payNotice.hidden = !text;
+  }
+
   form.addEventListener('submit', function (event) {
     event.preventDefault();
     clearFormError();
+    setPayNotice('');
 
     var body = buildRequestBody();
     if (!body) return;
 
     setLoading(true);
-    fetch('/api/check', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-      .then(function (res) {
-        return res.json()
-          .catch(function () { return null; })
-          .then(function (data) { return { res: res, data: data }; });
-      })
+    runCheck(body)
       .then(function (result) {
         var data = result.data;
         if (!result.res.ok || !data || typeof data.verdict !== 'string') {
@@ -160,12 +207,27 @@
             ('server replied ' + result.res.status);
           throw new Error(detail);
         }
+        var settled = result.res.headers.get('x-payment-response');
+        if (settled) {
+          try {
+            var receipt = JSON.parse(global.atob(settled));
+            setPayNotice(receipt.transaction ? 'Paid. Settlement ' + receipt.transaction : 'Payment settled.');
+          } catch (e) {
+            setPayNotice('Payment settled.');
+          }
+        } else {
+          setPayNotice('');
+        }
         renderReport(data);
         refreshStats();
       })
       .catch(function (err) {
         var detail = err && err.message ? err.message : 'network error';
-        showFormError('Check failed: ' + detail + '. Make sure the Shield server is reachable, then try again.');
+        if (err && (err.code === 4001 || /user rejected|denied/i.test(detail))) {
+          detail = 'payment was rejected in the wallet';
+        }
+        setPayNotice('');
+        showFormError('Check failed: ' + detail);
       })
       .then(function () {
         setLoading(false);
@@ -255,8 +317,48 @@
     return card;
   }
 
+  /* ---- wallet button ---- */
+
+  function renderWallet(address) {
+    if (!walletBtn || !walletState) return;
+    if (!global.TruvianWallet || !global.TruvianWallet.isAvailable()) {
+      walletBtn.hidden = true;
+      walletState.textContent = 'no browser wallet detected - free checks only';
+      return;
+    }
+    walletBtn.hidden = false;
+    if (address) {
+      walletBtn.textContent = global.TruvianWallet.shorten(address);
+      walletBtn.classList.add('connected');
+      walletState.textContent = 'connected - paid checks enabled';
+    } else {
+      walletBtn.textContent = 'Connect wallet';
+      walletBtn.classList.remove('connected');
+      walletState.textContent = 'optional - only needed once the free checks are used';
+    }
+  }
+
+  if (walletBtn && global.TruvianWallet) {
+    walletBtn.addEventListener('click', function () {
+      if (global.TruvianWallet.getAddress()) return; // already connected
+      walletBtn.disabled = true;
+      global.TruvianWallet.connect()
+        .then(function (address) { renderWallet(address); })
+        .catch(function (err) {
+          walletState.textContent = err && err.message ? err.message : 'wallet connection failed';
+        })
+        .then(function () { walletBtn.disabled = false; });
+    });
+    global.TruvianWallet.onAccountsChanged(renderWallet);
+  }
+
   /* ---- boot ---- */
 
+  if (global.TruvianWallet) {
+    global.TruvianWallet.restore().then(renderWallet);
+  } else {
+    renderWallet(null);
+  }
   refreshStats();
   setInterval(refreshStats, 30000);
-})();
+})(window);

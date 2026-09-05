@@ -28,6 +28,11 @@
     </div>
   </header>
 
+  <div class="wallet-bar">
+    <button id="wallet-btn" type="button" class="wallet-btn" hidden>Connect wallet</button>
+    <span id="wallet-state" class="wallet-state"></span>
+  </div>
+
   <div id="stats-strip" class="stats-strip" aria-label="live usage stats">
     <span class="stats-dot" aria-hidden="true">●</span>
     <span id="stats-main">connecting to Shield…</span>
@@ -79,6 +84,7 @@
           <button id="submit-btn" type="submit">Run safety check</button>
         </div>
 
+        <p id="pay-notice" class="pay-notice wide" role="status" aria-live="polite" hidden></p>
         <p id="form-error" class="form-error wide" role="alert" hidden></p>
       </form>
     </section>
@@ -168,6 +174,7 @@
   </footer>
 
 </div>
+<script src="./wallet.js"></script>
 <script src="./app.js"></script>
 </body>
 </html>
