@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Truvian Shield</title>
+<meta name="description" content="Execution safety for on-chain agents, powered by live Telegraph miners.">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="site-header">
+    <h1>🛡️ Truvian Shield</h1>
+    <p class="tagline">execution safety for on-chain agents, powered by live Telegraph miners</p>
+    <div class="badge-row">
+      <span class="badge">Telegraph Season I · Track 3</span>
+      <a href="https://miner.truvian.xyz" target="_blank" rel="noopener">miner.truvian.xyz</a>
+      <span class="sep" aria-hidden="true">·</span>
+      <a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">github.com/mrnetwork0001/Truvian</a>
+    </div>
+  </header>
+
+  <div id="stats-strip" class="stats-strip" aria-label="live usage stats">
+    <span class="stats-dot" aria-hidden="true">●</span>
+    <span id="stats-main">connecting to Shield…</span>
+    <span id="stats-detail" class="stats-detail"></span>
+  </div>
+
+  <main>
+    <section class="check-section" aria-labelledby="check-heading">
+      <h2 id="check-heading" class="section-label">Run a check</h2>
+      <p class="section-note">Describe the transaction your agent is about to sign — or paste a mined
+        transaction hash to verify it instead. Shield queries live Telegraph miners and returns a
+        go/no-go verdict with per-check evidence.</p>
+
+      <form id="check-form" novalidate>
+        <div class="field">
+          <label for="chain">chain</label>
+          <select id="chain" name="chain">
+            <option value="base" selected>base</option>
+            <option value="ethereum">ethereum</option>
+            <option value="base-sepolia">base-sepolia</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="valueEth">value (ETH)</label>
+          <input id="valueEth" name="valueEth" type="text" inputmode="decimal"
+                 placeholder="0.05" autocomplete="off" spellcheck="false">
+        </div>
+
+        <div class="field wide">
+          <label for="to">recipient address</label>
+          <input id="to" name="to" type="text" placeholder="0x… (40 hex chars)"
+                 autocomplete="off" spellcheck="false">
+        </div>
+
+        <div class="field wide">
+          <label for="txHash">transaction hash <span class="label-hint">— verify a mined transaction instead</span></label>
+          <input id="txHash" name="txHash" type="text" placeholder="0x… (64 hex chars)"
+                 autocomplete="off" spellcheck="false">
+        </div>
+
+        <div class="field">
+          <label for="protocol">protocol <span class="label-hint">(optional)</span></label>
+          <input id="protocol" name="protocol" type="text" placeholder="aave, uniswap, …"
+                 autocomplete="off" spellcheck="false">
+        </div>
+
+        <div class="field submit-field">
+          <button id="submit-btn" type="submit">Run safety check</button>
+        </div>
+
+        <p id="form-error" class="form-error wide" role="alert" hidden></p>
+      </form>
+    </section>
+
+    <section id="report" class="report" aria-labelledby="report-heading" hidden>
+      <h2 id="report-heading" class="section-label">Verdict</h2>
+      <div id="verdict-banner" class="verdict" role="status" aria-live="polite"></div>
+      <ul id="reasons" class="reasons"></ul>
+      <h3 id="evidence-heading" class="section-label"></h3>
+      <div id="checks" class="checks"></div>
+    </section>
+
+    <section class="how-section" aria-labelledby="how-heading">
+      <h2 id="how-heading" class="section-label">How it works</h2>
+      <p class="section-note">Every check below is a paid query to a live Telegraph miner. Shield
+        never fabricates data — each answer arrives from the network with its own cost, latency and,
+        when the engine issues one, a signal hash you can verify independently.</p>
+      <div class="how-grid">
+        <div class="how-item">
+          <span class="intent-tag">GAS_PRICE</span>
+          <h3>Gas conditions</h3>
+          <p>A live miner reports current fee conditions on the target chain, so the agent never signs into a fee spike.</p>
+        </div>
+        <div class="how-item">
+          <span class="intent-tag">ONCHAIN_TX_LOOKUP</span>
+          <h3>On-chain facts</h3>
+          <p>Canonical transaction facts read from real chain state — the same check that verifies a mined transaction hash.</p>
+        </div>
+        <div class="how-item">
+          <span class="intent-tag">CRYPTO_PRICE</span>
+          <h3>Price context</h3>
+          <p>A live market price anchors the dollar value of what is about to move, before it moves.</p>
+        </div>
+        <div class="how-item">
+          <span class="intent-tag">TVL_LOOKUP</span>
+          <h3>Protocol health</h3>
+          <p>When a protocol is named, its reported TVL helps flag drained or suspicious targets.</p>
+        </div>
+      </div>
+      <p class="how-footnote">Verdicts are advisory — the final signing decision stays with the agent.
+        Responses carrying a signal hash can be checked against the
+        <a href="https://explorer.telegraphprotocol.com" target="_blank" rel="noopener">Telegraph explorer</a>.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Built for the Telegraph Protocol Season I hackathon · all answers come from live Telegraph miners · no mocked data.</p>
+    <p>
+      <a href="https://miner.truvian.xyz" target="_blank" rel="noopener">our miner</a>
+      <span class="sep" aria-hidden="true">·</span>
+      <a href="https://explorer.telegraphprotocol.com" target="_blank" rel="noopener">telegraph explorer</a>
+      <span class="sep" aria-hidden="true">·</span>
+      <a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">source</a>
+    </p>
+  </footer>
+
+</div>
+<script src="./app.js"></script>
+</body>
+</html>
