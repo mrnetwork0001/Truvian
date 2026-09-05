@@ -244,6 +244,12 @@ export function buildShieldServer() {
     return reply.type('text/html; charset=utf-8').send(FALLBACK_HTML);
   });
 
+  // The landing page's "Launch App" target: the check tool itself.
+  app.get('/app', async (_req, reply) => {
+    if (await sendPublicFile(reply, 'app.html')) return reply;
+    return reply.type('text/html; charset=utf-8').send(FALLBACK_HTML);
+  });
+
   app.get('/*', async (req, reply) => {
     const rel = (req.params as Record<string, string>)['*'] ?? '';
     if (rel !== '' && (await sendPublicFile(reply, rel))) return reply;
