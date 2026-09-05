@@ -61,6 +61,13 @@ select:focus-visible {
   text-wrap: balance;
 }
 
+/* ---- brand lockup (header + footer) ---- */
+
+.brand { margin: 0 0 .85rem; line-height: 0; }
+.brand a, .footer-brand { display: inline-block; line-height: 0; }
+.brand-logo { display: block; height: 80px; width: auto; max-width: 100%; }
+.footer-logo { height: 44px; margin-bottom: .75rem; opacity: .9; }
+
 .tagline {
   color: var(--muted);
   margin: 0 0 1rem;
@@ -382,6 +389,8 @@ select:focus-visible {
 
 @media (max-width: 700px) {
   .page { padding: 1.75rem 1rem 2.5rem; }
+  .brand-logo { height: 60px; }
+  .footer-logo { height: 36px; }
   #check-form { grid-template-columns: 1fr; }
   .how-grid { grid-template-columns: 1fr; }
   .status-chip { margin-left: 0; }
