@@ -64,9 +64,8 @@ select:focus-visible {
 /* ---- brand lockup (header + footer) ---- */
 
 .brand { margin: 0 0 .85rem; line-height: 0; }
-.brand a, .footer-brand { display: inline-block; line-height: 0; }
+.brand a { display: inline-block; line-height: 0; }
 .brand-logo { display: block; height: 80px; width: auto; max-width: 100%; }
-.footer-logo { height: 44px; margin-bottom: .75rem; opacity: .9; }
 
 .tagline {
   color: var(--muted);
@@ -376,21 +375,73 @@ select:focus-visible {
 /* ---- footer ---- */
 
 .site-footer {
-  margin-top: 3rem;
-  padding-top: 1.25rem;
+  margin-top: 4rem;
+  padding: 3rem 0 1.75rem;
   border-top: 1px solid var(--edge-soft);
-  color: var(--faint);
-  font-size: .8rem;
+  color: var(--muted);
+  font-size: .82rem;
 }
 
-.site-footer p { margin: .35rem 0; }
+.foot-grid {
+  display: grid;
+  grid-template-columns: 1.7fr 1fr 1fr 1fr;
+  gap: 2rem 2.5rem;
+}
+
+.foot-brand { display: inline-block; line-height: 0; margin: 0 0 1rem; }
+.foot-logo { display: block; height: 38px; width: auto; opacity: .9; }
+
+.foot-desc {
+  margin: 0 0 1.25rem;
+  max-width: 40ch;
+  line-height: 1.65;
+}
+
+.foot-social { display: flex; gap: 1rem; }
+.foot-social a { color: var(--muted); line-height: 0; }
+.foot-social a:hover { color: var(--text); }
+.foot-social svg { width: 22px; height: 22px; fill: currentColor; }
+
+.foot-col h4 {
+  margin: 0 0 1.1rem;
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.foot-col ul { list-style: none; margin: 0; padding: 0; }
+.foot-col li { margin: 0 0 .75rem; }
+.foot-col a { color: var(--muted); }
+.foot-col a:hover { color: var(--text); text-decoration: none; }
+
+.foot-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: .4rem 1.5rem;
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--edge-soft);
+  font-size: .75rem;
+  color: var(--faint);
+}
+
+@media (max-width: 860px) {
+  .foot-grid { grid-template-columns: 1fr 1fr; }
+  .foot-brand-col { grid-column: 1 / -1; }
+}
+
+@media (max-width: 480px) {
+  .foot-grid { grid-template-columns: 1fr; }
+}
 
 /* ---- responsive ---- */
 
 @media (max-width: 700px) {
   .page { padding: 1.75rem 1rem 2.5rem; }
   .brand-logo { height: 60px; }
-  .footer-logo { height: 36px; }
   #check-form { grid-template-columns: 1fr; }
   .how-grid { grid-template-columns: 1fr; }
   .status-chip { margin-left: 0; }

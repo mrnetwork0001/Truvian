@@ -135,7 +135,19 @@ h2{font-size:clamp(22px,3vw,32px);line-height:1.15;margin:0 0 8px;letter-spacing
 /* final / footer */
 .final{text-align:center}
 .final .cta-row{justify-content:center}
-.foot{border-top:1px solid var(--border);padding:28px 0 40px;font-size:12px;color:var(--muted)}
-.foot .links{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:10px}
-.foot .links a{color:var(--muted)}
-.foot .links a:hover{color:var(--text)}
+/* site footer: brand column + three link columns */
+.site-foot{border-top:1px solid var(--border);padding:48px 0 28px;font-size:13px;color:var(--muted)}
+.foot-grid{display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr;gap:32px 40px}
+.foot-desc{margin:0 0 20px;max-width:40ch;line-height:1.65}
+.foot-social{display:flex;gap:16px}
+.foot-social a{color:var(--muted);line-height:0}
+.foot-social a:hover{color:var(--text)}
+.foot-social svg{width:22px;height:22px;fill:currentColor}
+.foot-col h4{margin:0 0 18px;font-size:11px;font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:#6f6f6f}
+.foot-col ul{list-style:none;margin:0;padding:0}
+.foot-col li{margin:0 0 12px}
+.foot-col a{color:var(--muted)}
+.foot-col a:hover{color:var(--text);text-decoration:none}
+.foot-bottom{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 24px;margin-top:40px;padding-top:16px;border-top:1px solid var(--border);font-size:12px;color:#6f6f6f}
+@media(max-width:860px){.foot-grid{grid-template-columns:1fr 1fr}.foot-brand-col{grid-column:1/-1}}
+@media(max-width:480px){.foot-grid{grid-template-columns:1fr}}
