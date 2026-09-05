@@ -4,13 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Truvian Shield — execution safety for on-chain agents</title>
-<meta name="description" content="Before an agent signs a transaction, Truvian Shield queries live Telegraph Protocol miners over x402 and returns a deterministic go/no-go verdict with per-check evidence anyone can verify on the Telegraph node.">
+<meta name="description" content="Before an agent signs a transaction, Truvian Shield queries live Telegraph Protocol miners over x402 and returns a go/no-go verdict with per-check evidence anyone can verify on the Telegraph node.">
 <meta name="theme-color" content="#0a0a0a">
 <meta name="color-scheme" content="dark">
 <meta property="og:title" content="Truvian Shield">
-<meta property="og:description" content="An execution-safety checkpoint for on-chain agents, powered by live Telegraph miners. Four paid checks, one verdict, verifiable evidence.">
+<meta property="og:description" content="An execution-safety checkpoint for on-chain agents. Four paid checks against live Telegraph miners, one verdict, verifiable receipts.">
 <meta property="og:url" content="https://truvian.xyz/">
 <meta property="og:type" content="website">
+<meta property="og:image" content="https://truvian.xyz/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="./landing.css">
 </head>
 <body>
@@ -19,19 +24,14 @@
 <header class="top">
   <div class="wrap top-inner">
     <a class="brand" href="/" aria-label="Truvian Shield home">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M12 2.5 4.5 5.4v6.1c0 4.4 3.1 8.4 7.5 9.9 4.4-1.5 7.5-5.5 7.5-9.9V5.4L12 2.5Z" fill="none" stroke="#caa53d" stroke-width="1.6" stroke-linejoin="round"/>
-        <path d="m8.6 12.2 2.3 2.3 4.6-4.9" fill="none" stroke="#caa53d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      Truvian Shield
+      <img class="brand-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176">
     </a>
     <nav class="topnav" aria-label="Page sections">
-      <a href="#how">How it works</a>
+      <a href="#how">How</a>
       <a href="#checks">Checks</a>
-      <a href="#rules">Scoring</a>
+      <a href="#scoring">Scoring</a>
       <a href="#architecture">Architecture</a>
       <a href="#agents">API</a>
-      <a href="#verify">Verify</a>
       <a href="#faq">FAQ</a>
     </nav>
     <a class="btn btn-primary btn-sm" href="/app">Launch App</a>
@@ -42,879 +42,605 @@
 
   <!-- ============ HERO ============ -->
   <section class="hero" aria-labelledby="hero-title">
-    <div class="wrap hero-grid">
-      <div>
-        <p class="eyebrow">Telegraph Protocol · Season I · Track 3 · Applications</p>
-        <h1 id="hero-title">Your agent is about to sign. Should it?</h1>
-        <p class="lede">Truvian Shield is an execution-safety checkpoint for on-chain agents. Before a transaction is signed,
-          Shield asks <strong>live Telegraph Protocol miners</strong> four questions — about fees, the counterparty, the dollar value
-          and the protocol's liquidity — and returns a deterministic <strong>SAFE / CAUTION / BLOCK</strong> verdict with per-check
-          evidence, cost, latency and a node-issued signal hash anyone can verify.</p>
-        <div class="cta-row">
-          <a class="btn btn-primary" href="/app">Launch App</a>
-          <a class="btn" href="#agents">Use it from an agent</a>
-        </div>
-        <ul class="hero-facts" aria-label="Key facts">
-          <li>4 checks, one verdict</li>
-          <li>$0.01 per miner query, paid over x402</li>
-          <li>~10 s for a full report</li>
-          <li>live miners only, nothing mocked</li>
-        </ul>
-      </div>
-
-      <div class="report" aria-label="Example report, measured live on Base">
-        <p class="report-caption">A real report · measured live on Base</p>
-        <div class="verdict safe">
-          <span class="verdict-word">SAFE</span>
-          <span class="verdict-note">3 checks against live Telegraph miners</span>
-        </div>
-        <ul class="rows">
-          <li class="row">
-            <div class="row-head">
-              <span class="row-name">FEE</span><span class="tag">GAS_PRICE</span><span class="chip pass">pass</span>
-            </div>
-            <p class="row-sum">gas price is within the normal range for base</p>
-            <div class="row-meta"><span>miner Truvian (8453)</span><span>$0.0100</span><span>750 ms</span><span class="chip x402">x402 · paid</span></div>
-          </li>
-          <li class="row">
-            <div class="row-head">
-              <span class="row-name">VALUE</span><span class="tag">CRYPTO_PRICE</span><span class="chip pass">pass</span>
-            </div>
-            <p class="row-sum">ETH priced at $2,476 — the transfer is below the $10,000 caution threshold</p>
-            <div class="row-meta"><span>miner ChainSight</span><span>$0.0100</span><span class="chip x402">x402 · paid</span></div>
-          </li>
-          <li class="row">
-            <div class="row-head">
-              <span class="row-name">LIQUIDITY</span><span class="tag">TVL_LOOKUP</span><span class="chip pass">pass</span>
-            </div>
-            <p class="row-sum">reported TVL $18.2B for aave clears the $1,000,000 liquidity threshold</p>
-            <div class="row-meta"><span>live TVL miner</span><span>$0.0100</span><span class="chip x402">x402 · paid</span></div>
-          </li>
-        </ul>
-        <p class="report-foot">Every card in the app also carries a signal hash you can resolve on the Telegraph node.
-          <a href="#example">See the full walkthrough</a>.</p>
-      </div>
-    </div>
-  </section>
-
-  <div class="wrap">
-    <div id="stats-strip" class="stats-strip" role="status" aria-live="polite" aria-label="Live usage stats" hidden>
-      <span class="stats-dot" aria-hidden="true">●</span>
-      <span id="stats-main"></span>
-      <span id="stats-detail" class="stats-detail"></span>
-      <span class="stats-src">source: <code>GET /api/stats</code></span>
-    </div>
-  </div>
-
-  <!-- ============ PROBLEM ============ -->
-  <section class="band" id="problem" aria-labelledby="problem-title">
     <div class="wrap">
-      <span class="label">The problem</span>
-      <h2 class="h2" id="problem-title">Agents sign blind.</h2>
-      <p class="intro">An autonomous agent that moves money on-chain makes its decision on whatever one RPC or one API told it a
-        moment ago. Nobody vouched for that data, nobody paid for it, and there is no record of where it came from.</p>
-      <ul class="problem-list">
-        <li><strong>A fee spike looks like a normal fee.</strong> The agent signs into congestion and overpays, or the transaction stalls.</li>
-        <li><strong>A reverted counterparty looks like a working one.</strong> The "proof" it was given never actually succeeded on-chain.</li>
-        <li><strong>A six-figure transfer looks like a handful of ETH.</strong> Without a live price, the dollar exposure is invisible.</li>
-        <li><strong>A drained protocol looks like a healthy one.</strong> TVL that collapsed an hour ago is not in the prompt.</li>
-        <li><strong>Once signed, there is no undo.</strong> A wrong signature is final in a way a wrong sentence never is.</li>
-      </ul>
-      <p class="pull">Shield puts a checkpoint between <em>decided</em> and <em>signed</em>: four independent, paid, verifiable
-        answers from a live oracle network, folded into one verdict the agent can act on.</p>
+      <div class="hero-grid">
+        <div>
+          <p class="label">Telegraph Protocol · Season I · Track 3</p>
+          <h1 id="hero-title">Should your agent sign?</h1>
+          <p class="lede">One POST before the signature: four paid questions to live Telegraph miners, one verdict, receipts anyone can verify.</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="/app">Launch App</a>
+            <a class="btn" href="#agents">API for agents</a>
+          </div>
+        </div>
+
+        <figure class="fig hero-fig">
+          <svg viewBox="36 0 328 352" role="img" aria-labelledby="hero-svg-t hero-svg-d">
+            <title id="hero-svg-t">The Shield checkpoint</title>
+            <desc id="hero-svg-d">An agent's proposed transaction passes through Shield, which runs four paid checks against live miners and returns sign when the score is 80 or more, or hold for CAUTION and BLOCK.</desc>
+            <defs>
+              <marker id="h-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#caa53d"/></marker>
+              <marker id="h-arr-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4ade80"/></marker>
+              <marker id="h-arr-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#f87171"/></marker>
+            </defs>
+            <!-- agent -->
+            <rect x="120" y="12" width="160" height="52" rx="12" fill="#111" stroke="#7db4ff" stroke-width="1.5"/>
+            <rect x="138" y="28" width="20" height="16" rx="4" fill="none" stroke="#7db4ff" stroke-width="1.5"/>
+            <circle cx="144" cy="36" r="1.8" fill="#7db4ff"/><circle cx="152" cy="36" r="1.8" fill="#7db4ff"/>
+            <line x1="148" y1="28" x2="148" y2="22" stroke="#7db4ff" stroke-width="1.5"/>
+            <text x="168" y="35" font-size="14" font-weight="700" fill="#e8e8e8">AGENT</text>
+            <text x="168" y="51" font-size="12" fill="#9a9a9a">about to sign</text>
+            <!-- proposed tx -->
+            <line x1="200" y1="64" x2="200" y2="102" stroke="#caa53d" stroke-width="1.6" marker-end="url(#h-arr)"/>
+            <text x="210" y="88" font-size="12" fill="#9a9a9a">proposed tx</text>
+            <!-- shield -->
+            <path d="M200 106 L258 128 V172 C258 204 232 230 200 240 C168 230 142 204 142 172 V128 Z" fill="#161616" stroke="#caa53d" stroke-width="2"/>
+            <text x="200" y="150" text-anchor="middle" font-size="15" font-weight="700" fill="#caa53d">SHIELD</text>
+            <circle cx="166" cy="172" r="5" fill="#caa53d"/><circle cx="189" cy="172" r="5" fill="#caa53d"/>
+            <circle cx="211" cy="172" r="5" fill="#caa53d"/><circle cx="234" cy="172" r="5" fill="#caa53d"/>
+            <text x="200" y="196" text-anchor="middle" font-size="12" fill="#e8e8e8">4 paid checks</text>
+            <text x="200" y="212" text-anchor="middle" font-size="12" fill="#9a9a9a">live miners · x402</text>
+            <!-- fork -->
+            <path d="M200 240 V262 H120 V284" fill="none" stroke="#4ade80" stroke-width="1.6" marker-end="url(#h-arr-g)"/>
+            <path d="M200 262 H280 V284" fill="none" stroke="#f87171" stroke-width="1.6" marker-end="url(#h-arr-r)"/>
+            <text x="112" y="278" text-anchor="end" font-size="12" fill="#4ade80">score ≥ 80</text>
+            <text x="288" y="278" font-size="12" fill="#f87171">score &lt; 80</text>
+            <!-- sign -->
+            <rect x="60" y="286" width="120" height="48" rx="10" fill="rgba(74,222,128,.08)" stroke="#4ade80" stroke-width="1.5"/>
+            <path d="M80 310 l7 7 l13 -14" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <text x="110" y="315" font-size="15" font-weight="700" fill="#4ade80">SIGN</text>
+            <!-- hold -->
+            <rect x="220" y="286" width="120" height="48" rx="10" fill="rgba(248,113,113,.08)" stroke="#f87171" stroke-width="1.5"/>
+            <rect x="238" y="306" width="18" height="14" rx="4" fill="#f87171"/>
+            <rect x="238" y="296" width="4" height="12" rx="2" fill="#f87171"/>
+            <rect x="243" y="293" width="4" height="15" rx="2" fill="#f87171"/>
+            <rect x="248" y="294" width="4" height="14" rx="2" fill="#f87171"/>
+            <rect x="253" y="297" width="4" height="11" rx="2" fill="#f87171"/>
+            <rect x="231" y="305" width="4" height="10" rx="2" fill="#f87171" transform="rotate(-32 233 310)"/>
+            <text x="268" y="315" font-size="15" font-weight="700" fill="#f87171">HOLD</text>
+            <text x="120" y="348" text-anchor="middle" font-size="12" fill="#9a9a9a">SAFE</text>
+            <text x="280" y="348" text-anchor="middle" font-size="12" fill="#9a9a9a">CAUTION · BLOCK</text>
+          </svg>
+          <figcaption>The checkpoint sits between "decided" and "signed". Verdicts are advisory.</figcaption>
+        </figure>
+      </div>
+
+      <div class="bignums" aria-label="Key numbers">
+        <div class="bignum"><b>$0.01</b><span>per miner query · USDC over x402</span></div>
+        <div class="bignum"><b>4</b><span>checks · one verdict</span></div>
+        <div class="bignum"><b>~10 s</b><span>full report · ~2–4 s per check</span></div>
+        <div class="bignum"><b>100%</b><span>live miners · nothing mocked</span></div>
+      </div>
+
+      <div id="stats" class="stats" role="status" aria-live="polite" aria-label="Live usage stats" hidden>
+        <span class="dot" aria-hidden="true"></span>
+        <b id="stats-main"></b>
+        <span id="stats-detail"></span>
+        <span class="src">live · <code>GET /api/stats</code></span>
+      </div>
     </div>
   </section>
 
   <!-- ============ HOW IT WORKS ============ -->
-  <section class="band band-alt" id="how" aria-labelledby="how-title">
+  <section class="band-alt" id="how" aria-labelledby="how-title">
     <div class="wrap">
       <span class="label">How it works</span>
-      <h2 class="h2" id="how-title">Four steps from "about to sign" to "here is the evidence".</h2>
-      <p class="intro">The same flow runs whether you use the dashboard or call the API. Nothing is pre-computed; every report is built from
-        fresh miner answers at the moment you ask.</p>
-      <ol class="steps">
-        <li>
-          <div class="card">
-            <span class="num" aria-hidden="true"></span>
-            <h3>Describe the transaction</h3>
-            <p>Chain (<code>base</code>, <code>ethereum</code> or <code>base-sepolia</code>), recipient address, value in ETH.
-              Optionally a transaction hash to verify a mined transaction, and a protocol name to check liquidity.</p>
-          </div>
-        </li>
-        <li>
-          <div class="card">
-            <span class="num" aria-hidden="true"></span>
-            <h3>Shield queries live miners</h3>
-            <p>One paid query per applicable check: <code>GAS_PRICE</code>, <code>ONCHAIN_TX_LOOKUP</code>, <code>CRYPTO_PRICE</code>,
-              <code>TVL_LOOKUP</code>. Each is a real x402 payment of $0.01 in USDC, settled on-chain. Shield launches every applicable
-              query at once; the payments themselves are serialized per payer wallet.</p>
-          </div>
-        </li>
-        <li>
-          <div class="card">
-            <span class="num" aria-hidden="true"></span>
-            <h3>Each answer is judged</h3>
-            <p>Miners answer in plain text. Shield parses the number or status it needs and grades the check
-              <strong>pass</strong>, <strong>warn</strong>, <strong>fail</strong> or <strong>error</strong> against fixed, public thresholds — with the reason stated.</p>
-          </div>
-        </li>
-        <li>
-          <div class="card">
-            <span class="num" aria-hidden="true"></span>
-            <h3>You get a verdict with receipts</h3>
-            <p><strong>SAFE</strong>, <strong>CAUTION</strong> or <strong>BLOCK</strong>, a score out of 100, the reasons, and one card per check
-              showing the miner, its answer, latency, cost and a signal hash the Telegraph node will confirm.</p>
-          </div>
-        </li>
-      </ol>
+      <h2 id="how-title">From "about to sign" to evidence in four steps.</h2>
+      <p class="sub">Every report is built fresh from paid miner answers at the moment you ask.</p>
+
+      <figure class="fig">
+        <!-- desktop -->
+        <svg class="d-desk" viewBox="0 0 1000 196" role="img" aria-labelledby="flow-t flow-d">
+          <title id="flow-t">Four-step flow</title>
+          <desc id="flow-d">Describe the transaction, Shield queries live miners with one x402 payment of one cent per check, each text answer is graded pass, warn or fail, and a verdict with receipts comes back in about ten seconds.</desc>
+          <defs><marker id="f-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#caa53d"/></marker></defs>
+          <!-- 1 -->
+          <rect x="20" y="22" width="200" height="118" rx="12" fill="#111" stroke="#262626"/>
+          <circle cx="44" cy="48" r="13" fill="#caa53d"/><text x="44" y="52.5" text-anchor="middle" font-size="13" font-weight="700" fill="#0a0a0a">1</text>
+          <text x="66" y="53" font-size="14" font-weight="700" fill="#e8e8e8">Describe</text>
+          <text x="38" y="86" font-size="11" fill="#9a9a9a">chain · to · value in ETH</text>
+          <text x="38" y="112" font-size="11" fill="#7db4ff">tx hash? · protocol?</text>
+          <line x1="220" y1="81" x2="268" y2="81" stroke="#caa53d" stroke-width="1.6" marker-end="url(#f-arr)"/>
+          <text x="247" y="72" text-anchor="middle" font-size="11" fill="#9a9a9a">input</text>
+          <!-- 2 -->
+          <rect x="270" y="22" width="200" height="118" rx="12" fill="#111" stroke="#262626"/>
+          <circle cx="294" cy="48" r="13" fill="#caa53d"/><text x="294" y="52.5" text-anchor="middle" font-size="13" font-weight="700" fill="#0a0a0a">2</text>
+          <text x="316" y="53" font-size="14" font-weight="700" fill="#e8e8e8">Query live miners</text>
+          <text x="288" y="86" font-size="11" fill="#9a9a9a">x402 · $0.01 each · USDC</text>
+          <text x="288" y="112" font-size="11" fill="#caa53d">GAS · TX · PRICE · TVL</text>
+          <line x1="470" y1="81" x2="518" y2="81" stroke="#caa53d" stroke-width="1.6" marker-end="url(#f-arr)"/>
+          <text x="497" y="72" text-anchor="middle" font-size="11" fill="#9a9a9a">answers</text>
+          <!-- 3 -->
+          <rect x="520" y="22" width="200" height="118" rx="12" fill="#111" stroke="#262626"/>
+          <circle cx="544" cy="48" r="13" fill="#caa53d"/><text x="544" y="52.5" text-anchor="middle" font-size="13" font-weight="700" fill="#0a0a0a">3</text>
+          <text x="566" y="53" font-size="14" font-weight="700" fill="#e8e8e8">Grade</text>
+          <text x="538" y="86" font-size="11" fill="#9a9a9a">fixed public thresholds</text>
+          <rect x="538" y="98" width="44" height="20" rx="10" fill="rgba(74,222,128,.1)" stroke="#4ade80"/><text x="560" y="112" text-anchor="middle" font-size="11" fill="#4ade80">pass</text>
+          <rect x="590" y="98" width="48" height="20" rx="10" fill="rgba(245,179,66,.1)" stroke="#f5b342"/><text x="614" y="112" text-anchor="middle" font-size="11" fill="#f5b342">warn</text>
+          <rect x="646" y="98" width="40" height="20" rx="10" fill="rgba(248,113,113,.1)" stroke="#f87171"/><text x="666" y="112" text-anchor="middle" font-size="11" fill="#f87171">fail</text>
+          <line x1="720" y1="81" x2="768" y2="81" stroke="#caa53d" stroke-width="1.6" marker-end="url(#f-arr)"/>
+          <text x="747" y="72" text-anchor="middle" font-size="11" fill="#9a9a9a">grades</text>
+          <!-- 4 -->
+          <rect x="770" y="22" width="200" height="118" rx="12" fill="#111" stroke="#caa53d"/>
+          <circle cx="794" cy="48" r="13" fill="#caa53d"/><text x="794" y="52.5" text-anchor="middle" font-size="13" font-weight="700" fill="#0a0a0a">4</text>
+          <text x="816" y="53" font-size="14" font-weight="700" fill="#e8e8e8">Verdict + receipts</text>
+          <text x="788" y="86" font-size="11" fill="#9a9a9a">SAFE · CAUTION · BLOCK</text>
+          <text x="788" y="112" font-size="11" fill="#7db4ff">miner · cost · ms · hash</text>
+          <!-- time bracket -->
+          <path d="M270 152 V162 H970 V152" fill="none" stroke="#9a9a9a" stroke-width="1"/>
+          <text x="622" y="184" text-anchor="middle" font-size="12" fill="#9a9a9a">~10 s end to end · ~2–4 s per paid check</text>
+        </svg>
+        <!-- mobile -->
+        <svg class="d-mob" viewBox="0 0 360 556" role="img" aria-labelledby="flowm-t flowm-d">
+          <title id="flowm-t">Four-step flow</title>
+          <desc id="flowm-d">Describe the transaction, Shield queries live miners with one x402 payment of one cent per check, each text answer is graded pass, warn or fail, and a verdict with receipts comes back in about ten seconds.</desc>
+          <defs><marker id="fm-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#caa53d"/></marker></defs>
+          <!-- 1 -->
+          <rect x="20" y="10" width="320" height="100" rx="12" fill="#111" stroke="#262626"/>
+          <circle cx="44" cy="36" r="13" fill="#caa53d"/><text x="44" y="40.5" text-anchor="middle" font-size="13" font-weight="700" fill="#0a0a0a">1</text>
+          <text x="66" y="41" font-size="15" font-weight="700" fill="#e8e8e8">Describe</text>
+          <text x="38" y="70" font-size="13" fill="#9a9a9a">chain · to · value in ETH</text>
+          <text x="38" y="94" font-size="13" fill="#7db4ff">tx hash? · protocol?</text>
+          <line x1="60" y1="110" x2="60" y2="143" stroke="#caa53d" stroke-width="1.6" marker-end="url(#fm-arr)"/>
+          <text x="72" y="132" font-size="12" fill="#9a9a9a">input</text>
+          <!-- 2 -->
+          <rect x="20" y="145" width="320" height="100" rx="12" fill="#111" stroke="#262626"/>
+          <circle cx="44" cy="171" r="13" fill="#caa53d"/><text x="44" y="175.5" text-anchor="middle" font-size="13" font-weight="700" fill="#0a0a0a">2</text>
+          <text x="66" y="176" font-size="15" font-weight="700" fill="#e8e8e8">Query live miners</text>
+          <text x="38" y="205" font-size="13" fill="#9a9a9a">x402 · $0.01 each · USDC</text>
+          <text x="38" y="229" font-size="13" fill="#caa53d">GAS · TX · PRICE · TVL</text>
+          <line x1="60" y1="245" x2="60" y2="278" stroke="#caa53d" stroke-width="1.6" marker-end="url(#fm-arr)"/>
+          <text x="72" y="267" font-size="12" fill="#9a9a9a">answers</text>
+          <!-- 3 -->
+          <rect x="20" y="280" width="320" height="100" rx="12" fill="#111" stroke="#262626"/>
+          <circle cx="44" cy="306" r="13" fill="#caa53d"/><text x="44" y="310.5" text-anchor="middle" font-size="13" font-weight="700" fill="#0a0a0a">3</text>
+          <text x="66" y="311" font-size="15" font-weight="700" fill="#e8e8e8">Grade</text>
+          <text x="38" y="340" font-size="13" fill="#9a9a9a">fixed public thresholds</text>
+          <rect x="38" y="350" width="48" height="20" rx="10" fill="rgba(74,222,128,.1)" stroke="#4ade80"/><text x="62" y="364" text-anchor="middle" font-size="12" fill="#4ade80">pass</text>
+          <rect x="94" y="350" width="52" height="20" rx="10" fill="rgba(245,179,66,.1)" stroke="#f5b342"/><text x="120" y="364" text-anchor="middle" font-size="12" fill="#f5b342">warn</text>
+          <rect x="154" y="350" width="44" height="20" rx="10" fill="rgba(248,113,113,.1)" stroke="#f87171"/><text x="176" y="364" text-anchor="middle" font-size="12" fill="#f87171">fail</text>
+          <line x1="60" y1="380" x2="60" y2="413" stroke="#caa53d" stroke-width="1.6" marker-end="url(#fm-arr)"/>
+          <text x="72" y="402" font-size="12" fill="#9a9a9a">grades</text>
+          <!-- 4 -->
+          <rect x="20" y="415" width="320" height="100" rx="12" fill="#111" stroke="#caa53d"/>
+          <circle cx="44" cy="441" r="13" fill="#caa53d"/><text x="44" y="445.5" text-anchor="middle" font-size="13" font-weight="700" fill="#0a0a0a">4</text>
+          <text x="66" y="446" font-size="15" font-weight="700" fill="#e8e8e8">Verdict + receipts</text>
+          <text x="38" y="475" font-size="13" fill="#9a9a9a">SAFE · CAUTION · BLOCK</text>
+          <text x="38" y="499" font-size="13" fill="#7db4ff">miner · cost · ms · hash</text>
+          <text x="180" y="545" text-anchor="middle" font-size="13" fill="#9a9a9a">~10 s end to end · ~2–4 s per check</text>
+        </svg>
+        <figcaption>Only the checks your input allows will run, and only those are paid for.</figcaption>
+      </figure>
     </div>
   </section>
 
   <!-- ============ THE FOUR CHECKS ============ -->
-  <section class="band" id="checks" aria-labelledby="checks-title">
+  <section id="checks" aria-labelledby="checks-title">
     <div class="wrap">
       <span class="label">The four checks</span>
-      <h2 class="h2" id="checks-title">What each check asks, who answers, and exactly what the grades mean.</h2>
-      <p class="intro">Each check maps one Telegraph intent to explicit, published thresholds. Miners answer in natural-language text
-        (that is what Telegraph validators score), so every parser is defensive: an unparseable answer degrades to
-        <span class="chip warn">warn</span> with a stated reason, never a crash. The thresholds below are exported constants in
-        <code>verdict.ts</code>, so tests and this page stay in sync.</p>
-      <p class="intro">Only the checks your request can use actually run — and only those are paid for. FEE runs on every request;
-        the other three switch on when you supply a transaction hash, a value, or a protocol name.</p>
+      <h2 id="checks-title">Four questions. Four intents. Fixed thresholds.</h2>
+      <p class="sub">Each check is one $0.01 query to a live miner, graded against published constants.</p>
 
-      <div class="grid grid-2">
-        <article class="card check-card" aria-labelledby="chk-fee">
-          <div class="card-head"><h3 id="chk-fee">FEE</h3><span class="tag tag-gold">GAS_PRICE</span><span class="chip x402">$0.01 · x402</span></div>
-          <p class="q">Is the network's gas price sane right now, or is the agent about to sign into a spike?</p>
-          <dl class="kv">
-            <dt>Runs</dt><dd>on every check</dd>
-            <dt>Answered by</dt><dd>Truvian's own miner (id 8453, <code>/gas?chain=</code>) first — it ranks in GAS_PRICE on the live
-              leaderboard; then other live GAS_PRICE miners from the node's catalog, e.g. ChainSight (302)</dd>
-            <dt>Parses</dt><dd>the first <code>‹n› gwei</code> figure and any stated fee level (low / normal / high)</dd>
-          </dl>
-          <table class="rules">
-            <thead><tr><th scope="col">Grade</th><th scope="col">Condition</th></tr></thead>
-            <tbody>
-              <tr><td><span class="chip pass">pass</span></td><td>gas price is within the normal range for the chain — the summary states the gwei figure and level</td></tr>
-              <tr><td><span class="chip warn">warn</span></td><td>the miner reports a <em>high</em> fee level</td></tr>
-              <tr><td><span class="chip warn">warn</span></td><td>gas price is more than 10× the chain's typical floor — <strong>base 0.01 gwei</strong> · base-sepolia 0.001 gwei · ethereum 1 gwei</td></tr>
-              <tr><td><span class="chip warn">warn</span></td><td>neither a gwei figure nor a fee level could be parsed</td></tr>
-              <tr><td><span class="chip error">error</span></td><td>the GAS_PRICE query failed (timeout, payment rejected, no live miner) — costs 10 points, never silently skipped</td></tr>
-            </tbody>
-          </table>
-        </article>
-
-        <article class="card check-card" aria-labelledby="chk-cp">
-          <div class="card-head"><h3 id="chk-cp">COUNTERPARTY</h3><span class="tag tag-gold">ONCHAIN_TX_LOOKUP</span><span class="chip x402">$0.01 · x402</span></div>
-          <p class="q">Did the transaction you are relying on actually succeed on-chain?</p>
-          <dl class="kv">
-            <dt>Runs</dt><dd>only when you supply a transaction hash</dd>
-            <dt>Answered by</dt><dd>Truvian's own miner (id 8453, <code>/tx?chain=&amp;hash=</code>) first, reading canonical receipts and logs;
-              then other live ONCHAIN_TX_LOOKUP miners from the catalog</dd>
-            <dt>Parses</dt><dd>reverted / not found / success from the answer text</dd>
-          </dl>
-          <table class="rules">
-            <thead><tr><th scope="col">Grade</th><th scope="col">Condition</th></tr></thead>
-            <tbody>
-              <tr><td><span class="chip pass">pass</span></td><td>the transaction succeeded on-chain (and, if you named a recipient, the answer involves it)</td></tr>
-              <tr><td><span class="chip warn">warn</span></td><td>not found on-chain — no usable evidence for this counterparty</td></tr>
-              <tr><td><span class="chip warn">warn</span></td><td>succeeded, but the answer does not mention the supplied <code>to</code> address — evidence may be unrelated</td></tr>
-              <tr><td><span class="chip warn">warn</span></td><td>status could not be determined from the answer</td></tr>
-              <tr><td><span class="chip fail">fail</span></td><td>the transaction <strong>REVERTED</strong> on-chain — hard evidence against signing</td></tr>
-              <tr><td><span class="chip error">error</span></td><td>the ONCHAIN_TX_LOOKUP query failed</td></tr>
-            </tbody>
-          </table>
-        </article>
-
-        <article class="card check-card" aria-labelledby="chk-val">
-          <div class="card-head"><h3 id="chk-val">VALUE</h3><span class="tag tag-gold">CRYPTO_PRICE</span><span class="chip x402">$0.01 · x402</span></div>
-          <p class="q">How many dollars is this transfer, really? ETH/USD from a live price miner, multiplied by the value you gave.</p>
-          <dl class="kv">
-            <dt>Runs</dt><dd>when you supply a value in ETH</dd>
-            <dt>Answered by</dt><dd>a live CRYPTO_PRICE miner on the network — ChainSight (302, <code>/price?symbol=ETH</code>) first, then others from the catalog</dd>
-            <dt>Computes</dt><dd><code>usd = valueEth × ETH/USD</code>, formatted deterministically (<code>$1,234.56</code>, no locale dependence)</dd>
-          </dl>
-          <table class="rules">
-            <thead><tr><th scope="col">Grade</th><th scope="col">Condition</th></tr></thead>
-            <tbody>
-              <tr><td><span class="chip pass">pass</span></td><td>the transfer is worth $10,000 or less — the summary states the ETH amount, USD value and price used</td></tr>
-              <tr><td><span class="chip warn">warn</span></td><td>above <strong>$10,000</strong> — double-check the recipient before signing</td></tr>
-              <tr><td><span class="chip warn">warn</span></td><td>above $100,000 <em>and</em> the supplied <code>txHash</code> verified as successful — allowed only because of on-chain evidence</td></tr>
-              <tr><td><span class="chip warn">warn</span></td><td>no ETH/USD figure could be parsed — the value is left unpriced</td></tr>
-              <tr><td><span class="chip fail">fail</span></td><td>above <strong>$100,000</strong> with no verified <code>txHash</code> evidence</td></tr>
-              <tr><td><span class="chip error">error</span></td><td>the CRYPTO_PRICE query failed</td></tr>
-            </tbody>
-          </table>
-        </article>
-
-        <article class="card check-card" aria-labelledby="chk-liq">
-          <div class="card-head"><h3 id="chk-liq">LIQUIDITY</h3><span class="tag tag-gold">TVL_LOOKUP</span><span class="chip x402">$0.01 · x402</span></div>
-          <p class="q">Does the protocol you are interacting with still hold real liquidity?</p>
-          <dl class="kv">
-            <dt>Runs</dt><dd>when you name a protocol</dd>
-            <dt>Answered by</dt><dd>live TVL_LOOKUP miners on the network — ChainSight (302, <code>/tvl?protocol=</code>), FinWire (7322), then others from the catalog</dd>
-            <dt>Parses</dt><dd><code>$4.12 billion</code>, <code>412,000 USD</code> and similar magnitude suffixes</dd>
-          </dl>
-          <table class="rules">
-            <thead><tr><th scope="col">Grade</th><th scope="col">Condition</th></tr></thead>
-            <tbody>
-              <tr><td><span class="chip pass">pass</span></td><td>reported TVL is at least <strong>$1,000,000</strong></td></tr>
-              <tr><td><span class="chip warn">warn</span></td><td>reported TVL is below $1,000,000</td></tr>
-              <tr><td><span class="chip warn">warn</span></td><td>TVL unavailable or unparseable — you are told liquidity is <em>unverified</em> rather than shown a made-up figure (by design a warn, never an error)</td></tr>
-            </tbody>
-          </table>
-        </article>
-      </div>
-      <p class="fine">A request with no <code>txHash</code>, <code>valueEth</code> or <code>protocol</code> pays for the FEE query alone. Unused signals are never bought.</p>
-    </div>
-  </section>
-
-  <!-- ============ WORKED EXAMPLE ============ -->
-  <section class="band band-alt" id="example" aria-labelledby="example-title">
-    <div class="wrap">
-      <span class="label">Live worked example</span>
-      <h2 class="h2" id="example-title">A real check, end to end.</h2>
-      <p class="intro">This is a report Shield produced against live miners on Base: a small ETH transfer to a recipient,
-        with <code>aave</code> named as the protocol. No transaction hash was supplied, so the COUNTERPARTY check did not run
-        and was not charged.</p>
-
-      <div class="example">
-        <div class="card">
-          <h3>Input</h3>
-          <ul class="inputs">
-            <li><span class="k">chain</span><span class="v">base</span></li>
-            <li><span class="k">to</span><span class="v">a recipient address</span></li>
-            <li><span class="k">valueEth</span><span class="v">a small transfer</span></li>
-            <li><span class="k">txHash</span><span class="v dim">— not supplied</span></li>
-            <li><span class="k">protocol</span><span class="v">aave</span></li>
-          </ul>
-          <div class="math">
-            <p><strong>Score:</strong> 100 − 0 − 0 − 0 = <strong>100</strong> → SAFE</p>
-            <p><strong>Paid:</strong> 3 queries × $0.01 = <strong>$0.03</strong> in USDC, settled on Base Sepolia</p>
-            <p><strong>Fastest answer:</strong> the Truvian miner returned the gas price in <strong>750 ms</strong></p>
-            <p><strong>Prices seen:</strong> ETH at $2,476 (ChainSight) · Aave TVL $18.2B</p>
+      <div class="checks">
+        <article class="check" aria-labelledby="chk-fee">
+          <div class="check-head">
+            <span class="glyph" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M8 28a12 12 0 0 1 24 0" fill="none" stroke="#caa53d" stroke-width="2.5" stroke-linecap="round"/><line x1="20" y1="28" x2="27" y2="17" stroke="#caa53d" stroke-width="2.5" stroke-linecap="round"/><circle cx="20" cy="28" r="2.5" fill="#caa53d"/></svg></span>
+            <h3 id="chk-fee">FEE</h3>
+            <span class="chip chip-gold">GAS_PRICE</span>
           </div>
-        </div>
-
-        <div class="report">
-          <p class="report-caption">Output</p>
-          <div class="verdict safe">
-            <span class="verdict-word">SAFE</span>
-            <span class="verdict-note">score 100 / 100</span>
+          <p class="q">Is gas sane right now?</p>
+          <div class="row">
+            <span class="chip chip-warn">warn · fee level high</span>
+            <span class="chip chip-warn">warn · &gt; 10× chain floor</span>
           </div>
-          <ul class="rows">
-            <li class="row">
-              <div class="row-head"><span class="row-name">FEE</span><span class="tag">GAS_PRICE</span><span class="chip pass">pass</span></div>
-              <p class="row-sum">gas price is within the normal range for base</p>
-              <div class="row-meta"><span>miner Truvian (8453)</span><span>$0.0100</span><span>750 ms</span><span class="chip x402">x402 · paid</span><span>verify signal → Telegraph node</span></div>
-            </li>
-            <li class="row">
-              <div class="row-head"><span class="row-name">COUNTERPARTY</span><span class="tag">ONCHAIN_TX_LOOKUP</span><span class="chip skip">not run</span></div>
-              <p class="row-sum">no transaction hash supplied — this check is skipped, not charged, and not penalized (it has no row in the real report)</p>
-            </li>
-            <li class="row">
-              <div class="row-head"><span class="row-name">VALUE</span><span class="tag">CRYPTO_PRICE</span><span class="chip pass">pass</span></div>
-              <p class="row-sum">ETH priced at $2,476 by ChainSight — the transfer is below the $10,000 caution threshold</p>
-              <div class="row-meta"><span>miner ChainSight</span><span>$0.0100</span><span class="chip x402">x402 · paid</span><span>verify signal → Telegraph node</span></div>
-            </li>
-            <li class="row">
-              <div class="row-head"><span class="row-name">LIQUIDITY</span><span class="tag">TVL_LOOKUP</span><span class="chip pass">pass</span></div>
-              <p class="row-sum">reported TVL $18.2B for aave clears the $1,000,000 liquidity threshold</p>
-              <div class="row-meta"><span>live TVL miner</span><span>$0.0100</span><span class="chip x402">x402 · paid</span><span>verify signal → Telegraph node</span></div>
-            </li>
-          </ul>
-        </div>
+          <div class="foot">
+            <span class="pair">answered by <span class="chip chip-blue">Truvian · 8453</span></span>
+            <span class="pair">runs <span class="chip chip-muted">always</span></span>
+          </div>
+        </article>
+
+        <article class="check" aria-labelledby="chk-cp">
+          <div class="check-head">
+            <span class="glyph" aria-hidden="true"><svg viewBox="0 0 40 40"><circle cx="11" cy="20" r="5" fill="none" stroke="#7db4ff" stroke-width="2.5"/><circle cx="29" cy="20" r="5" fill="none" stroke="#7db4ff" stroke-width="2.5"/><line x1="16" y1="20" x2="24" y2="20" stroke="#7db4ff" stroke-width="2.5"/><path d="M26 29l3 3 5-6" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <h3 id="chk-cp">COUNTERPARTY</h3>
+            <span class="chip chip-gold">ONCHAIN_TX_LOOKUP</span>
+          </div>
+          <p class="q">Did the referenced tx actually succeed?</p>
+          <div class="row">
+            <span class="chip chip-fail">fail · reverted</span>
+            <span class="chip chip-warn">warn · not found</span>
+          </div>
+          <div class="foot">
+            <span class="pair">answered by <span class="chip chip-blue">Truvian · 8453</span></span>
+            <span class="pair">runs <span class="chip chip-muted">with a tx hash</span></span>
+          </div>
+        </article>
+
+        <article class="check" aria-labelledby="chk-val">
+          <div class="check-head">
+            <span class="glyph" aria-hidden="true"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="13" fill="none" stroke="#4ade80" stroke-width="2.5"/><text x="20" y="26" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="16" font-weight="700" fill="#4ade80">$</text></svg></span>
+            <h3 id="chk-val">VALUE</h3>
+            <span class="chip chip-gold">CRYPTO_PRICE</span>
+          </div>
+          <p class="q">How many dollars are at stake?</p>
+          <div class="row">
+            <span class="chip chip-warn">warn · &gt; $10,000</span>
+            <span class="chip chip-fail">fail · &gt; $100,000</span>
+            <span class="chip chip-muted">unless the tx hash verifies</span>
+          </div>
+          <div class="foot">
+            <span class="pair">answered by <span class="chip chip-blue">ChainSight · 302</span></span>
+            <span class="pair">runs <span class="chip chip-muted">with a value</span></span>
+          </div>
+        </article>
+
+        <article class="check" aria-labelledby="chk-liq">
+          <div class="check-head">
+            <span class="glyph" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M20 7c0 0-10 11-10 17a10 10 0 0 0 20 0c0-6-10-17-10-17z" fill="none" stroke="#f5b342" stroke-width="2.5" stroke-linejoin="round"/><path d="M14 25a6 6 0 0 0 6 6" fill="none" stroke="#f5b342" stroke-width="2" stroke-linecap="round"/></svg></span>
+            <h3 id="chk-liq">LIQUIDITY</h3>
+            <span class="chip chip-gold">TVL_LOOKUP</span>
+          </div>
+          <p class="q">Is the protocol still liquid?</p>
+          <div class="row">
+            <span class="chip chip-warn">warn · TVL &lt; $1,000,000</span>
+          </div>
+          <div class="foot">
+            <span class="pair">answered by <span class="chip chip-blue">ChainSight · 302</span><span class="chip chip-blue">FinWire · 7322</span></span>
+            <span class="pair">runs <span class="chip chip-muted">with a protocol</span></span>
+          </div>
+        </article>
       </div>
     </div>
   </section>
 
-  <!-- ============ VERDICT RULES ============ -->
-  <section class="band" id="rules" aria-labelledby="rules-title">
+  <!-- ============ SCORING ============ -->
+  <section class="band-alt" id="scoring" aria-labelledby="scoring-title">
     <div class="wrap">
-      <span class="label">Verdict rules</span>
-      <h2 class="h2" id="rules-title">Deterministic scoring. Same evidence, same verdict, every time.</h2>
-      <p class="intro">There is no model in the loop deciding what "safe" means and no weights to tune. The report starts at 100, each check's
-        grade subtracts a fixed number of points, the total maps to a verdict, and three hard rules that no score can override
-        are applied last.</p>
-
-      <div class="grid grid-2" style="margin-top:1.5rem">
-        <div class="table-wrap">
-          <table class="plain">
-            <caption>Points per check grade (start at 100)</caption>
-            <thead><tr><th scope="col">Grade</th><th scope="col">Points</th><th scope="col">Meaning</th></tr></thead>
-            <tbody>
-              <tr><td><span class="chip pass">pass</span></td><td class="num-cell">0</td><td>the evidence supports signing</td></tr>
-              <tr><td><span class="chip warn">warn</span></td><td class="num-cell">−15</td><td>something needs a second look</td></tr>
-              <tr><td><span class="chip fail">fail</span></td><td class="num-cell">−35</td><td>hard evidence against signing</td></tr>
-              <tr><td><span class="chip error">error</span></td><td class="num-cell">−10</td><td>the miner query failed; missing evidence is never free</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="table-wrap">
-          <table class="plain">
-            <caption>Score to verdict</caption>
-            <thead><tr><th scope="col">Score</th><th scope="col">Verdict</th><th scope="col">Suggested action</th></tr></thead>
-            <tbody>
-              <tr><td class="num-cell">80 – 100</td><td><span class="chip safe">SAFE</span></td><td>proceed</td></tr>
-              <tr><td class="num-cell">50 – 79</td><td><span class="chip caution">CAUTION</span></td><td>escalate to a human or a stricter policy</td></tr>
-              <tr><td class="num-cell">0 – 49</td><td><span class="chip block">BLOCK</span></td><td>do not sign</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <ul class="rules-list" aria-label="Override rules">
-        <li><strong>Any fail caps the verdict at CAUTION</strong>, even if the score is still 80 or more.</li>
-        <li><strong>Two fails always mean BLOCK</strong>, whatever the score.</li>
-        <li><strong>A report where every check errored can never be SAFE.</strong> Zero live evidence never green-lights a signature.</li>
-        <li><strong>Verdicts are advisory.</strong> Shield never holds the agent's keys and never signs its transactions; the final decision stays with the agent.</li>
-      </ul>
+      <span class="label">Scoring</span>
+      <h2 id="scoring-title">Start at 100. Lose points for what the miners find.</h2>
+      <p class="sub">Same evidence, same verdict, every time.</p>
 
       <div class="score-grid">
-        <div>
-          <h3>The whole algorithm — <code>finalizeReport</code> in <code>verdict.ts</code></h3>
-<pre aria-label="Verdict algorithm pseudocode"><code>PENALTY = { pass: <span class="n">0</span>, warn: <span class="n">15</span>, fail: <span class="n">35</span>, error: <span class="n">10</span> }
+        <figure class="fig">
+          <svg class="d-desk" viewBox="0 0 720 132" role="img" aria-labelledby="sc-t sc-d">
+            <title id="sc-t">Score scale</title>
+            <desc id="sc-d">A 0 to 100 scale: below 50 is BLOCK, 50 to 79 is CAUTION, 80 and above is SAFE. Every report starts at 100.</desc>
+            <text x="676" y="34" text-anchor="end" font-size="12" fill="#caa53d">start at 100</text>
+            <polygon points="680,50 674,41 686,41" fill="#caa53d"/>
+            <rect x="40" y="52" width="320" height="30" fill="rgba(248,113,113,.16)" stroke="#f87171"/>
+            <rect x="360" y="52" width="192" height="30" fill="rgba(245,179,66,.16)" stroke="#f5b342"/>
+            <rect x="552" y="52" width="128" height="30" fill="rgba(74,222,128,.16)" stroke="#4ade80"/>
+            <text x="200" y="72" text-anchor="middle" font-size="13" font-weight="700" fill="#f87171">BLOCK &lt; 50</text>
+            <text x="456" y="72" text-anchor="middle" font-size="13" font-weight="700" fill="#f5b342">CAUTION 50–79</text>
+            <text x="616" y="72" text-anchor="middle" font-size="13" font-weight="700" fill="#4ade80">SAFE ≥ 80</text>
+            <line x1="40" y1="82" x2="40" y2="92" stroke="#9a9a9a"/><line x1="360" y1="82" x2="360" y2="92" stroke="#9a9a9a"/>
+            <line x1="552" y1="82" x2="552" y2="92" stroke="#9a9a9a"/><line x1="680" y1="82" x2="680" y2="92" stroke="#9a9a9a"/>
+            <text x="40" y="106" text-anchor="middle" font-size="12" fill="#9a9a9a">0</text>
+            <text x="360" y="106" text-anchor="middle" font-size="12" fill="#9a9a9a">50</text>
+            <text x="552" y="106" text-anchor="middle" font-size="12" fill="#9a9a9a">80</text>
+            <text x="680" y="106" text-anchor="middle" font-size="12" fill="#9a9a9a">100</text>
+            <text x="360" y="126" text-anchor="middle" font-size="12" fill="#9a9a9a">score = 100 − penalties</text>
+          </svg>
+          <svg class="d-mob" viewBox="0 0 360 132" role="img" aria-labelledby="scm-t scm-d">
+            <title id="scm-t">Score scale</title>
+            <desc id="scm-d">A 0 to 100 scale: below 50 is BLOCK, 50 to 79 is CAUTION, 80 and above is SAFE. Every report starts at 100.</desc>
+            <text x="336" y="34" text-anchor="end" font-size="12" fill="#caa53d">start at 100</text>
+            <polygon points="340,50 334,41 346,41" fill="#caa53d"/>
+            <rect x="20" y="52" width="160" height="26" fill="rgba(248,113,113,.16)" stroke="#f87171"/>
+            <rect x="180" y="52" width="96" height="26" fill="rgba(245,179,66,.16)" stroke="#f5b342"/>
+            <rect x="276" y="52" width="64" height="26" fill="rgba(74,222,128,.16)" stroke="#4ade80"/>
+            <text x="100" y="69.5" text-anchor="middle" font-size="13" font-weight="700" fill="#f87171">BLOCK</text>
+            <text x="228" y="69.5" text-anchor="middle" font-size="13" font-weight="700" fill="#f5b342">CAUTION</text>
+            <text x="308" y="69.5" text-anchor="middle" font-size="13" font-weight="700" fill="#4ade80">SAFE</text>
+            <line x1="20" y1="78" x2="20" y2="88" stroke="#9a9a9a"/><line x1="180" y1="78" x2="180" y2="88" stroke="#9a9a9a"/>
+            <line x1="276" y1="78" x2="276" y2="88" stroke="#9a9a9a"/><line x1="340" y1="78" x2="340" y2="88" stroke="#9a9a9a"/>
+            <text x="20" y="102" text-anchor="middle" font-size="12" fill="#9a9a9a">0</text>
+            <text x="180" y="102" text-anchor="middle" font-size="12" fill="#9a9a9a">50</text>
+            <text x="276" y="102" text-anchor="middle" font-size="12" fill="#9a9a9a">80</text>
+            <text x="340" y="102" text-anchor="middle" font-size="12" fill="#9a9a9a">100</text>
+            <text x="180" y="124" text-anchor="middle" font-size="12" fill="#9a9a9a">score = 100 − penalties</text>
+          </svg>
+          <figcaption>≥ 80 SAFE · 50–79 CAUTION · &lt; 50 BLOCK.</figcaption>
+        </figure>
 
-score = <span class="n">100</span>
-<span class="k">for</span> check <span class="k">in</span> checks:
-  score -= PENALTY[check.status]
-score = clamp(score, <span class="n">0</span>, <span class="n">100</span>)
-
-verdict = score &gt;= <span class="n">80</span> ? <span class="s">SAFE</span>
-        : score &gt;= <span class="n">50</span> ? <span class="s">CAUTION</span>
-        : <span class="s">BLOCK</span>
-
-<span class="c">// hard rules, applied after the threshold</span>
-<span class="k">if</span> fails &gt;= <span class="n">1</span> <span class="k">and</span> verdict == <span class="s">SAFE</span>: verdict = <span class="s">CAUTION</span>
-<span class="k">if</span> fails &gt;= <span class="n">2</span>:                    verdict = <span class="s">BLOCK</span>
-<span class="k">if</span> every check errored <span class="k">and</span> verdict == <span class="s">SAFE</span>:
-                                   verdict = <span class="s">CAUTION</span>
-<span class="c">// nothing collected at all</span>
-<span class="k">if</span> checks is empty: verdict = <span class="s">CAUTION</span>, score = <span class="n">50</span>
-
-reasons = [<span class="s">"NAME: summary"</span> <span class="k">for</span> each non-pass check]
-       <span class="k">or</span> [<span class="s">"All checks passed against live Telegraph</span>
-<span class="s">            miner signals."</span>]</code></pre>
-        </div>
-        <div>
-          <h3>Worked arithmetic</h3>
-          <div class="table-wrap">
-            <table class="plain" aria-label="Worked scoring examples">
-              <thead><tr><th scope="col">Checks</th><th scope="col">Score</th><th scope="col">Verdict</th></tr></thead>
-              <tbody>
-                <tr><td>4 × pass</td><td class="num-cell">100</td><td><span class="chip safe">SAFE</span></td></tr>
-                <tr><td>FEE warn, rest pass</td><td class="num-cell">85</td><td><span class="chip safe">SAFE</span></td></tr>
-                <tr><td>VALUE warn + LIQUIDITY warn</td><td class="num-cell">70</td><td><span class="chip caution">CAUTION</span></td></tr>
-                <tr><td>COUNTERPARTY fail alone</td><td class="num-cell">65</td><td><span class="chip caution">CAUTION</span></td></tr>
-                <tr><td>3 × warn + 1 error</td><td class="num-cell">45</td><td><span class="chip block">BLOCK</span></td></tr>
-                <tr><td>COUNTERPARTY fail + VALUE fail</td><td class="num-cell">30</td><td><span class="chip block">BLOCK</span> (two fails)</td></tr>
-                <tr><td>FEE error, the only check</td><td class="num-cell">90</td><td><span class="chip caution">CAUTION</span> (all errored)</td></tr>
-              </tbody>
-            </table>
+        <div class="side">
+          <div class="panel">
+            <h3>Penalties</h3>
+            <div class="pens">
+              <span class="pen warn"><b>−15</b> warn</span>
+              <span class="pen fail"><b>−35</b> fail</span>
+              <span class="pen err"><b>−10</b> error</span>
+            </div>
           </div>
-          <h3>Single-transaction verification</h3>
-          <p class="fine" style="margin-top:0"><code>GET /api/verify/:txHash</code> judges one ONCHAIN_TX_LOOKUP signal with a stricter map — verifying a reverted transaction is an outright BLOCK.</p>
-          <div class="table-wrap" style="margin-top:.75rem">
-            <table class="plain" aria-label="Verification verdict map">
-              <thead><tr><th scope="col">Miner says</th><th scope="col">Score</th><th scope="col">Verdict</th></tr></thead>
-              <tbody>
-                <tr><td>reverted</td><td class="num-cell">20</td><td><span class="chip block">BLOCK</span></td></tr>
-                <tr><td>not found</td><td class="num-cell">60</td><td><span class="chip caution">CAUTION</span></td></tr>
-                <tr><td>success, answer references the hash</td><td class="num-cell">100</td><td><span class="chip safe">SAFE</span></td></tr>
-                <tr><td>success, hash not referenced / undeterminable</td><td class="num-cell">60</td><td><span class="chip caution">CAUTION</span></td></tr>
-                <tr><td>query failed</td><td class="num-cell">50</td><td><span class="chip caution">CAUTION</span></td></tr>
-              </tbody>
-            </table>
+          <div class="panel">
+            <h3>Overrides</h3>
+            <div class="callout">any <strong>fail</strong> ⇒ at most CAUTION</div>
+            <div class="callout block">two <strong>fails</strong> ⇒ BLOCK</div>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ============ ARCHITECTURE ============ -->
-  <section class="band band-alt" id="architecture" aria-labelledby="arch-title">
+  <!-- ============ ARCHITECTURE + PAYMENT ============ -->
+  <section id="architecture" aria-labelledby="arch-title">
     <div class="wrap">
-      <span class="label">Architecture · built on Telegraph</span>
-      <h2 class="h2" id="arch-title">One request in, one paid query per check out, one hash back per answer.</h2>
-      <p class="intro">Telegraph Protocol is a decentralized network in which independent miners answer typed questions — intents such as
-        <code>GAS_PRICE</code>, <code>ONCHAIN_TX_LOOKUP</code>, <code>CRYPTO_PRICE</code> and <code>TVL_LOOKUP</code> — over plain HTTP,
-        with validators scoring every answer against ground truth and clients paying per query through x402.</p>
-      <p class="intro">Shield is a consumer of that network: a thin, stateless API in front of it that runs no oracle of its own, never caches
-        answers, never substitutes its own data, and never green-lights a signature without live evidence. Every box below is a real
-        service you can hit yourself.</p>
+      <span class="label">Architecture · payment</span>
+      <h2 id="arch-title">One request in, one paid query per check, one hash back.</h2>
+      <p class="sub">Every query is a real x402 settlement in USDC on Base Sepolia — gasless for the payer, on-chain for everyone.</p>
 
-      <figure class="figure">
-        <div class="diagram-scroll" tabindex="0" aria-label="Architecture diagram, scrolls horizontally on narrow screens">
-          <svg viewBox="0 0 1100 424" role="img" aria-labelledby="arch-svg-title arch-svg-desc">
-            <title id="arch-svg-title">Truvian Shield architecture</title>
-            <desc id="arch-svg-desc">An agent posts a proposed transaction to the Shield API. Shield pays the Telegraph engine per query over x402; the engine dispatches to live miners Truvian 8453, ChainSight 302 and FinWire 7322, settles USDC on Base Sepolia through a facilitator, and returns each answer with a signal hash that Shield folds into the verdict. Anyone can resolve that hash on the node's signal endpoint.</desc>
-            <defs>
-              <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#caa53d"/></marker>
-              <marker id="ah-dim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a8a"/></marker>
-            </defs>
-
-            <!-- return path: answer + signal hash -->
-            <polyline points="685,110 685,50 80,50 80,146" fill="none" stroke="#caa53d" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ah)"/>
-            <text x="382" y="42" font-size="10.5" fill="#caa53d" text-anchor="middle">answer + signal_hash → verdict, evidence, hash back to the agent</text>
-
-            <!-- agent -->
-            <rect x="10" y="150" width="140" height="80" rx="4" fill="#161616" stroke="#262626"/>
-            <text x="80" y="185" font-size="14" font-weight="700" fill="#e8e8e8" text-anchor="middle">Agent</text>
-            <text x="80" y="205" font-size="10.5" fill="#9a9a9a" text-anchor="middle">about to sign a tx</text>
-
-            <!-- agent -> shield -->
-            <line x1="150" y1="190" x2="238" y2="190" stroke="#caa53d" stroke-width="1.5" marker-end="url(#ah)"/>
-            <text x="194" y="176" font-size="10.5" fill="#caa53d" text-anchor="middle">POST</text>
-            <text x="194" y="208" font-size="10.5" fill="#caa53d" text-anchor="middle">/api/check</text>
-
-            <!-- shield -->
-            <rect x="240" y="110" width="190" height="160" rx="4" fill="#161616" stroke="#caa53d"/>
-            <text x="335" y="135" font-size="14" font-weight="700" fill="#caa53d" text-anchor="middle">Truvian Shield</text>
-            <text x="335" y="160" font-size="10.5" fill="#e8e8e8" text-anchor="middle">/api/check · /api/verify</text>
-            <text x="335" y="180" font-size="10" fill="#9a9a9a" text-anchor="middle">pure, deterministic verdicts</text>
-            <text x="335" y="200" font-size="10" fill="#9a9a9a" text-anchor="middle">x402 client · viem · EIP-3009</text>
-            <text x="335" y="220" font-size="10" fill="#9a9a9a" text-anchor="middle">fan-out · 1 retry · 10 s cap</text>
-            <text x="335" y="240" font-size="10" fill="#9a9a9a" text-anchor="middle">payments serialized per payer</text>
-            <text x="335" y="260" font-size="10" fill="#6f6f6f" text-anchor="middle">truvian.xyz</text>
-
-            <!-- shield <-> engine -->
-            <line x1="430" y1="190" x2="588" y2="190" stroke="#caa53d" stroke-width="1.5" marker-end="url(#ah)" marker-start="url(#ah)"/>
-            <text x="509" y="176" font-size="10" fill="#caa53d" text-anchor="middle">HTTP 402 challenge</text>
-            <text x="509" y="208" font-size="10" fill="#caa53d" text-anchor="middle">PAYMENT-SIGNATURE</text>
-
-            <!-- engine -->
-            <rect x="590" y="110" width="190" height="160" rx="4" fill="#161616" stroke="#7db4ff" stroke-opacity=".7"/>
-            <text x="685" y="135" font-size="14" font-weight="700" fill="#e8e8e8" text-anchor="middle">Telegraph engine</text>
-            <text x="685" y="160" font-size="10" fill="#7db4ff" text-anchor="middle">devnode.telegraphprotocol.com</text>
-            <text x="685" y="180" font-size="10" fill="#9a9a9a" text-anchor="middle">/engine/v1/ask/{minerId}</text>
-            <text x="685" y="200" font-size="10" fill="#9a9a9a" text-anchor="middle">verifies the EIP-3009 auth</text>
-            <text x="685" y="220" font-size="10" fill="#9a9a9a" text-anchor="middle">dispatches · records signal</text>
-            <text x="685" y="240" font-size="10" fill="#9a9a9a" text-anchor="middle">issues signal_hash</text>
-            <text x="685" y="260" font-size="10" fill="#6f6f6f" text-anchor="middle">Diamond 0x5a23…7ff8</text>
-
-            <!-- engine -> miners -->
-            <text x="970" y="66" font-size="10" fill="#9a9a9a" text-anchor="middle">live miners · from the node's catalog</text>
-            <line x1="780" y1="150" x2="858" y2="106" stroke="#caa53d" stroke-width="1.5" marker-end="url(#ah)"/>
-            <line x1="780" y1="190" x2="858" y2="188" stroke="#caa53d" stroke-width="1.5" marker-end="url(#ah)"/>
-            <line x1="780" y1="230" x2="858" y2="270" stroke="#caa53d" stroke-width="1.5" marker-end="url(#ah)"/>
-
-            <rect x="860" y="78" width="220" height="56" rx="4" fill="#161616" stroke="#caa53d"/>
-            <text x="970" y="101" font-size="12" font-weight="700" fill="#e8e8e8" text-anchor="middle">Truvian · miner 8453</text>
-            <text x="970" y="119" font-size="10" fill="#9a9a9a" text-anchor="middle">GAS_PRICE · ONCHAIN_TX_LOOKUP</text>
-
-            <rect x="860" y="160" width="220" height="56" rx="4" fill="#161616" stroke="#262626"/>
-            <text x="970" y="183" font-size="12" font-weight="700" fill="#e8e8e8" text-anchor="middle">ChainSight · miner 302</text>
-            <text x="970" y="201" font-size="10" fill="#9a9a9a" text-anchor="middle">CRYPTO_PRICE · TVL_LOOKUP · …</text>
-
-            <rect x="860" y="242" width="220" height="56" rx="4" fill="#161616" stroke="#262626"/>
-            <text x="970" y="265" font-size="12" font-weight="700" fill="#e8e8e8" text-anchor="middle">FinWire · miner 7322</text>
-            <text x="970" y="283" font-size="10" fill="#9a9a9a" text-anchor="middle">TVL_LOOKUP</text>
-
-            <!-- engine -> settlement -->
-            <line x1="685" y1="270" x2="685" y2="328" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#ah-dim)"/>
-            <text x="695" y="303" font-size="9.5" fill="#9a9a9a" text-anchor="start">settle 10000 atomic USDC = $0.01</text>
-
-            <rect x="590" y="330" width="190" height="84" rx="4" fill="#161616" stroke="#262626"/>
-            <text x="685" y="353" font-size="12" font-weight="700" fill="#e8e8e8" text-anchor="middle">Base Sepolia · 84532</text>
-            <text x="685" y="372" font-size="10" fill="#9a9a9a" text-anchor="middle">USDC transferWithAuthorization</text>
-            <text x="685" y="388" font-size="10" fill="#9a9a9a" text-anchor="middle">broadcast by facilitator · gasless</text>
-            <text x="685" y="404" font-size="9.5" fill="#6f6f6f" text-anchor="middle">settlement tx in PAYMENT-RESPONSE</text>
-
-            <!-- agent -> verify -->
-            <line x1="80" y1="230" x2="80" y2="328" stroke="#8a8a8a" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ah-dim)"/>
-            <text x="90" y="285" font-size="9.5" fill="#9a9a9a" text-anchor="start">verify later, or anyone else can</text>
-
-            <rect x="10" y="330" width="420" height="84" rx="4" fill="#161616" stroke="#262626"/>
-            <text x="220" y="353" font-size="12" font-weight="700" fill="#e8e8e8" text-anchor="middle">Public verification, no account needed</text>
-            <text x="220" y="374" font-size="10" fill="#7db4ff" text-anchor="middle">GET devnode.telegraphprotocol.com/engine/v1/signal/&lt;hash&gt;</text>
-            <text x="220" y="394" font-size="10" fill="#9a9a9a" text-anchor="middle">→ recorded signal: miner, wallet, result id, timestamp</text>
-          </svg>
+      <figure class="fig">
+        <!-- desktop -->
+        <svg class="d-desk" viewBox="0 0 960 390" role="img" aria-labelledby="arch-t arch-d">
+          <title id="arch-t">Shield architecture and payment flow</title>
+          <desc id="arch-d">An agent posts to the Shield API. For each check Shield pays the Telegraph engine over x402: an HTTP 402 challenge, an EIP-3009 authorization signed with viem, a PAYMENT-SIGNATURE header, and USDC settlement on Base Sepolia. The engine routes each intent to a live miner, Truvian 8453, ChainSight 302 or FinWire 7322, and returns the answer with a signal hash that flows back to the agent and can be resolved on the node.</desc>
+          <defs>
+            <marker id="a-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#caa53d"/></marker>
+            <marker id="a-arr-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7db4ff"/></marker>
+          </defs>
+          <!-- agent -->
+          <rect x="10" y="140" width="130" height="84" rx="10" fill="#111" stroke="#7db4ff" stroke-width="1.5"/>
+          <text x="75" y="178" text-anchor="middle" font-size="13" font-weight="700" fill="#e8e8e8">AGENT</text>
+          <text x="75" y="196" text-anchor="middle" font-size="11" fill="#9a9a9a">your code</text>
+          <!-- agent -> shield -->
+          <line x1="140" y1="158" x2="208" y2="158" stroke="#caa53d" stroke-width="1.6" marker-end="url(#a-arr)"/>
+          <text x="175" y="148" text-anchor="middle" font-size="11" fill="#9a9a9a">POST</text>
+          <text x="175" y="176" text-anchor="middle" font-size="11" fill="#9a9a9a">/api/check</text>
+          <line x1="210" y1="206" x2="142" y2="206" stroke="#7db4ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#a-arr-b)"/>
+          <text x="175" y="198" text-anchor="middle" font-size="11" fill="#7db4ff">verdict</text>
+          <text x="175" y="222" text-anchor="middle" font-size="11" fill="#7db4ff">receipts</text>
+          <!-- shield -->
+          <rect x="210" y="130" width="170" height="104" rx="12" fill="#161616" stroke="#caa53d" stroke-width="2"/>
+          <text x="295" y="160" text-anchor="middle" font-size="13" font-weight="700" fill="#caa53d">SHIELD API</text>
+          <text x="295" y="180" text-anchor="middle" font-size="11" fill="#9a9a9a">truvian.xyz</text>
+          <text x="295" y="200" text-anchor="middle" font-size="11" fill="#e8e8e8">pays · grades · scores</text>
+          <!-- shield <-> engine -->
+          <line x1="380" y1="158" x2="468" y2="158" stroke="#caa53d" stroke-width="1.6" marker-end="url(#a-arr)"/>
+          <text x="425" y="148" text-anchor="middle" font-size="11" fill="#9a9a9a">paid query</text>
+          <line x1="470" y1="206" x2="382" y2="206" stroke="#7db4ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#a-arr-b)"/>
+          <text x="425" y="198" text-anchor="middle" font-size="11" fill="#7db4ff">answer +</text>
+          <text x="425" y="222" text-anchor="middle" font-size="11" fill="#7db4ff">signal_hash</text>
+          <!-- engine -->
+          <rect x="470" y="130" width="190" height="104" rx="12" fill="#161616" stroke="#caa53d" stroke-width="2"/>
+          <text x="565" y="160" text-anchor="middle" font-size="13" font-weight="700" fill="#caa53d">TELEGRAPH ENGINE</text>
+          <text x="565" y="180" text-anchor="middle" font-size="11" fill="#9a9a9a">devnode · Base Sepolia</text>
+          <text x="565" y="200" text-anchor="middle" font-size="11" fill="#e8e8e8">routes intents to miners</text>
+          <text x="565" y="218" text-anchor="middle" font-size="11" fill="#7db4ff">issues signal_hash</text>
+          <!-- engine -> miners bus -->
+          <line x1="660" y1="182" x2="706" y2="182" stroke="#caa53d" stroke-width="1.6"/>
+          <text x="683" y="174" text-anchor="middle" font-size="11" fill="#9a9a9a">intent</text>
+          <line x1="706" y1="76" x2="706" y2="236" stroke="#caa53d" stroke-width="1.6"/>
+          <line x1="706" y1="76" x2="723" y2="76" stroke="#caa53d" stroke-width="1.6" marker-end="url(#a-arr)"/>
+          <line x1="706" y1="156" x2="723" y2="156" stroke="#caa53d" stroke-width="1.6" marker-end="url(#a-arr)"/>
+          <line x1="706" y1="236" x2="723" y2="236" stroke="#caa53d" stroke-width="1.6" marker-end="url(#a-arr)"/>
+          <!-- miners -->
+          <rect x="725" y="46" width="225" height="60" rx="10" fill="#111" stroke="#262626"/>
+          <text x="739" y="71" font-size="13" font-weight="700" fill="#e8e8e8">Truvian · 8453</text>
+          <text x="739" y="91" font-size="11" fill="#9a9a9a">GAS_PRICE · ONCHAIN_TX_LOOKUP</text>
+          <rect x="725" y="126" width="225" height="60" rx="10" fill="#111" stroke="#262626"/>
+          <text x="739" y="151" font-size="13" font-weight="700" fill="#e8e8e8">ChainSight · 302</text>
+          <text x="739" y="171" font-size="11" fill="#9a9a9a">CRYPTO_PRICE · TVL_LOOKUP</text>
+          <rect x="725" y="206" width="225" height="60" rx="10" fill="#111" stroke="#262626"/>
+          <text x="739" y="231" font-size="13" font-weight="700" fill="#e8e8e8">FinWire · 7322</text>
+          <text x="739" y="251" font-size="11" fill="#9a9a9a">TVL_LOOKUP</text>
+          <text x="837" y="30" text-anchor="middle" font-size="11" fill="#9a9a9a">live miners · $0.01 each</text>
+          <!-- x402 strip -->
+          <line x1="295" y1="234" x2="295" y2="278" stroke="#9a9a9a" stroke-dasharray="2 4"/>
+          <line x1="565" y1="234" x2="565" y2="278" stroke="#9a9a9a" stroke-dasharray="2 4"/>
+          <rect x="20" y="278" width="610" height="94" rx="12" fill="#0f0f0f" stroke="#caa53d" stroke-dasharray="6 4"/>
+          <text x="40" y="298" font-size="11" fill="#caa53d">x402 payment · per check · gasless settlement</text>
+          <rect x="40" y="312" width="123" height="44" rx="8" fill="#161616" stroke="#262626"/>
+          <text x="101" y="330" text-anchor="middle" font-size="11" fill="#e8e8e8">HTTP 402</text>
+          <text x="101" y="346" text-anchor="middle" font-size="11" fill="#9a9a9a">challenge</text>
+          <line x1="163" y1="334" x2="187" y2="334" stroke="#caa53d" stroke-width="1.6" marker-end="url(#a-arr)"/>
+          <rect x="189" y="312" width="123" height="44" rx="8" fill="#161616" stroke="#262626"/>
+          <text x="250" y="330" text-anchor="middle" font-size="11" fill="#e8e8e8">sign EIP-3009</text>
+          <text x="250" y="346" text-anchor="middle" font-size="11" fill="#9a9a9a">with viem</text>
+          <line x1="312" y1="334" x2="336" y2="334" stroke="#caa53d" stroke-width="1.6" marker-end="url(#a-arr)"/>
+          <rect x="338" y="312" width="123" height="44" rx="8" fill="#161616" stroke="#262626"/>
+          <text x="399" y="330" text-anchor="middle" font-size="11" fill="#e8e8e8">PAYMENT-SIGNATURE</text>
+          <text x="399" y="346" text-anchor="middle" font-size="11" fill="#9a9a9a">header</text>
+          <line x1="461" y1="334" x2="485" y2="334" stroke="#caa53d" stroke-width="1.6" marker-end="url(#a-arr)"/>
+          <rect x="487" y="312" width="123" height="44" rx="8" fill="#161616" stroke="#262626"/>
+          <text x="548" y="330" text-anchor="middle" font-size="11" fill="#e8e8e8">settle USDC</text>
+          <text x="548" y="346" text-anchor="middle" font-size="11" fill="#9a9a9a">on Base Sepolia</text>
+          <!-- verify on node -->
+          <rect x="725" y="300" width="225" height="64" rx="10" fill="#111" stroke="#7db4ff" stroke-width="1.5"/>
+          <text x="837" y="326" text-anchor="middle" font-size="13" font-weight="700" fill="#7db4ff">VERIFY ON NODE</text>
+          <text x="837" y="346" text-anchor="middle" font-size="11" fill="#9a9a9a">/engine/v1/signal/&lt;hash&gt;</text>
+          <path d="M725 332 H650 V236" fill="none" stroke="#7db4ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#a-arr-b)"/>
+          <text x="688" y="322" text-anchor="middle" font-size="11" fill="#7db4ff">anyone</text>
+        </svg>
+        <!-- mobile -->
+        <svg class="d-mob" viewBox="0 0 360 760" role="img" aria-labelledby="archm-t archm-d">
+          <title id="archm-t">Shield architecture and payment flow</title>
+          <desc id="archm-d">An agent posts to the Shield API. For each check Shield pays the Telegraph engine over x402: an HTTP 402 challenge, an EIP-3009 authorization signed with viem, a PAYMENT-SIGNATURE header, and USDC settlement on Base Sepolia. The engine routes each intent to a live miner, Truvian 8453, ChainSight 302 or FinWire 7322, and returns the answer with a signal hash that flows back to the agent and can be resolved on the node.</desc>
+          <defs>
+            <marker id="am-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#caa53d"/></marker>
+            <marker id="am-arr-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7db4ff"/></marker>
+          </defs>
+          <rect x="100" y="10" width="160" height="52" rx="10" fill="#111" stroke="#7db4ff" stroke-width="1.5"/>
+          <text x="180" y="32" text-anchor="middle" font-size="14" font-weight="700" fill="#e8e8e8">AGENT</text>
+          <text x="180" y="50" text-anchor="middle" font-size="12" fill="#9a9a9a">your code</text>
+          <line x1="180" y1="62" x2="180" y2="98" stroke="#caa53d" stroke-width="1.6" marker-end="url(#am-arr)"/>
+          <text x="190" y="84" font-size="12" fill="#9a9a9a">POST /api/check</text>
+          <rect x="60" y="100" width="240" height="64" rx="12" fill="#161616" stroke="#caa53d" stroke-width="2"/>
+          <text x="180" y="126" text-anchor="middle" font-size="14" font-weight="700" fill="#caa53d">SHIELD API</text>
+          <text x="180" y="148" text-anchor="middle" font-size="12" fill="#9a9a9a">truvian.xyz · pays · grades</text>
+          <line x1="180" y1="164" x2="180" y2="200" stroke="#caa53d" stroke-width="1.6" marker-end="url(#am-arr)"/>
+          <text x="190" y="186" font-size="12" fill="#9a9a9a">paid query</text>
+          <rect x="30" y="202" width="300" height="128" rx="12" fill="#0f0f0f" stroke="#caa53d" stroke-dasharray="6 4"/>
+          <text x="45" y="222" font-size="12" fill="#caa53d">x402 · per check · gasless</text>
+          <text x="45" y="246" font-size="12" font-weight="700" fill="#caa53d">1</text><text x="60" y="246" font-size="12" fill="#e8e8e8">HTTP 402 challenge</text>
+          <text x="45" y="268" font-size="12" font-weight="700" fill="#caa53d">2</text><text x="60" y="268" font-size="12" fill="#e8e8e8">sign EIP-3009 with viem</text>
+          <text x="45" y="290" font-size="12" font-weight="700" fill="#caa53d">3</text><text x="60" y="290" font-size="12" fill="#e8e8e8">PAYMENT-SIGNATURE header</text>
+          <text x="45" y="312" font-size="12" font-weight="700" fill="#caa53d">4</text><text x="60" y="312" font-size="12" fill="#e8e8e8">settle USDC on Base Sepolia</text>
+          <line x1="180" y1="330" x2="180" y2="366" stroke="#caa53d" stroke-width="1.6" marker-end="url(#am-arr)"/>
+          <rect x="60" y="368" width="240" height="64" rx="12" fill="#161616" stroke="#caa53d" stroke-width="2"/>
+          <text x="180" y="392" text-anchor="middle" font-size="14" font-weight="700" fill="#caa53d">TELEGRAPH ENGINE</text>
+          <text x="180" y="412" text-anchor="middle" font-size="12" fill="#9a9a9a">routes · issues signal_hash</text>
+          <!-- return loop -->
+          <path d="M300 400 H336 V132 H302" fill="none" stroke="#7db4ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#am-arr-b)"/>
+          <text x="352" y="266" text-anchor="middle" font-size="12" fill="#7db4ff" transform="rotate(-90 352 266)">answer + signal_hash</text>
+          <!-- miners bus -->
+          <path d="M180 432 V452 H40 V614" fill="none" stroke="#caa53d" stroke-width="1.6"/>
+          <text x="190" y="448" font-size="12" fill="#9a9a9a">intent</text>
+          <line x1="40" y1="494" x2="58" y2="494" stroke="#caa53d" stroke-width="1.6" marker-end="url(#am-arr)"/>
+          <line x1="40" y1="554" x2="58" y2="554" stroke="#caa53d" stroke-width="1.6" marker-end="url(#am-arr)"/>
+          <line x1="40" y1="614" x2="58" y2="614" stroke="#caa53d" stroke-width="1.6" marker-end="url(#am-arr)"/>
+          <rect x="60" y="470" width="240" height="48" rx="10" fill="#111" stroke="#262626"/>
+          <text x="72" y="490" font-size="14" font-weight="700" fill="#e8e8e8">Truvian · 8453</text>
+          <text x="72" y="508" font-size="12" fill="#9a9a9a">GAS_PRICE · ONCHAIN_TX_LOOKUP</text>
+          <rect x="60" y="530" width="240" height="48" rx="10" fill="#111" stroke="#262626"/>
+          <text x="72" y="550" font-size="14" font-weight="700" fill="#e8e8e8">ChainSight · 302</text>
+          <text x="72" y="568" font-size="12" fill="#9a9a9a">CRYPTO_PRICE · TVL_LOOKUP</text>
+          <rect x="60" y="590" width="240" height="48" rx="10" fill="#111" stroke="#262626"/>
+          <text x="72" y="610" font-size="14" font-weight="700" fill="#e8e8e8">FinWire · 7322</text>
+          <text x="72" y="628" font-size="12" fill="#9a9a9a">TVL_LOOKUP</text>
+          <!-- verify -->
+          <rect x="60" y="680" width="240" height="64" rx="10" fill="#111" stroke="#7db4ff" stroke-width="1.5"/>
+          <text x="180" y="704" text-anchor="middle" font-size="14" font-weight="700" fill="#7db4ff">VERIFY ON NODE</text>
+          <text x="180" y="724" text-anchor="middle" font-size="12" fill="#9a9a9a">/engine/v1/signal/&lt;hash&gt;</text>
+          <path d="M300 712 H336 V420 H302" fill="none" stroke="#7db4ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#am-arr-b)"/>
+          <text x="352" y="566" text-anchor="middle" font-size="12" fill="#7db4ff" transform="rotate(-90 352 566)">anyone resolves the hash</text>
+        </svg>
+        <div class="legend" aria-label="Legend">
+          <span><i></i>request · payment</span>
+          <span><i class="dash"></i>answer · signal hash · verification</span>
         </div>
-        <figcaption>Figure 1 — Request path (solid gold), payment settlement (grey), and the evidence path back (dashed). Miner IDs are the live Telegraph registrations Shield routes to first; the node's free catalog supplies fallbacks ordered by leaderboard rank.</figcaption>
+        <figcaption>Shield never custodies your keys; it pays miners from its own USDC wallet and hands back the evidence.</figcaption>
       </figure>
-      <ul class="arch-legend" aria-label="Diagram legend">
-        <li><span class="sw" aria-hidden="true"></span>paid request path (x402)</li>
-        <li><span class="sw dash" aria-hidden="true"></span>answer, signal hash and verification</li>
-        <li><span class="sw dim" aria-hidden="true"></span>USDC settlement on Base Sepolia</li>
-      </ul>
-
-      <div class="grid grid-3" style="margin-top:1.5rem">
-        <div class="card">
-          <h3>Routing is deterministic</h3>
-          <p>Candidates per intent come from the node's catalog (<code>GET /api/miners</code>, 60 s cache): Truvian 8453 first for its two intents, then curated known-good miners, then the rest by leaderboard rank. First attempt plus one retry to a <em>different</em> miner, 10 s timeout each.</p>
-        </div>
-        <div class="card">
-          <h3>Verdicts are pure functions</h3>
-          <p><code>buildCheckReport(request, signals)</code> does no I/O and reads no clock. Identical inputs always yield an identical report — the same discipline as the Truvian miner, where determinism is the product.</p>
-        </div>
-        <div class="card">
-          <h3>Failure is evidence, not silence</h3>
-          <p>A miner that times out or rejects payment becomes an <span class="chip error">error</span> row with the reason attached. The transport module never throws; the verdict engine renders every outcome.</p>
-        </div>
-      </div>
-
-      <h3 class="sub" id="payments">Payment flow: every check is a real x402 v2 payment, settled on-chain.</h3>
-      <p class="intro">Shield implements the <code>exact</code> EVM scheme directly from the x402 v2 specification with <code>viem</code> — no
-        <code>@x402/*</code> dependency. The wire format was verified against the live node's 402 challenge before a single USDC moved.
-        Per query: <strong>$0.01</strong> (the miner's on-chain <code>minPriceUsdc</code> floor), paid in USDC on Base Sepolia.</p>
-
-      <ol class="flow">
-        <li>
-          <span class="dir">server → client</span>
-          <h3>HTTP 402 challenge</h3>
-          <p>Shield calls <code>POST /engine/v1/ask/{minerId}</code> with <code>{method, endpoint, payload}</code>. Unpaid, the node answers <strong>402</strong> with a base64 <code>PAYMENT-REQUIRED</code> header. The header is authoritative; the JSON body is only a human summary.</p>
-<pre><code>{
-  <span class="k">"x402Version"</span>: <span class="n">2</span>,
-  <span class="k">"accepts"</span>: [{
-    <span class="k">"scheme"</span>: <span class="s">"exact"</span>,
-    <span class="k">"network"</span>: <span class="s">"eip155:84532"</span>,
-    <span class="k">"amount"</span>: <span class="s">"10000"</span>,                              <span class="c">// atomic USDC = $0.01</span>
-    <span class="k">"asset"</span>: <span class="s">"0x036CbD53842c5426634e7929541eC2318f3dCF7e"</span>, <span class="c">// Circle USDC, Base Sepolia</span>
-    <span class="k">"payTo"</span>: <span class="s">"0x5a2324aA18613FAD4e44bDF0d6c73Ec1f6D87ff8"</span>, <span class="c">// Telegraph Diamond</span>
-    <span class="k">"maxTimeoutSeconds"</span>: <span class="n">60</span>,
-    <span class="k">"extra"</span>: { <span class="k">"name"</span>: <span class="s">"USDC"</span>, <span class="k">"version"</span>: <span class="s">"2"</span> }
-  }]
-}</code></pre>
-        </li>
-        <li>
-          <span class="dir">client</span>
-          <h3>Price cap before anything is signed</h3>
-          <p>The challenged <code>amount</code> is compared with <code>SHIELD_MAX_PAYMENT_USDC</code> (default $0.10). A challenge above the cap is refused and never signed — the payer key cannot be drained by a mispriced miner.</p>
-        </li>
-        <li>
-          <span class="dir">client</span>
-          <h3>EIP-3009 <code>TransferWithAuthorization</code>, signed offline</h3>
-          <p>An EIP-712 typed-data signature over the USDC contract's domain, produced with viem. No RPC call, no gas, no allowance transaction — the authorization itself is the payment.</p>
-          <dl class="kv">
-            <dt>domain</dt><dd>{ name: "USDC", version: "2", chainId: 84532, verifyingContract: asset }</dd>
-            <dt>primaryType</dt><dd>TransferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce)</dd>
-            <dt>message</dt><dd>from = payer · to = payTo · value = 10000 · validAfter = now − 600 · validBefore = now + maxTimeoutSeconds · nonce = 32 random bytes</dd>
-          </dl>
-        </li>
-        <li>
-          <span class="dir">client → server</span>
-          <h3>Retry with <code>PAYMENT-SIGNATURE</code></h3>
-          <p>The same request is re-sent with one extra header: base64 of <code>{x402Version, resource, accepted, payload: {signature, authorization}}</code>, where <code>resource</code> and <code>accepted</code> are echoed verbatim from the challenge. A fresh nonce is generated per attempt; one retry if the facilitator rejects the first.</p>
-        </li>
-        <li>
-          <span class="dir">server → chain</span>
-          <h3>Verification and gasless settlement</h3>
-          <p>The node verifies the signature server-side and hands it to the facilitator, which broadcasts <code>transferWithAuthorization</code> on Base Sepolia and pays the gas. <strong>The payer wallet holds USDC only — no ETH.</strong> The 200 response carries the miner's answer plus a <code>PAYMENT-RESPONSE</code> header with the settlement: <code>{success, transaction, network, payer}</code>. A rejected payment comes back as 402 again with an <code>errorReason</code> (for example <code>invalid_exact_evm_insufficient_balance</code>), which Shield surfaces verbatim on the check card.</p>
-        </li>
-        <li>
-          <span class="dir">client</span>
-          <h3>Serialized per payer</h3>
-          <p>The facilitator rejects overlapping authorizations from one payer, so Shield queues payments per process. A four-check report is four sequential paid round-trips — about 10 s end to end, ~2–4 s per check — and nothing is lost to a rejected batch. Cost, latency, miner, transport and signal hash are recorded on every check.</p>
-        </li>
-      </ol>
     </div>
   </section>
 
   <!-- ============ VERIFIABILITY ============ -->
-  <section class="band" id="verify" aria-labelledby="verify-title">
+  <section class="band-alt" id="verify" aria-labelledby="verify-title">
     <div class="wrap">
-      <span class="label">Why you can trust a report</span>
-      <h2 class="h2" id="verify-title">Don't trust the card. Resolve the hash.</h2>
-      <p class="intro">A safety tool is only as good as the provenance of its evidence. Every paid answer is recorded by the Telegraph node and
-        identified by a <code>signal_hash</code>. Shield prints it on the check card and in the JSON, and the node exposes a public
-        resolver — so a judge, an auditor or the counterparty can confirm that the evidence Shield shows was really served by that
-        miner, to that wallet, at that time. You are checking the network's record, not Shield's rendering.</p>
-
-      <div class="grid grid-2">
-        <article class="card">
-          <h3>Live miners only</h3>
-          <p>Every number on a report was produced by a Telegraph miner at the moment you asked. There is no cache of canned
-            answers, no simulated fallback, no fixture. If a miner is down, the check says so and the score is penalized — Shield
-            will fail a check honestly before it fakes a pass. (The hackathon disqualifies mocked or simulated data; Shield contains none.)</p>
-        </article>
-        <article class="card">
-          <h3>Every query is paid and settled</h3>
-          <p>Each check is a real x402 payment: the node returns HTTP 402, Shield signs an EIP-3009 <code>TransferWithAuthorization</code>
-            with viem, retries with a <code>PAYMENT-SIGNATURE</code> header, and a facilitator settles $0.01 USDC on Base Sepolia
-            on-chain, gaslessly. The cost appears on every card.</p>
-        </article>
-        <article class="card">
-          <h3>Signal hashes anyone can resolve</h3>
-          <p>Resolve any card's hash at <code>https://devnode.telegraphprotocol.com/engine/v1/signal/&lt;hash&gt;</code> and the node returns
-            the recorded signal — miner, wallet, result id and timestamp. No account, no API key.</p>
-        </article>
-        <article class="card">
-          <h3>Open source, with a track record</h3>
-          <p>Shield, the miner behind it and the scoring module are all public at
-            <a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">github.com/mrnetwork0001/Truvian</a>.
-            The Truvian miner ranks in ONCHAIN_TX_LOOKUP and GAS_PRICE on the live leaderboard, and Truvian's WASM scoring module
-            held the ONCHAIN_TX_LOOKUP championship twice (registrations 544 and 617).</p>
-        </article>
-      </div>
-
-      <h3 class="sub">Verify a check in four steps</h3>
-      <ol class="flow" style="margin-top:1rem">
-        <li>
-          <h3>Run a check</h3>
-          <p>In the <a href="/app">app</a> or with <code>curl</code>. Each check card shows miner name, latency, cost, transport and a <em>verify signal</em> link.</p>
-        </li>
-        <li>
-          <h3>Copy the <code>signalHash</code></h3>
-          <p>From the card link or the <code>checks[i].signalHash</code> field in the JSON.</p>
-        </li>
-        <li>
-          <h3>Resolve it on the node</h3>
-          <p><code>GET https://devnode.telegraphprotocol.com/engine/v1/signal/&lt;hash&gt;</code> returns the recorded signal: <strong>miner, wallet, result id, timestamp</strong>.</p>
-        </li>
-        <li>
-          <h3>Compare</h3>
-          <p>Miner id and name should match the card; the wallet is Shield's payer; the timestamp brackets the request. The settlement transaction from <code>PAYMENT-RESPONSE</code> is separately visible on Base Sepolia.</p>
-        </li>
-      </ol>
-
-      <form class="verify-tool" id="verify-form" aria-labelledby="verify-tool-label">
+      <div class="verify-grid">
         <div>
-          <label id="verify-tool-label" for="signal-hash">Paste a signal hash to build the resolver URL</label>
-          <input id="signal-hash" name="hash" type="text" placeholder="signal_hash from any check card" autocomplete="off" spellcheck="false" inputmode="text">
+          <span class="label">Verifiability</span>
+          <h2 id="verify-title">Don't trust the card. Resolve the hash.</h2>
+          <p class="sub">Every check carries a signal hash issued by the Telegraph node — anyone can fetch it.</p>
+          <div class="row">
+            <span class="chip chip-muted">miner</span>
+            <span class="chip chip-muted">latency</span>
+            <span class="chip chip-muted">cost</span>
+            <span class="chip chip-gold">signal_hash</span>
+          </div>
         </div>
-        <button class="btn btn-ghost" type="submit">Open on the node</button>
-      </form>
-      <p class="verify-out" id="verify-out"><code>https://devnode.telegraphprotocol.com/engine/v1/signal/&lt;hash&gt;</code></p>
-      <p class="fine">The resolver opens in a new tab on the Telegraph node itself — this page never proxies or rewrites the response.</p>
+        <figure class="fig">
+          <svg viewBox="0 0 380 262" role="img" aria-labelledby="rc-t rc-d">
+            <title id="rc-t">A check receipt</title>
+            <desc id="rc-d">One check card shows the miner, latency, cost and a signal hash; the hash resolves on the Telegraph node at devnode.telegraphprotocol.com/engine/v1/signal.</desc>
+            <defs><marker id="r-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7db4ff"/></marker></defs>
+            <rect x="10" y="10" width="240" height="200" rx="12" fill="#111" stroke="#262626"/>
+            <text x="26" y="38" font-size="14" font-weight="700" fill="#caa53d">FEE</text>
+            <rect x="62" y="24" width="76" height="20" rx="10" fill="rgba(202,165,61,.1)" stroke="#caa53d"/>
+            <text x="100" y="38" text-anchor="middle" font-size="12" fill="#caa53d">GAS_PRICE</text>
+            <rect x="146" y="24" width="44" height="20" rx="10" fill="rgba(74,222,128,.1)" stroke="#4ade80"/>
+            <text x="168" y="38" text-anchor="middle" font-size="12" fill="#4ade80">pass</text>
+            <text x="26" y="64" font-size="12" fill="#9a9a9a">gas within normal range</text>
+            <line x1="26" y1="78" x2="234" y2="78" stroke="#262626"/>
+            <text x="26" y="100" font-size="12" fill="#9a9a9a">miner</text><text x="110" y="100" font-size="13" fill="#e8e8e8">Truvian · 8453</text>
+            <text x="26" y="124" font-size="12" fill="#9a9a9a">latency</text><text x="110" y="124" font-size="13" fill="#e8e8e8">750 ms</text>
+            <text x="26" y="148" font-size="12" fill="#9a9a9a">cost</text><text x="110" y="148" font-size="13" fill="#e8e8e8">$0.01 · x402</text>
+            <text x="26" y="172" font-size="12" fill="#9a9a9a">signal_hash</text><text x="110" y="172" font-size="13" fill="#caa53d">0x&lt;64 hex&gt;</text>
+            <rect x="26" y="184" width="124" height="20" rx="10" fill="rgba(125,180,255,.1)" stroke="#7db4ff"/>
+            <text x="88" y="198" text-anchor="middle" font-size="12" fill="#7db4ff">verify signal ↗</text>
+            <line x1="250" y1="168" x2="280" y2="168" stroke="#7db4ff" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#r-arr)"/>
+            <rect x="282" y="136" width="88" height="64" rx="10" fill="#111" stroke="#7db4ff" stroke-width="1.5"/>
+            <text x="326" y="162" text-anchor="middle" font-size="14" font-weight="700" fill="#7db4ff">NODE</text>
+            <text x="326" y="184" text-anchor="middle" font-size="12" fill="#4ade80">confirms ✓</text>
+            <text x="190" y="234" text-anchor="middle" font-size="12" fill="#9a9a9a">devnode.telegraphprotocol.com</text>
+            <text x="190" y="252" text-anchor="middle" font-size="12" fill="#9a9a9a">/engine/v1/signal/&lt;hash&gt;</text>
+          </svg>
+          <figcaption>The node, not Shield, is the source of truth for every answer.</figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
-  <!-- ============ FOR AGENTS / API ============ -->
-  <section class="band band-alt" id="agents" aria-labelledby="agents-title">
+  <!-- ============ FOR AGENTS ============ -->
+  <section id="agents" aria-labelledby="agents-title">
     <div class="wrap">
-      <span class="label">For agents · API contract</span>
-      <h2 class="h2" id="agents-title">One POST before you sign. Four routes. Nothing to install.</h2>
-      <p class="intro">The dashboard and the API return the identical report. Call <code>/api/check</code> with what you know about the
-        transaction, then gate the signature on <code>verdict</code>. The response shape is the exported TypeScript
-        <code>CheckReport</code> / <code>CheckItem</code> in <code>src/shield/types.ts</code> — the single source of truth shared by the
-        transport, the verdict engine, the server and the dashboard.</p>
-
-      <div class="endpoint"><span class="method">POST</span><code>/api/check</code><span class="what">proposed transaction → CheckReport</span></div>
-      <div class="api-grid">
+      <span class="label">For agents</span>
+      <h2 id="agents-title">One POST before you sign.</h2>
+      <p class="sub">The dashboard and the API return the same report.</p>
+      <div class="agents-grid">
         <div>
-<pre aria-label="Request body"><code><span class="c">// request — all fields optional; give `to` or `txHash`</span>
-<span class="c">// (illustrative values: 0x4200…0006 is WETH on Base)</span>
-{
-  <span class="k">"chain"</span>:    <span class="s">"base"</span>,   <span class="c">// base | ethereum | base-sepolia</span>
-  <span class="k">"to"</span>:       <span class="s">"0x4200000000000000000000000000000000000006"</span>,
-  <span class="k">"valueEth"</span>: <span class="s">"0.25"</span>,   <span class="c">// number or numeric string, ≥ 0</span>
-  <span class="k">"txHash"</span>:   <span class="s">"0x…"</span>,    <span class="c">// 32-byte hex, enables COUNTERPARTY</span>
-  <span class="k">"protocol"</span>: <span class="s">"aave"</span>    <span class="c">// enables LIQUIDITY</span>
-}
-
-<span class="c">// 400 on malformed input</span>
-{ <span class="k">"error"</span>: <span class="s">"INVALID_INPUT"</span>,
-  <span class="k">"message"</span>: <span class="s">"to must be a 20-byte 0x-hex address"</span> }</code></pre>
-        </div>
-        <div>
-<pre aria-label="Response body"><code><span class="c">// response — illustrative; ‹bracketed› values vary per run</span>
-{
-  <span class="k">"verdict"</span>: <span class="s">"SAFE"</span>,            <span class="c">// SAFE | CAUTION | BLOCK</span>
-  <span class="k">"score"</span>:   <span class="n">100</span>,
-  <span class="k">"reasons"</span>: [<span class="s">"All checks passed against live Telegraph miner signals."</span>],
-  <span class="k">"checks"</span>: [
-    {
-      <span class="k">"name"</span>:       <span class="s">"FEE"</span>,
-      <span class="k">"intent"</span>:     <span class="s">"GAS_PRICE"</span>,
-      <span class="k">"status"</span>:     <span class="s">"pass"</span>,        <span class="c">// pass | warn | fail | error</span>
-      <span class="k">"summary"</span>:    <span class="s">"gas price ‹n› gwei is within the normal range for base (‹level›)"</span>,
-      <span class="k">"answer"</span>:     <span class="s">"‹miner's natural-language answer, verbatim›"</span>,
-      <span class="k">"latencyMs"</span>:  <span class="n">750</span>,
-      <span class="k">"transport"</span>:  <span class="s">"x402"</span>,        <span class="c">// x402 = paid via the engine; direct = catalog fallback</span>
-      <span class="k">"signalHash"</span>: <span class="s">"‹hash issued by the Telegraph node›"</span>,
-      <span class="k">"minerName"</span>:  <span class="s">"Truvian Exact On-Chain Truth Engine"</span>,
-      <span class="k">"costUsd"</span>:    <span class="n">0.01</span>
-    },
-    { <span class="k">"name"</span>: <span class="s">"VALUE"</span>, <span class="k">"intent"</span>: <span class="s">"CRYPTO_PRICE"</span>, <span class="k">"status"</span>: <span class="s">"pass"</span>,
-      <span class="k">"summary"</span>: <span class="s">"transaction value 0.25 ETH ~ $619.00 (ETH at $2,476.00) is below the caution thresholds"</span>,
-      <span class="k">"minerName"</span>: <span class="s">"ChainSight — On-Chain Intelligence Hub"</span>, <span class="k">"costUsd"</span>: <span class="n">0.01</span>, <span class="p">…</span> },
-    { <span class="k">"name"</span>: <span class="s">"LIQUIDITY"</span>, <span class="k">"intent"</span>: <span class="s">"TVL_LOOKUP"</span>, <span class="k">"status"</span>: <span class="s">"pass"</span>,
-      <span class="k">"summary"</span>: <span class="s">"reported TVL $18,200,000,000.00 for aave clears the $1,000,000.00 liquidity threshold"</span>,
-      <span class="k">"costUsd"</span>: <span class="n">0.01</span>, <span class="p">…</span> }
-  ]
-}</code></pre>
-        </div>
-      </div>
-
-      <div class="code-block">
-        <h3>Gate the signature</h3>
-<pre><code><span class="c">// inside your agent's signing step</span>
-<span class="k">const</span> report = <span class="k">await</span> fetch(<span class="s">'https://truvian.xyz/api/check'</span>, {
-  method: <span class="s">'POST'</span>, headers: { <span class="s">'content-type'</span>: <span class="s">'application/json'</span> },
-  body: JSON.stringify({ chain, to, valueEth, txHash, protocol }),
-}).then(r =&gt; r.json());
-
-<span class="k">if</span> (report.verdict === <span class="s">'BLOCK'</span>)   <span class="k">throw new</span> Error(report.reasons.join(<span class="s">'; '</span>));
-<span class="k">if</span> (report.verdict === <span class="s">'CAUTION'</span>) <span class="k">await</span> escalate(report);   <span class="c">// human or stricter policy</span>
-<span class="k">await</span> sign(tx);                                                <span class="c">// SAFE</span></code></pre>
-      </div>
-
-      <div class="code-block">
-        <h3>From a terminal</h3>
-<pre><code><span class="c"># pre-check a transfer before signing</span>
+          <div class="code"><pre><code><span class="c"># pre-check a transfer before signing</span>
 curl -sS https://truvian.xyz/api/check \
   -H <span class="s">'content-type: application/json'</span> \
   -d <span class="s">'{"chain":"base","to":"0x4200000000000000000000000000000000000006","valueEth":"0.25","protocol":"aave"}'</span>
-
-<span class="c"># verify a mined transaction</span>
-curl -sS <span class="s">"https://truvian.xyz/api/verify/0x&lt;64 hex&gt;?chain=base"</span>
-
-<span class="c"># live counters</span>
-curl -sS https://truvian.xyz/api/stats</code></pre>
-      </div>
-
-      <ul class="endpoints" aria-label="Endpoints">
-        <li><code>POST /api/check</code><span>JSON <code>{chain, to?, valueEth?, txHash?, protocol?}</code> → full report as above. Invalid input returns 400 with a message.</span></li>
-        <li><code>GET /api/verify/:txHash</code><span>single ONCHAIN_TX_LOOKUP verification of a mined transaction (<code>?chain=</code> optional, default <code>base</code>). A reverted transaction is an outright BLOCK.</span></li>
-        <li><code>GET /api/stats</code><span><code>{checksRun, telegraphRequests, byIntent:{GAS_PRICE, ONCHAIN_TX_LOOKUP, CRYPTO_PRICE, TVL_LOOKUP}}</code> — counts every launched Telegraph request, successful or not; shown live at the top of this page.</span></li>
-        <li><code>GET /healthz</code><span><code>{ok:true}</code> — liveness.</span></li>
-      </ul>
-      <p class="fine">All server strings are rendered by the dashboard via <code>textContent</code>, never <code>innerHTML</code>.</p>
-    </div>
-  </section>
-
-  <!-- ============ THE TRUVIAN STACK ============ -->
-  <section class="band" id="stack" aria-labelledby="stack-title">
-    <div class="wrap">
-      <span class="label">The Truvian stack</span>
-      <h2 class="h2" id="stack-title">Supply, quality, demand — one loop, one codebase.</h2>
-      <p class="intro">Shield is the third piece of a single project that participates in every Telegraph track. The miner supplies exact
-        answers, the scorer defines what exact means, and Shield turns both into paid, real-world requests on the network.</p>
-
-      <div class="loop">
-        <article class="card">
-          <h3><span class="role">Supply</span> Truvian miner</h3>
-          <ul>
-            <li>Miner id <strong>8453</strong>, slug <code>truvian-onchain-truth</code></li>
-            <li><a href="https://miner.truvian.xyz" target="_blank" rel="noopener">miner.truvian.xyz</a></li>
-            <li>Serves <code>ONCHAIN_TX_LOOKUP</code> and <code>GAS_PRICE</code> on Base</li>
-            <li>Ranks in both intents on the live leaderboard</li>
-            <li>Deterministic: byte-identical output for identical finalized-chain state; OP-stack L1 fee included in every cost</li>
-          </ul>
-        </article>
-        <div class="arrow" aria-hidden="true">→</div>
-        <article class="card">
-          <h3><span class="role">Quality</span> Championship scorer</h3>
-          <ul>
-            <li>Rust → WASM scoring module for <code>ONCHAIN_TX_LOOKUP</code></li>
-            <li>Registered per-intent via <code>registerWasm</code>; must beat the incumbent on a node-internal benchmark</li>
-            <li>Held the <code>ONCHAIN_TX_LOOKUP</code> championship <strong>twice</strong> — registrations <strong>544</strong> and <strong>617</strong></li>
-          </ul>
-        </article>
-        <div class="arrow" aria-hidden="true">→</div>
-        <article class="card">
-          <h3><span class="role">Demand</span> Truvian Shield</h3>
-          <ul>
-            <li>Track 3 application — this page and <a href="/app">/app</a></li>
-            <li>Every check is real paid demand for <code>GAS_PRICE</code>, <code>ONCHAIN_TX_LOOKUP</code>, <code>CRYPTO_PRICE</code>, <code>TVL_LOOKUP</code></li>
-            <li>Routes to the network's best miners, not only our own</li>
-            <li>The stats endpoint counts every Telegraph request it launches</li>
-          </ul>
-        </article>
-      </div>
-
-      <div class="grid grid-3">
-        <a class="card card-link" href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">
-          <h3>Source ↗</h3><p>Miner, scorer, Shield, the x402 client and the empirical notes behind it — one open repository.</p>
-        </a>
-        <a class="card card-link" href="https://explorer.telegraphprotocol.com" target="_blank" rel="noopener">
-          <h3>Telegraph explorer ↗</h3><p>Live leaderboard of miners per intent.</p>
-        </a>
-        <a class="card card-link" href="https://docs.telegraphprotocol.com/docs" target="_blank" rel="noopener">
-          <h3>Telegraph docs ↗</h3><p>Intents, miner registration, scoring and payments.</p>
-        </a>
+<span class="c"># → {"verdict":"SAFE","score":100,"reasons":[],"checks":[…]}</span></code></pre></div>
+          <div class="row" style="margin-top:12px">
+            <span class="chip chip-fail">BLOCK → stop</span>
+            <span class="chip chip-warn">CAUTION → escalate</span>
+            <span class="chip chip-pass">SAFE → sign</span>
+          </div>
+        </div>
+        <ul class="endpoints" aria-label="Endpoints">
+          <li><code><span class="m">POST</span>/api/check</code><span>{chain, to?, valueEth?, txHash?, protocol?} → verdict, score, reasons, checks[]</span></li>
+          <li><code><span class="m">GET</span>/api/verify/:txHash</code><span>one ONCHAIN_TX_LOOKUP verification · reverted ⇒ BLOCK</span></li>
+          <li><code><span class="m">GET</span>/api/stats</code><span>{checksRun, telegraphRequests, byIntent}</span></li>
+          <li><code><span class="m">GET</span>/healthz</code><span>{ok:true}</span></li>
+        </ul>
       </div>
     </div>
   </section>
 
   <!-- ============ FAQ ============ -->
-  <section class="band band-alt" id="faq" aria-labelledby="faq-title">
+  <section class="band-alt" id="faq" aria-labelledby="faq-title">
     <div class="wrap">
       <span class="label">FAQ</span>
-      <h2 class="h2" id="faq-title">Questions a founder or a judge would ask.</h2>
-      <div class="faq">
-        <article class="card">
+      <h2 id="faq-title">Four questions a judge would ask.</h2>
+      <div class="faq" style="margin-top:20px">
+        <article>
           <h3>What does a check cost?</h3>
-          <p>Each check is one paid query to a Telegraph miner at $0.01, settled in USDC on Base Sepolia through x402. A full
-            four-check report is four cents; the three-check example above cost three. Shield pays the miners from its own USDC
-            wallet, and every card shows exactly what was paid.</p>
+          <p>One miner query at $0.01 in USDC over x402 — a full four-check report is four cents.</p>
         </article>
-        <article class="card">
-          <h3>Which chains are supported?</h3>
-          <p><code>base</code> (mainnet), <code>ethereum</code> and <code>base-sepolia</code>. Whatever chain you check, the miner
-            payments themselves settle on Base Sepolia — that is where the live Telegraph deployment runs during Season I.</p>
+        <article>
+          <h3>Which chains?</h3>
+          <p><code>base</code>, <code>ethereum</code> and <code>base-sepolia</code>; miner payments always settle on Base Sepolia, where the live Telegraph deployment runs.</p>
         </article>
-        <article class="card">
-          <h3>Is a SAFE verdict a guarantee?</h3>
-          <p>No. Verdicts are advisory. Shield surfaces evidence a signing agent would otherwise not have; it does not custody the agent's
-            keys, sign, or block anything itself. Treat BLOCK as a hard stop, CAUTION as "escalate", and SAFE as "the live evidence found
-            nothing wrong" — not as a promise about the counterparty's intentions.</p>
+        <article>
+          <h3>Is SAFE a guarantee?</h3>
+          <p>No — verdicts are advisory; Shield surfaces live evidence and never custodies keys or signs.</p>
         </article>
-        <article class="card">
-          <h3>Is any of the data mocked, cached or simulated?</h3>
-          <p>No. Every answer comes from a live Telegraph miner at request time, paid for and stamped with a signal hash. If a miner is
-            unreachable, the check is graded <code>error</code> (or <code>warn</code> for an unavailable TVL) with the reason stated, and
-            the score drops. Shield never fills a gap with a plausible number.</p>
-        </article>
-        <article class="card">
-          <h3>How do I use it from an agent?</h3>
-          <p>Make one <code>POST /api/check</code> before signing and branch on <code>verdict</code> — the snippet in
-            <a href="#agents">For agents</a> is the whole integration. For a transaction that has already been mined,
-            <code>GET /api/verify/:txHash</code> returns a one-check verification report.</p>
-        </article>
-        <article class="card">
-          <h3>How long does a check take?</h3>
-          <p>About 2–4 seconds per paid check — the 402 challenge, the signed authorization, the retry and the settlement are real
-            network round-trips — and about 10 seconds for a full four-check report. Shield launches every applicable query at once,
-            but the x402 payments are serialized per payer wallet, so the paid round-trips complete one after another.</p>
-        </article>
-        <article class="card">
-          <h3>Why do some reports show fewer than four checks?</h3>
-          <p>Only the checks your input makes possible actually run. FEE always runs; COUNTERPARTY needs a transaction hash; VALUE
-            needs an ETH value; LIQUIDITY needs a protocol name. A check that did not run is not charged and does not affect the score.</p>
-        </article>
-        <article class="card">
-          <h3>Who operates the miners?</h3>
-          <p>FEE and COUNTERPARTY are answered first by Truvian's own miner (id 8453, <code>truvian-onchain-truth</code>). VALUE and
-            LIQUIDITY come from independent live miners on the network such as ChainSight and FinWire. The miner's name is printed on every
-            card, and the <a href="https://explorer.telegraphprotocol.com" target="_blank" rel="noopener">explorer</a> lists them all.</p>
+        <article>
+          <h3>Is anything mocked or cached?</h3>
+          <p>No; every answer comes from a live miner at request time, and an unreachable miner is graded <code>error</code>, never filled in.</p>
         </article>
       </div>
     </div>
   </section>
 
   <!-- ============ FINAL CTA ============ -->
-  <section class="band final" aria-labelledby="final-title">
+  <section class="final" aria-labelledby="final-title">
     <div class="wrap">
       <span class="label">Try it</span>
       <h2 id="final-title">Run a check against live miners now.</h2>
-      <p class="intro">Paste a recipient, a value and a protocol — or a mined transaction hash — and watch paid answers become one verdict,
-        each with a hash the Telegraph node will confirm.</p>
+      <p class="sub" style="margin:0 auto 24px">Four cents, ten seconds, receipts included.</p>
       <div class="cta-row">
         <a class="btn btn-primary" href="/app">Launch App</a>
-        <a class="btn" href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">Read the source ↗</a>
+        <a class="btn" href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">Source ↗</a>
       </div>
     </div>
   </section>
 
 </main>
 
-<footer class="site-footer">
+<footer class="foot">
   <div class="wrap">
-    <p>Truvian Shield · built for the Telegraph Protocol Season I hackathon, Track 3 · all answers come from live Telegraph miners · no mocked data · verdicts are advisory.</p>
-    <p class="links">
+    <a class="foot-brand" href="/"><img class="foot-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
+    <p style="margin:0">Truvian Shield · Telegraph Protocol Season I · Track 3 · live miners only · verdicts are advisory.</p>
+    <p class="links" style="margin-bottom:0">
       <a href="/app">app</a>
-      <span class="sep" aria-hidden="true">·</span>
       <a href="https://miner.truvian.xyz" target="_blank" rel="noopener">miner.truvian.xyz</a>
-      <span class="sep" aria-hidden="true">·</span>
       <a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">source</a>
-      <span class="sep" aria-hidden="true">·</span>
-      <a href="https://explorer.telegraphprotocol.com" target="_blank" rel="noopener">telegraph explorer</a>
-      <span class="sep" aria-hidden="true">·</span>
-      <a href="https://docs.telegraphprotocol.com/docs" target="_blank" rel="noopener">telegraph docs</a>
-      <span class="sep" aria-hidden="true">·</span>
+      <a href="https://explorer.telegraphprotocol.com" target="_blank" rel="noopener">explorer</a>
+      <a href="https://docs.telegraphprotocol.com/docs" target="_blank" rel="noopener">docs</a>
       <a href="/api/stats">/api/stats</a>
-      <span class="sep" aria-hidden="true">·</span>
       <a href="/healthz">/healthz</a>
     </p>
   </div>

@@ -27,3 +27,6 @@ out/
 # Track 2 scorer build artifacts & vendored reference repos
 scorer/vendor/
 scorer/target/
+
+# Shield runtime counters (written next to the process, never source)
+.shield-stats.json
