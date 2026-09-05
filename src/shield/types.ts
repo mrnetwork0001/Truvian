@@ -80,4 +80,6 @@ export interface ShieldStats {
   checksRun: number;
   telegraphRequests: number;
   byIntent: Record<ShieldIntent, number>;
+  /** Real USD paid to live miners over x402, all-time. */
+  paidUsd: number;
 }

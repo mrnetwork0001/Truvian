@@ -28,7 +28,9 @@ import {
   ShieldInputError,
   type SignalOutcome,
 } from './verdict.js';
-import type { CheckRequest, ShieldIntent, ShieldStats, ShieldTransport } from './types.js';
+import { createLimiter, type Limiter, type LimiterState } from './limits.js';
+import { payerAddress, payerUsdcBalance } from './payer.js';
+import type { CheckReport, CheckRequest, ShieldIntent, ShieldStats, ShieldTransport } from './types.js';
 
 const PUBLIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'public');
 const STATS_FILE = process.env.SHIELD_STATS_FILE ?? resolve(process.cwd(), '.shield-stats.json');
@@ -43,37 +45,56 @@ function defaultTransport(): ShieldTransport {
 
 // ---------- stats (best-effort persistence) ----------
 
+/** What actually lands on disk: public counters plus today's spend budget. */
+interface PersistedStats extends ShieldStats {
+  limits?: LimiterState;
+}
+
 function emptyStats(): ShieldStats {
   return {
     checksRun: 0,
     telegraphRequests: 0,
     byIntent: { GAS_PRICE: 0, ONCHAIN_TX_LOOKUP: 0, CRYPTO_PRICE: 0, TVL_LOOKUP: 0 },
+    paidUsd: 0,
   };
 }
 
-function loadStats(): ShieldStats {
+function loadStats(): { stats: ShieldStats; limits?: LimiterState } {
   const stats = emptyStats();
   try {
-    const parsed = JSON.parse(readFileSync(STATS_FILE, 'utf8')) as Partial<ShieldStats>;
+    const parsed = JSON.parse(readFileSync(STATS_FILE, 'utf8')) as Partial<PersistedStats>;
     stats.checksRun = Number(parsed.checksRun) || 0;
     stats.telegraphRequests = Number(parsed.telegraphRequests) || 0;
+    stats.paidUsd = Number(parsed.paidUsd) || 0;
     const by = parsed.byIntent;
     if (typeof by === 'object' && by !== null) {
       for (const key of Object.keys(stats.byIntent) as ShieldIntent[]) {
         stats.byIntent[key] = Number((by as Record<string, unknown>)[key]) || 0;
       }
     }
+    return parsed.limits ? { stats, limits: parsed.limits } : { stats };
   } catch {
     // first run or unreadable file - start from zeros
   }
-  return stats;
+  return { stats };
 }
 
 let persistChain: Promise<void> = Promise.resolve();
-function persistStats(stats: ShieldStats): void {
-  const snapshot = JSON.stringify(stats, null, 2);
+function persistStats(stats: ShieldStats, limits: LimiterState): void {
+  const snapshot = JSON.stringify({ ...stats, limits }, null, 2);
   // fire-and-forget, serialized so concurrent checks never interleave writes
   persistChain = persistChain.then(() => writeFile(STATS_FILE, snapshot, 'utf8')).catch(() => {});
+}
+
+/** Real USD a finished report paid to miners (x402 settlements only). */
+function reportSpendUsd(report: CheckReport): number {
+  let total = 0;
+  for (const check of report.checks) {
+    if (check.transport === 'x402' && typeof check.costUsd === 'number' && Number.isFinite(check.costUsd)) {
+      total += check.costUsd;
+    }
+  }
+  return total;
 }
 
 // ---------- tiny safe static handler (no @fastify/static in package.json) ----------
@@ -134,8 +155,24 @@ ul{list-style:none;padding:0}li{margin:.6rem 0}
 // ---------- server ----------
 
 export function buildShieldServer() {
-  const app = Fastify({ logger: true });
-  const stats = loadStats();
+  // Behind nginx the socket address is always 127.0.0.1, so per-IP limits need
+  // the forwarded address. Set SHIELD_TRUST_PROXY=0 when exposing Shield
+  // directly, where a client could otherwise forge the header.
+  const app = Fastify({ logger: true, trustProxy: process.env.SHIELD_TRUST_PROXY !== '0' });
+  const loaded = loadStats();
+  const stats = loaded.stats;
+  const limiter: Limiter = createLimiter();
+  limiter.hydrate(loaded.limits);
+
+  const save = (): void => persistStats(stats, limiter.serialize());
+
+  /** Refresh the payer balance in the background; never blocks a request. */
+  const refreshBalance = (): void => {
+    void payerUsdcBalance()
+      .then((balance) => limiter.setBalanceUsdc(balance))
+      .catch(() => limiter.setBalanceUsdc(null));
+  };
+  refreshBalance();
 
   /**
    * One live Telegraph query. Counts stats up-front (a launched request is a
@@ -159,13 +196,39 @@ export function buildShieldServer() {
   };
 
   app.get('/healthz', async () => ({ ok: true }));
-  app.get('/api/stats', async () => stats);
+
+  app.get('/api/stats', async (req) => {
+    refreshBalance(); // cached 60s inside payerUsdcBalance
+    const budget = limiter.snapshot();
+    const you = limiter.peek(req.ip);
+    return {
+      ...stats,
+      budget,
+      payer: payerAddress(),
+      you: { checksLeftToday: you.remainingForIp, perDay: budget.perIpDailyCap },
+    };
+  });
 
   app.post('/api/check', async (req, reply) => {
+    // Brakes BEFORE any miner is paid: one script must not be able to drain
+    // the payer wallet or take the service down.
+    const gate = limiter.consume(req.ip);
+    if (!gate.allowed) {
+      if (gate.retryAfterSec !== undefined) reply.header('Retry-After', String(gate.retryAfterSec));
+      return reply.status(429).send({
+        error: 'RATE_LIMITED',
+        scope: gate.scope,
+        message: gate.reason,
+        retryAfterSec: gate.retryAfterSec,
+        checksLeftToday: gate.remainingForIp,
+      });
+    }
+
     let parsed: CheckRequest;
     try {
       parsed = normalizeCheckRequest(req.body ?? {});
     } catch (err) {
+      limiter.refund(req.ip); // nothing was paid for, so nothing is charged
       if (err instanceof ShieldInputError) {
         return reply.status(400).send({ error: 'INVALID_INPUT', message: err.message });
       }
@@ -196,8 +259,12 @@ export function buildShieldServer() {
       price: outcome(2),
       tvl: outcome(3),
     });
+    const spent = reportSpendUsd(report);
     stats.checksRun++;
-    persistStats(stats);
+    stats.paidUsd = Number((stats.paidUsd + spent).toFixed(6));
+    limiter.recordSpend(spent);
+    save();
+    reply.header('X-Shield-Checks-Left', String(gate.remainingForIp));
     return report;
   });
 
@@ -206,10 +273,26 @@ export function buildShieldServer() {
     if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
       return reply.status(400).send({ error: 'INVALID_INPUT', message: 'txHash must be a 32-byte 0x-hex string' });
     }
+    // One paid ONCHAIN_TX_LOOKUP, so it draws on the same allowance as a check.
+    const gate = limiter.consume(req.ip);
+    if (!gate.allowed) {
+      if (gate.retryAfterSec !== undefined) reply.header('Retry-After', String(gate.retryAfterSec));
+      return reply.status(429).send({
+        error: 'RATE_LIMITED',
+        scope: gate.scope,
+        message: gate.reason,
+        retryAfterSec: gate.retryAfterSec,
+        checksLeftToday: gate.remainingForIp,
+      });
+    }
     const q = (req.query ?? {}) as Record<string, unknown>;
     const chain = typeof q.chain === 'string' && q.chain.trim() !== '' ? q.chain.trim().toLowerCase() : 'base';
     const result = await ask('ONCHAIN_TX_LOOKUP', { chain, hash: txHash.toLowerCase() });
-    persistStats(stats);
+    if (result.ok && result.result.transport === 'x402' && typeof result.result.costUsd === 'number') {
+      stats.paidUsd = Number((stats.paidUsd + result.result.costUsd).toFixed(6));
+      limiter.recordSpend(result.result.costUsd);
+    }
+    save();
     return assessTxVerification(txHash, result);
   });
 

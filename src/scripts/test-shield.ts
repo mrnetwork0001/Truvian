@@ -22,6 +22,7 @@ import {
   type SignalOutcome,
   type SignalSet,
 } from '../shield/verdict.js';
+import { createLimiter, utcDay } from '../shield/limits.js';
 import type { CheckReport, CheckRequest, IntentResult } from '../shield/types.js';
 
 let failures = 0;
@@ -220,6 +221,72 @@ function unitTests() {
   check('empty body -> empty request', Object.keys(normalizeCheckRequest({})).length === 0);
 }
 
+// ---------- rate limiting and spend cap ----------
+
+function limiterTests() {
+  console.log('\n--- limiter: per-IP burst, per-IP day, global day, spend cap ---');
+  let clock = Date.UTC(2026, 8, 5, 12, 0, 0); // fixed UTC noon, so day rollover is testable
+  const now = () => clock;
+
+  const burst = createLimiter({ perIpPerMinute: 2, perIpPerDay: 99, globalPerDay: 99, globalSpendUsdPerDay: 99, now });
+  check('burst: first two allowed', burst.consume('1.1.1.1').allowed && burst.consume('1.1.1.1').allowed);
+  const third = burst.consume('1.1.1.1');
+  check('burst: third denied', !third.allowed && third.scope === 'ip-burst');
+  check('burst: retry inside a minute', (third.retryAfterSec ?? 0) > 0 && (third.retryAfterSec ?? 0) <= 60);
+  check('burst: a different IP is unaffected', burst.consume('2.2.2.2').allowed);
+  clock += 61_000;
+  check('burst: allowed again after a minute', burst.consume('1.1.1.1').allowed);
+
+  const daily = createLimiter({ perIpPerMinute: 99, perIpPerDay: 3, globalPerDay: 99, globalSpendUsdPerDay: 99, now });
+  for (let i = 0; i < 3; i++) daily.consume('3.3.3.3');
+  const fourth = daily.consume('3.3.3.3');
+  check('ip-day: allowance exhausted', !fourth.allowed && fourth.scope === 'ip-day' && fourth.remainingForIp === 0);
+  check('ip-day: retry is until UTC midnight', (fourth.retryAfterSec ?? 0) > 3600);
+  clock += 24 * 60 * 60 * 1000;
+  check('ip-day: new UTC day restores the allowance', daily.consume('3.3.3.3').allowed);
+
+  const global = createLimiter({ perIpPerMinute: 99, perIpPerDay: 99, globalPerDay: 2, globalSpendUsdPerDay: 99, now });
+  global.consume('a');
+  global.consume('b');
+  const capped = global.consume('c');
+  check('global-day: cap stops every caller', !capped.allowed && capped.scope === 'global-day');
+
+  const spend = createLimiter({ perIpPerMinute: 99, perIpPerDay: 99, globalPerDay: 99, globalSpendUsdPerDay: 0.1, now });
+  check('spend: allowed while budget remains', spend.consume('d').allowed);
+  spend.recordSpend(0.04);
+  check('spend: still allowed at $0.04 of $0.10', spend.consume('d').allowed);
+  spend.recordSpend(0.04);
+  const broke = spend.consume('d');
+  check('spend: denied when the next check could exceed the budget', !broke.allowed && broke.scope === 'global-spend');
+  check('spend: snapshot reports real spend', Math.abs(spend.snapshot().spentTodayUsd - 0.08) < 1e-9);
+
+  const refund = createLimiter({ perIpPerMinute: 99, perIpPerDay: 1, globalPerDay: 99, globalSpendUsdPerDay: 99, now });
+  refund.consume('e');
+  refund.refund('e');
+  check('refund: a check that never ran is not charged', refund.consume('e').allowed);
+
+  const snap = createLimiter({ perIpPerMinute: 99, perIpPerDay: 5, globalPerDay: 10, globalSpendUsdPerDay: 1, now });
+  snap.setBalanceUsdc(0.2);
+  const s = snap.snapshot();
+  check('snapshot: funded-checks from balance', s.checksFunded === 5 && s.balanceUsdc === 0.2);
+  check('snapshot: caps surfaced', s.dailyCheckCap === 10 && s.perIpDailyCap === 5);
+  snap.setBalanceUsdc(null);
+  check('snapshot: unknown balance stays null, never zero', snap.snapshot().checksFunded === null);
+
+  const persisted = createLimiter({ perIpPerDay: 99, globalPerDay: 5, globalSpendUsdPerDay: 99, now });
+  persisted.consume('f');
+  persisted.recordSpend(0.04);
+  const state = persisted.serialize();
+  const revived = createLimiter({ perIpPerDay: 99, globalPerDay: 5, globalSpendUsdPerDay: 99, now });
+  revived.hydrate(state);
+  check('persistence: restart keeps today\'s spend', Math.abs(revived.snapshot().spentTodayUsd - 0.04) < 1e-9);
+  check('persistence: restart keeps today\'s count', revived.snapshot().checksToday === 1);
+  const stale = createLimiter({ globalPerDay: 5, now });
+  stale.hydrate({ day: '2020-01-01', checksToday: 5, spentTodayUsd: 9 });
+  check('persistence: yesterday\'s counters are ignored', stale.snapshot().checksToday === 0);
+  check('utcDay is the UTC calendar day', utcDay(Date.UTC(2026, 8, 5, 23, 59)) === '2026-09-05');
+}
+
 // ---------- e2e (SHIELD_E2E=1): real server + live Telegraph miners ----------
 
 async function e2eTests() {
@@ -266,6 +333,7 @@ async function e2eTests() {
 
 async function main() {
   unitTests();
+  limiterTests();
   if (process.env.SHIELD_E2E === '1') {
     await e2eTests();
   } else {

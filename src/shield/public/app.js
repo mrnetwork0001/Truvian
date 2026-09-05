@@ -51,9 +51,15 @@
         return res.json();
       })
       .then(function (stats) {
-        statsMain.textContent =
-          fmtInt(stats.checksRun) + ' checks · ' +
-          fmtInt(stats.telegraphRequests) + ' Telegraph requests routed';
+        var head = [
+          fmtInt(stats.checksRun) + ' checks',
+          fmtInt(stats.telegraphRequests) + ' Telegraph requests routed',
+        ];
+        if (typeof stats.paidUsd === 'number' && stats.paidUsd > 0) {
+          head.push('$' + stats.paidUsd.toFixed(2) + ' paid to miners');
+        }
+        statsMain.textContent = head.join(' · ');
+
         var parts = [];
         if (stats.byIntent && typeof stats.byIntent === 'object') {
           Object.keys(stats.byIntent).forEach(function (intent) {
@@ -63,7 +69,18 @@
             }
           });
         }
-        statsDetail.textContent = parts.length ? '(' + parts.join(' · ') + ')' : '';
+        var tail = parts.length ? '(' + parts.join(' · ') + ')' : '';
+        // Budget: how many checks the payer wallet can still fund, and how
+        // many free checks this visitor has left today.
+        var budget = stats.budget;
+        if (budget && typeof budget.checksFunded === 'number') {
+          tail += (tail ? ' · ' : '') + 'funded for ' + fmtInt(budget.checksFunded) + ' more checks';
+        }
+        var you = stats.you;
+        if (you && typeof you.checksLeftToday === 'number' && typeof you.perDay === 'number' && you.perDay > 0) {
+          tail += (tail ? ' · ' : '') + you.checksLeftToday + ' of ' + you.perDay + ' free checks left today';
+        }
+        statsDetail.textContent = tail;
       })
       .catch(function () {
         statsMain.textContent = 'live stats unavailable';

@@ -13,13 +13,18 @@
         .then(function (r) { if (!r.ok) throw new Error('stats ' + r.status); return r.json(); })
         .then(function (s) {
           if (!s || typeof s !== 'object') throw new Error('bad body');
-          main.textContent = n(s.checksRun) + ' checks run · ' + n(s.telegraphRequests) + ' Telegraph requests';
+          var head = [n(s.checksRun) + ' checks run', n(s.telegraphRequests) + ' Telegraph requests'];
+          if (typeof s.paidUsd === 'number' && s.paidUsd > 0) head.push('$' + s.paidUsd.toFixed(2) + ' paid to miners');
+          main.textContent = head.join(' · ');
           var parts = [];
           if (s.byIntent && typeof s.byIntent === 'object') {
             Object.keys(s.byIntent).forEach(function (k) {
               var v = s.byIntent[k];
               if (typeof v === 'number' && isFinite(v)) parts.push(k + ' ' + n(v));
             });
+          }
+          if (s.budget && typeof s.budget.checksFunded === 'number') {
+            parts.push('funded for ' + n(s.budget.checksFunded) + ' more checks');
           }
           det.textContent = parts.join(' · ');
           strip.hidden = false;
