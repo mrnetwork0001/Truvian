@@ -287,6 +287,75 @@ function limiterTests() {
   check('utcDay is the UTC calendar day', utcDay(Date.UTC(2026, 8, 5, 23, 59)) === '2026-09-05');
 }
 
+// ---------- agent guard: refuse-at thresholds ----------
+
+async function guardTests() {
+  console.log('\n--- agent guard: refusal thresholds ---');
+  const { guard, ShieldBlockedError, ShieldUnavailableError } = await import('../agent/guard.js');
+
+  const reports: Record<string, CheckReport> = {
+    SAFE: { verdict: 'SAFE', score: 100, reasons: [], checks: [] },
+    CAUTION: { verdict: 'CAUTION', score: 65, reasons: ['one check failed'], checks: [] },
+    BLOCK: { verdict: 'BLOCK', score: 30, reasons: ['two checks failed'], checks: [] },
+  };
+
+  // Stand in for Shield: return the verdict the case wants, without a network.
+  const withStubbedShield = async (verdict: keyof typeof reports, fn: () => Promise<unknown>) => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(reports[verdict]), { status: 200, headers: { 'content-type': 'application/json' } })) as typeof fetch;
+    try {
+      return await fn();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  };
+
+  const wallet = {
+    chain: { id: 8453 },
+    sendTransaction: async (_args: { to?: string | null; value?: bigint }) => '0xsigned' as `0x${string}`,
+  };
+  const tx = { to: '0x4cd00e387622c35bddb9b4c962c136462338bc31', value: 10n ** 16n };
+
+  const outcome = async (verdict: keyof typeof reports, refuseAt: 'BLOCK' | 'CAUTION') => {
+    const guarded = guard(wallet, { refuseAt, shieldUrl: 'http://shield.test' });
+    return withStubbedShield(verdict, async () => {
+      try {
+        await guarded.sendTransaction(tx);
+        return 'signed';
+      } catch (err) {
+        return err instanceof ShieldBlockedError ? 'refused' : `error:${(err as Error).name}`;
+      }
+    });
+  };
+
+  check('guard: BLOCK is refused at refuseAt=BLOCK', (await outcome('BLOCK', 'BLOCK')) === 'refused');
+  check('guard: CAUTION signs at refuseAt=BLOCK', (await outcome('CAUTION', 'BLOCK')) === 'signed');
+  check('guard: SAFE signs at refuseAt=BLOCK', (await outcome('SAFE', 'BLOCK')) === 'signed');
+  check('guard: CAUTION is refused at refuseAt=CAUTION', (await outcome('CAUTION', 'CAUTION')) === 'refused');
+  check('guard: BLOCK is refused at refuseAt=CAUTION', (await outcome('BLOCK', 'CAUTION')) === 'refused');
+  check('guard: SAFE signs at refuseAt=CAUTION', (await outcome('SAFE', 'CAUTION')) === 'signed');
+
+  // An unreachable Shield must not fail open unless explicitly allowed.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => { throw new Error('connect ECONNREFUSED'); }) as typeof fetch;
+  try {
+    const strict = guard(wallet, { shieldUrl: 'http://shield.test' });
+    let strictOutcome = 'signed';
+    try {
+      await strict.sendTransaction(tx);
+    } catch (err) {
+      strictOutcome = err instanceof ShieldUnavailableError ? 'refused' : 'other';
+    }
+    check('guard: unreachable Shield fails closed by default', strictOutcome === 'refused');
+
+    const lenient = guard(wallet, { shieldUrl: 'http://shield.test', allowOnShieldFailure: true });
+    check('guard: allowOnShieldFailure lets the transaction through', (await lenient.sendTransaction(tx)) === '0xsigned');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
 // ---------- e2e (SHIELD_E2E=1): real server + live Telegraph miners ----------
 
 async function e2eTests() {
@@ -334,6 +403,7 @@ async function e2eTests() {
 async function main() {
   unitTests();
   limiterTests();
+  await guardTests();
   if (process.env.SHIELD_E2E === '1') {
     await e2eTests();
   } else {
