@@ -32,6 +32,7 @@
       <a href="#scoring">Scoring</a>
       <a href="#architecture">Architecture</a>
       <a href="#agents">API</a>
+      <a href="#why">Why</a>
       <a href="#faq">FAQ</a>
     </nav>
   </div>
@@ -595,6 +596,43 @@ curl -sS https://truvian.xyz/api/check \
   </section>
 
   <!-- ============ FAQ ============ -->
+  <!-- ============ RECENT CHECKS (live feed) ============ -->
+  <section class="band-alt" id="recent" aria-labelledby="recent-title" hidden>
+    <div class="wrap">
+      <span class="label">Recent checks</span>
+      <h2 id="recent-title">Every verdict here was paid for and answered live.</h2>
+      <p class="sub">The last checks anyone ran, newest first. Open one to see its evidence, or resolve its signal hashes on the Telegraph node yourself.</p>
+      <div id="recent-list" class="recent-list"></div>
+    </div>
+  </section>
+
+  <!-- ============ WHY TRUVIAN ============ -->
+  <section id="why" aria-labelledby="why-title">
+    <div class="wrap">
+      <span class="label">Why Truvian</span>
+      <h2 id="why-title">We built the miner, the scorer and the app.</h2>
+      <p class="sub">Shield does not just consume Telegraph. The same team supplies the answers, wrote the module that grades them, and pays for every one it uses.</p>
+      <div class="why-grid">
+        <article class="why-card">
+          <span class="why-step">Supply</span>
+          <h3>The miner</h3>
+          <p>Registration 172, live at <a href="https://miner.truvian.xyz" target="_blank" rel="noopener">miner.truvian.xyz</a>, serving ONCHAIN_TX_LOOKUP and GAS_PRICE on Base. It counts the OP-stack L1 data fee that most implementations silently drop, and answers in about 0.8 seconds.</p>
+        </article>
+        <article class="why-card">
+          <span class="why-step">Quality</span>
+          <h3>The scorer</h3>
+          <p>An open WebAssembly module that grades miner answers on facts, not word overlap: exact values, addresses, status words, and negation. Promoted to network champion twice, registrations 544 and 617.</p>
+        </article>
+        <article class="why-card">
+          <span class="why-step">Demand</span>
+          <h3>This app</h3>
+          <p>Shield pays live miners in USDC for every check, and charges for its own, so the loop closes: supply, grading, and a paying customer, all on one protocol.</p>
+        </article>
+      </div>
+      <p class="why-note">Full source, including the scorer and its test harness, is on <a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">GitHub</a>.</p>
+    </div>
+  </section>
+
   <section class="band-alt" id="faq" aria-labelledby="faq-title">
     <div class="wrap">
       <span class="label">FAQ</span>

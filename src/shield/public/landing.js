@@ -36,6 +36,69 @@
   setInterval(load, 30000);
 })();
 
+/* Recent checks: the public feed of reports anyone can open. Hidden until
+   there is something real to show, so the page never advertises an empty list. */
+(function () {
+  'use strict';
+  var section = document.getElementById('recent');
+  var list = document.getElementById('recent-list');
+  if (!section || !list || typeof fetch !== 'function') return;
+
+  var VERDICT_CLASS = { SAFE: 'safe', CAUTION: 'caution', BLOCK: 'block' };
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  }
+
+  function ago(iso) {
+    var then = Date.parse(iso);
+    if (!isFinite(then)) return '';
+    var seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+    if (seconds < 60) return seconds + 's ago';
+    if (seconds < 3600) return Math.round(seconds / 60) + 'm ago';
+    if (seconds < 86400) return Math.round(seconds / 3600) + 'h ago';
+    return Math.round(seconds / 86400) + 'd ago';
+  }
+
+  function row(entry) {
+    var link = el('a', 'recent-row');
+    link.href = '/app?r=' + encodeURIComponent(entry.id);
+    var verdict = String(entry.verdict || '').toUpperCase();
+    link.appendChild(el('span', 'recent-verdict ' + (VERDICT_CLASS[verdict] || 'caution'), verdict));
+    link.appendChild(el('span', 'recent-score', 'score ' + entry.score));
+    link.appendChild(el('span', 'recent-meta', entry.chain + ' · ' + entry.checks + (entry.checks === 1 ? ' check' : ' checks')));
+    if (entry.signals && entry.signals.length) {
+      link.appendChild(el('span', 'recent-signals', entry.signals.length + ' signal ' + (entry.signals.length === 1 ? 'hash' : 'hashes')));
+    }
+    link.appendChild(el('span', 'recent-when', ago(entry.at)));
+    return link;
+  }
+
+  function load() {
+    fetch('/api/recent?limit=8', { headers: { accept: 'application/json' } })
+      .then(function (r) { if (!r.ok) throw new Error('recent ' + r.status); return r.json(); })
+      .then(function (data) {
+        var checks = (data && data.checks) || [];
+        if (!checks.length) return;
+        list.textContent = '';
+        checks.forEach(function (entry) { list.appendChild(row(entry)); });
+        section.hidden = false;
+        // The reveal pass ran while this section was still hidden, so its
+        // blocks are sitting at opacity 0 and were never observed. Show them.
+        Array.prototype.forEach.call(section.querySelectorAll('.rv'), function (node) {
+          node.classList.remove('rv', 'in');
+          node.style.removeProperty('--rv-d');
+        });
+      })
+      .catch(function () { /* leave the section hidden */ });
+  }
+  load();
+  setInterval(load, 60000);
+})();
+
 /* Scroll reveal: each section's blocks (and each card inside a grid) fade and
    rise into place the first time they enter the viewport, staggered. Once a
    block has arrived its helper classes are removed so nothing lingers. */
