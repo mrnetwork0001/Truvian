@@ -2,12 +2,12 @@
  * Truvian Shield verdict engine.
  *
  * Pure and deterministic: (caller request, live Telegraph signals) -> CheckReport.
- * No I/O, no clock reads — identical inputs always produce an identical report.
+ * No I/O, no clock reads - identical inputs always produce an identical report.
  *
  * Miner answers arrive as natural-language TEXT (that is what Telegraph
  * validators score, and what live miners actually return), so every parser
  * here is defensive: regexes for numbers and keywords, and an unparseable
- * answer degrades to a 'warn' with a stated reason — never a crash.
+ * answer degrades to a 'warn' with a stated reason - never a crash.
  */
 import type {
   CheckItem,
@@ -92,8 +92,8 @@ const SUFFIX_MULT: Record<string, number> = {
 const SUFFIX_RE = '(k|thousand|mm?|million|bn?|billion|t|trillion)?';
 
 /**
- * First USD amount in an answer — "$4,215.34", "$4.12 billion", "412,000 USD",
- * "4.12 billion dollars" — scaled by any magnitude suffix. Null if none found.
+ * First USD amount in an answer - "$4,215.34", "$4.12 billion", "412,000 USD",
+ * "4.12 billion dollars" - scaled by any magnitude suffix. Null if none found.
  */
 export function parseUsdAmount(text: string): number | null {
   const m =
@@ -216,7 +216,7 @@ function itemFromFailure(
 function evaluateFee(request: CheckRequest, outcome: SignalOutcome | undefined): CheckItem | null {
   const name = 'FEE';
   const intent: ShieldIntent = 'GAS_PRICE';
-  if (outcome === undefined) return null; // gas signal never collected — no check row
+  if (outcome === undefined) return null; // gas signal never collected - no check row
   if (!outcome.ok) return itemFromFailure(name, intent, 'error', `Telegraph GAS_PRICE query failed: ${outcome.reason}`, outcome);
 
   const r = outcome.result;
@@ -227,7 +227,7 @@ function evaluateFee(request: CheckRequest, outcome: SignalOutcome | undefined):
 
   if (level === 'high') {
     return itemFromResult(name, intent, 'warn',
-      `miner reports a high fee level${gwei !== null ? ` (${gwei} gwei)` : ''} — consider waiting for fees to settle`, r);
+      `miner reports a high fee level${gwei !== null ? ` (${gwei} gwei)` : ''} - consider waiting for fees to settle`, r);
   }
   if (gwei !== null && gwei > floor * 10) {
     return itemFromResult(name, intent, 'warn',
@@ -244,7 +244,7 @@ function evaluateCounterparty(request: CheckRequest, outcome: SignalOutcome | un
   const name = 'COUNTERPARTY';
   const intent: ShieldIntent = 'ONCHAIN_TX_LOOKUP';
   if (outcome === undefined) {
-    if (request.txHash === undefined) return null; // no referenced tx — check not applicable
+    if (request.txHash === undefined) return null; // no referenced tx - check not applicable
     return itemFromFailure(name, intent, 'error', 'no ONCHAIN_TX_LOOKUP signal was collected for the referenced transaction', outcome);
   }
   if (!outcome.ok) return itemFromFailure(name, intent, 'error', `Telegraph ONCHAIN_TX_LOOKUP query failed: ${outcome.reason}`, outcome);
@@ -252,15 +252,15 @@ function evaluateCounterparty(request: CheckRequest, outcome: SignalOutcome | un
   const r = outcome.result;
   const status = parseTxStatus(r.answer);
   if (status === 'reverted') {
-    return itemFromResult(name, intent, 'fail', 'the referenced transaction REVERTED on-chain — the counterparty evidence indicates failure', r);
+    return itemFromResult(name, intent, 'fail', 'the referenced transaction REVERTED on-chain - the counterparty evidence indicates failure', r);
   }
   if (status === 'not_found') {
-    return itemFromResult(name, intent, 'warn', 'the referenced transaction was not found on-chain — no usable evidence for this counterparty', r);
+    return itemFromResult(name, intent, 'warn', 'the referenced transaction was not found on-chain - no usable evidence for this counterparty', r);
   }
   if (status === 'success') {
     if (request.to !== undefined && !r.answer.toLowerCase().includes(request.to.toLowerCase())) {
       return itemFromResult(name, intent, 'warn',
-        `referenced transaction succeeded but its answer does not mention counterparty ${request.to} — evidence may be unrelated`, r);
+        `referenced transaction succeeded but its answer does not mention counterparty ${request.to} - evidence may be unrelated`, r);
     }
     return itemFromResult(name, intent, 'pass',
       `referenced transaction succeeded on-chain${request.to !== undefined ? ' and involves the stated counterparty' : ''}`, r);
@@ -283,11 +283,11 @@ function evaluateValue(
 
   const r = outcome.result;
   if (request.valueEth === undefined) {
-    return itemFromResult(name, intent, 'pass', 'no transaction value supplied — nothing to appraise', r);
+    return itemFromResult(name, intent, 'pass', 'no transaction value supplied - nothing to appraise', r);
   }
   const usdPerEth = parseUsdAmount(r.answer);
   if (usdPerEth === null) {
-    return itemFromResult(name, intent, 'warn', 'could not parse an ETH/USD price from the miner answer — transaction value left unpriced', r);
+    return itemFromResult(name, intent, 'warn', 'could not parse an ETH/USD price from the miner answer - transaction value left unpriced', r);
   }
   const usd = request.valueEth * usdPerEth;
   const label = `${request.valueEth} ETH ~ ${fmtUsd(usd)} (ETH at ${fmtUsd(usdPerEth)})`;
@@ -295,12 +295,12 @@ function evaluateValue(
     // >$100k needs on-chain evidence: a referenced tx that actually succeeded.
     const txVerified = txOutcome !== undefined && txOutcome.ok && parseTxStatus(txOutcome.result.answer) === 'success';
     if (request.txHash !== undefined && txVerified) {
-      return itemFromResult(name, intent, 'warn', `${label} exceeds ${fmtUsd(VALUE_FAIL_USD)} — allowed only because verified on-chain tx evidence was supplied`, r);
+      return itemFromResult(name, intent, 'warn', `${label} exceeds ${fmtUsd(VALUE_FAIL_USD)} - allowed only because verified on-chain tx evidence was supplied`, r);
     }
     return itemFromResult(name, intent, 'fail', `${label} exceeds ${fmtUsd(VALUE_FAIL_USD)} with no verified txHash evidence`, r);
   }
   if (usd > VALUE_WARN_USD) {
-    return itemFromResult(name, intent, 'warn', `${label} exceeds ${fmtUsd(VALUE_WARN_USD)} — double-check the recipient before signing`, r);
+    return itemFromResult(name, intent, 'warn', `${label} exceeds ${fmtUsd(VALUE_WARN_USD)} - double-check the recipient before signing`, r);
   }
   return itemFromResult(name, intent, 'pass', `transaction value ${label} is below the caution thresholds`, r);
 }
@@ -310,12 +310,12 @@ function evaluateLiquidity(request: CheckRequest, outcome: SignalOutcome | undef
   const intent: ShieldIntent = 'TVL_LOOKUP';
   const protocol = request.protocol ?? 'the protocol';
   if (outcome === undefined) {
-    if (request.protocol === undefined) return null; // no protocol named — check not applicable
+    if (request.protocol === undefined) return null; // no protocol named - check not applicable
     // spec: TVL unavailable => warn (not error)
-    return itemFromFailure(name, intent, 'warn', `no TVL signal available for ${protocol} — liquidity unverified`, outcome);
+    return itemFromFailure(name, intent, 'warn', `no TVL signal available for ${protocol} - liquidity unverified`, outcome);
   }
   if (!outcome.ok) {
-    return itemFromFailure(name, intent, 'warn', `TVL signal unavailable for ${protocol} (${outcome.reason}) — liquidity unverified`, outcome);
+    return itemFromFailure(name, intent, 'warn', `TVL signal unavailable for ${protocol} (${outcome.reason}) - liquidity unverified`, outcome);
   }
 
   const r = outcome.result;
@@ -404,7 +404,7 @@ export function assessTxVerification(txHash: string, outcome: SignalOutcome | un
     verdict = 'BLOCK';
     score = 20;
   } else if (status === 'not_found') {
-    check = itemFromResult(name, intent, 'warn', `transaction ${hash} was not found on-chain — it may be unmined, dropped, or on another chain`, r);
+    check = itemFromResult(name, intent, 'warn', `transaction ${hash} was not found on-chain - it may be unmined, dropped, or on another chain`, r);
     verdict = 'CAUTION';
     score = 60;
   } else if (status === 'success') {
@@ -413,7 +413,7 @@ export function assessTxVerification(txHash: string, outcome: SignalOutcome | un
       verdict = 'SAFE';
       score = 100;
     } else {
-      check = itemFromResult(name, intent, 'warn', `miner reports success but its answer does not reference ${hash} — treat as unverified`, r);
+      check = itemFromResult(name, intent, 'warn', `miner reports success but its answer does not reference ${hash} - treat as unverified`, r);
       verdict = 'CAUTION';
       score = 60;
     }

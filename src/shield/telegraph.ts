@@ -5,23 +5,23 @@
  * TVL_LOOKUP) into a call against a LIVE Telegraph miner and returns a
  * uniform IntentResult. Two transports:
  *
- *  - 'x402'   — pays through the Telegraph node's miner dispatcher
+ *  - 'x402'   - pays through the Telegraph node's miner dispatcher
  *               (POST|GET /miner-dispatcher/v1/{minerId}{path}) with an
  *               x402 v2 exact-scheme payment: USDC on Base Sepolia via a
  *               signed EIP-3009 TransferWithAuthorization, sent base64 in
  *               the PAYMENT-SIGNATURE header. Wire format verified against
  *               the live node's 402 challenge and the x402 v2 spec
  *               (see src/shield/X402-NOTES.md).
- *  - 'direct' — calls the same live miners on their public base_url from
+ *  - 'direct' - calls the same live miners on their public base_url from
  *               the node's FREE catalog (GET /api/miners). Still real
- *               Telegraph miners — dev/fallback mode, labeled in
+ *               Telegraph miners - dev/fallback mode, labeled in
  *               IntentResult.transport.
  *
  * Routing is deterministic: candidates come from the free catalog at
  * request time (60s cache), our own miner 8453 first for its two intents,
  * then curated known-good miners, then the rest ordered by their current
  * leaderboard rank for the intent. One retry to a different miner; 10s
- * timeout per request; this module never throws — total failure returns an
+ * timeout per request; this module never throws - total failure returns an
  * IntentResult whose answer starts with 'unavailable:'.
  */
 import { randomBytes } from 'node:crypto';
@@ -96,7 +96,7 @@ const STATIC_MINERS: CatalogMiner[] = [
   },
   {
     id: '302',
-    name: 'ChainSight — On-Chain Intelligence Hub',
+    name: 'ChainSight - On-Chain Intelligence Hub',
     base_url: 'https://hub.shadrakbessanh.me',
     activation_status: 'active',
     supported_intents: ['CRYPTO_PRICE', 'TVL_LOOKUP', 'GAS_PRICE', 'ONCHAIN_TX_LOOKUP'],
@@ -139,7 +139,7 @@ async function loadCatalog(): Promise<CatalogMiner[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Route planning — deterministic candidate list per intent
+// Route planning - deterministic candidate list per intent
 // ---------------------------------------------------------------------------
 
 interface PlannedCall {
@@ -470,7 +470,7 @@ interface X402FetchResult {
  * PAYMENT-SIGNATURE header, and surface the PAYMENT-RESPONSE settlement.
  */
 // The facilitator rejects overlapping authorizations from one payer
-// ("batch_send_failed: missing_or_invalid_parameters…" — observed when four
+// ("batch_send_failed: missing_or_invalid_parameters…" - observed when four
 // checks paid at once), so payments are serialized per process. A check with
 // four paid intents costs ~4 sequential round-trips (~10 s), well inside the
 // proxy timeout, and nothing is lost to a rejected batch.
@@ -604,7 +604,7 @@ async function readBody(res: Response): Promise<unknown> {
 }
 
 // ---------------------------------------------------------------------------
-// askIntent — the Shield-facing entry point
+// askIntent - the Shield-facing entry point
 // ---------------------------------------------------------------------------
 
 function resolveTransport(): 'x402' | 'direct' {
@@ -756,7 +756,7 @@ export async function askIntent(intent: ShieldIntent, params: Record<string, str
       }
     }
     const summary = failures.map((f) => `${f.minerId}: ${f.error}`).join('; ');
-    return unavailable(transport, `all ${failures.length} miner attempt(s) failed — ${summary}`, startedAt, { failures });
+    return unavailable(transport, `all ${failures.length} miner attempt(s) failed - ${summary}`, startedAt, { failures });
   } catch (err) {
     return unavailable(transport, err instanceof Error ? err.message : String(err), startedAt, null);
   }

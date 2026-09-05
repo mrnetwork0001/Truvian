@@ -37,7 +37,7 @@
   <main>
     <section class="check-section" aria-labelledby="check-heading">
       <h2 id="check-heading" class="section-label">Run a check</h2>
-      <p class="section-note">Describe the transaction your agent is about to sign — or paste a mined
+      <p class="section-note">Describe the transaction your agent is about to sign - or paste a mined
         transaction hash to verify it instead. Shield queries live Telegraph miners and returns a
         go/no-go verdict with per-check evidence.</p>
 
@@ -64,7 +64,7 @@
         </div>
 
         <div class="field wide">
-          <label for="txHash">transaction hash <span class="label-hint">— verify a mined transaction instead</span></label>
+          <label for="txHash">transaction hash <span class="label-hint">- verify a mined transaction instead</span></label>
           <input id="txHash" name="txHash" type="text" placeholder="0x… (64 hex chars)"
                  autocomplete="off" spellcheck="false">
         </div>
@@ -94,7 +94,7 @@
     <section class="how-section" aria-labelledby="how-heading">
       <h2 id="how-heading" class="section-label">How it works</h2>
       <p class="section-note">Every check below is a paid query to a live Telegraph miner. Shield
-        never fabricates data — each answer arrives from the network with its own cost, latency and,
+        never fabricates data - each answer arrives from the network with its own cost, latency and,
         when the engine issues one, a signal hash you can verify independently.</p>
       <div class="how-grid">
         <div class="how-item">
@@ -105,7 +105,7 @@
         <div class="how-item">
           <span class="intent-tag">ONCHAIN_TX_LOOKUP</span>
           <h3>On-chain facts</h3>
-          <p>Canonical transaction facts read from real chain state — the same check that verifies a mined transaction hash.</p>
+          <p>Canonical transaction facts read from real chain state - the same check that verifies a mined transaction hash.</p>
         </div>
         <div class="how-item">
           <span class="intent-tag">CRYPTO_PRICE</span>
@@ -118,7 +118,7 @@
           <p>When a protocol is named, its reported TVL helps flag drained or suspicious targets.</p>
         </div>
       </div>
-      <p class="how-footnote">Verdicts are advisory — the final signing decision stays with the agent.
+      <p class="how-footnote">Verdicts are advisory - the final signing decision stays with the agent.
         Responses carrying a signal hash can be checked against the
         <a href="https://explorer.telegraphprotocol.com" target="_blank" rel="noopener">Telegraph explorer</a>.</p>
     </section>

@@ -27,7 +27,7 @@ export interface DecodedTransfer {
   token: string;
   from: string;
   to: string;
-  /** Raw token units as decimal string (no decimals scaling — that is presentation) */
+  /** Raw token units as decimal string (no decimals scaling - that is presentation) */
   amount: string;
   logIndex: number;
 }
@@ -45,7 +45,7 @@ export interface TxLookupResult {
    * Telegraph signal_mapping.label_field. Carries the FULL answer statement:
    * the node translates miner responses to an internal standard built from
    * the mapped fields, so the scored text must live here (the rank-1 miner's
-   * `signal` is its complete sentence — verified against its live API).
+   * `signal` is its complete sentence - verified against its live API).
    */
   signal: string;
   /** Provenance for signal_mapping.reason_field */
@@ -71,11 +71,11 @@ export interface TxLookupResult {
   effectiveGasPrice: string;
   /** OP-stack L1 data fee in wei; "0" on non-OP-stack chains */
   l1FeeWei: string;
-  /** gasUsed * effectiveGasPrice + l1Fee — the true total cost */
+  /** gasUsed * effectiveGasPrice + l1Fee - the true total cost */
   totalFeeWei: string;
   logCount: number;
   erc20Transfers: DecodedTransfer[];
-  /** Confirmations at response time — informational, NOT a scored field */
+  /** Confirmations at response time - informational, NOT a scored field */
   confirmations: string;
 }
 
@@ -86,14 +86,14 @@ export interface GasPriceInput {
 }
 
 export interface GasPriceResult {
-  /** Number-first natural-language answer — see TxLookupResult.answer */
+  /** Number-first natural-language answer - see TxLookupResult.answer */
   answer: string;
   signal: string;
   source: string;
   confidence: number;
   chain: SupportedChain;
   chainId: number;
-  /** Block this snapshot is anchored to — makes the answer verifiable */
+  /** Block this snapshot is anchored to - makes the answer verifiable */
   blockNumber: string;
   baseFeePerGasWei: string;
   /** eth_gasPrice */

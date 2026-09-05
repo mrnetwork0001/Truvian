@@ -32,7 +32,7 @@ const REGISTRY: Record<SupportedChain, ChainEntry> = {
     rpcUrls: ['https://rpc.xlayer.tech'],
     isOpStack: false,
   },
-  // Telegraph's own home chain — validators are likely to ask about it
+  // Telegraph's own home chain - validators are likely to ask about it
   'base-sepolia': {
     chain: baseSepolia,
     rpcUrls: ['https://sepolia.base.org', 'https://base-sepolia-rpc.publicnode.com'],

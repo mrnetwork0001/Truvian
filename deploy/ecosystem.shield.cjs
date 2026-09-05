@@ -23,7 +23,7 @@ module.exports = {
 
         // SHIELD_TRANSPORT: 'x402',
         //   Optional override. Defaults to 'x402' whenever TELEGRAPH_PAYER_KEY
-        //   is set, else 'direct' (free catalog base_urls — still real
+        //   is set, else 'direct' (free catalog base_urls - still real
         //   Telegraph miners, labeled in every check). See src/shield/telegraph.ts.
       },
       instances: 1,

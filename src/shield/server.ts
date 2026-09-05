@@ -64,7 +64,7 @@ function loadStats(): ShieldStats {
       }
     }
   } catch {
-    // first run or unreadable file — start from zeros
+    // first run or unreadable file - start from zeros
   }
   return stats;
 }
@@ -122,12 +122,12 @@ code{background:#161616;border:1px solid #262626;border-radius:4px;padding:.15re
 ul{list-style:none;padding:0}li{margin:.6rem 0}
 </style></head><body><main>
 <h1>Truvian Shield</h1>
-<p>Execution-safety checkpoint over live Telegraph miners. The dashboard has not been deployed to <code>src/shield/public/</code> yet — the API is live:</p>
+<p>Execution-safety checkpoint over live Telegraph miners. The dashboard has not been deployed to <code>src/shield/public/</code> yet - the API is live:</p>
 <ul>
-<li><code>POST /api/check</code> — body <code>{chain?, to?, valueEth?, txHash?, protocol?}</code> &rarr; go/no-go CheckReport</li>
-<li><code>GET /api/verify/:txHash</code> — single-transaction verification report</li>
-<li><code>GET /api/stats</code> — live Telegraph request counters</li>
-<li><code>GET /healthz</code> — liveness</li>
+<li><code>POST /api/check</code> - body <code>{chain?, to?, valueEth?, txHash?, protocol?}</code> &rarr; go/no-go CheckReport</li>
+<li><code>GET /api/verify/:txHash</code> - single-transaction verification report</li>
+<li><code>GET /api/stats</code> - live Telegraph request counters</li>
+<li><code>GET /healthz</code> - liveness</li>
 </ul>
 </main></body></html>`;
 
@@ -139,7 +139,7 @@ export function buildShieldServer() {
 
   /**
    * One live Telegraph query. Counts stats up-front (a launched request is a
-   * real Telegraph request whether or not it succeeds) and never rejects —
+   * real Telegraph request whether or not it succeeds) and never rejects -
    * failures become ok:false outcomes the verdict engine renders as evidence.
    */
   const ask = async (intent: ShieldIntent, params: Record<string, string>): Promise<SignalOutcome> => {
@@ -173,7 +173,7 @@ export function buildShieldServer() {
     }
 
     const chain = parsed.chain ?? 'base';
-    // Fan out only the intents this request can use — every one is a paid
+    // Fan out only the intents this request can use - every one is a paid
     // (or at minimum live) Telegraph query, so unused signals are not burned.
     const jobs: Array<Promise<SignalOutcome> | undefined> = [
       ask('GAS_PRICE', { chain }),

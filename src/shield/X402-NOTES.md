@@ -1,11 +1,11 @@
-# x402 payment mechanics — Telegraph node (empirical notes)
+# x402 payment mechanics - Telegraph node (empirical notes)
 
 Findings captured live on 2026-09-05 against `https://devnode.telegraphprotocol.com`,
 cross-checked against the x402 v2 specification (`coinbase/x402` →
 `specs/x402-specification-v2.md`, `specs/transports-v2/http.md`,
 `specs/schemes/exact/scheme_exact_evm.md`) and the client code in
 `telegraphprotocol/telegraph-usecases` (`*/api/src/x402Fetch.ts`, which uses the
-`@x402/fetch` npm client — Solana scheme only, so our EVM client is built from
+`@x402/fetch` npm client - Solana scheme only, so our EVM client is built from
 the spec directly with viem; **no `@x402/*` dependency needed or added**).
 
 ## 1. The live 402 challenge (verified with curl)
@@ -13,7 +13,7 @@ the spec directly with viem; **no `@x402/*` dependency needed or added**).
 Both paid surfaces answer identically when unpaid:
 
 - `POST /engine/v1/ask` (LLM-routed auto-ask)
-- `GET|POST /miner-dispatcher/v1/{minerId}{endpointPath}` (deterministic dispatch — what Shield uses)
+- `GET|POST /miner-dispatcher/v1/{minerId}{endpointPath}` (deterministic dispatch - what Shield uses)
 
 Response: HTTP **402** with a **`payment-required`** header containing
 base64-encoded JSON (`x402Version: 2`). Decoded challenge from the dispatcher:
@@ -37,7 +37,7 @@ base64-encoded JSON (`x402Version: 2`). Decoded challenge from the dispatcher:
       "maxTimeoutSeconds": 60,
       "extra": { "name": "USDC", "version": "2" }
     },
-    { "scheme": "exact", "network": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1", "…": "(Solana option — not used)" }
+    { "scheme": "exact", "network": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1", "…": "(Solana option - not used)" }
   ]
 }
 ```
@@ -45,7 +45,7 @@ base64-encoded JSON (`x402Version: 2`). Decoded challenge from the dispatcher:
 - Price is `10000` atomic USDC = **$0.01 per request** (the miner's on-chain
   `minPriceUsdc` floor; the same amount appears on every miner probed).
 - `asset` is Circle USDC on **Base Sepolia (84532)**; `payTo` is the Telegraph
-  Diamond contract. The JSON *body* of the 402 is a v1-style human summary —
+  Diamond contract. The JSON *body* of the 402 is a v1-style human summary -
   the header is authoritative.
 
 ## 2. Client protocol (x402 v2 over HTTP, exact/EVM scheme, EIP-3009)
@@ -59,7 +59,7 @@ Header summary (all base64-encoded JSON):
 | `PAYMENT-RESPONSE`  | server → client | `SettlementResponse` (tx hash or errorReason)  |
 
 The client never talks to the facilitator (`https://facilitator.payai.network`)
-directly — the node does verification + settlement server-side and the
+directly - the node does verification + settlement server-side and the
 facilitator broadcasts `transferWithAuthorization`, paying the gas. **The payer
 wallet therefore needs USDC only, no Base Sepolia ETH.**
 
@@ -88,7 +88,7 @@ EIP-712 signing (viem `account.signTypedData`, no RPC involved):
 
 - domain: `{ name: extra.name ("USDC"), version: extra.version ("2"), chainId: 84532, verifyingContract: asset }`
 - primaryType `TransferWithAuthorization`, fields
-  `(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce)` — EIP-3009.
+  `(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce)` - EIP-3009.
 
 ## 3. What is verified vs. what awaits funding
 
@@ -105,7 +105,7 @@ EIP-712 signing (viem `account.signTypedData`, no RPC involved):
   {"success":false,"errorReason":"invalid_exact_evm_insufficient_balance","payer":"0xd8D5…C14C","transaction":"","network":"eip155:84532"}
   ```
 
-  `payer` matched our signing address exactly — signing, encoding and header
+  `payer` matched our signing address exactly - signing, encoding and header
   transport are all correct; only the balance check failed. `askIntent` on the
   x402 transport surfaces this as
   `unavailable: … payment rejected: invalid_exact_evm_insufficient_balance`.
@@ -118,7 +118,7 @@ EIP-712 signing (viem `account.signTypedData`, no RPC involved):
   free) documents the **raw miner JSON** as the 200 body; the engine ask route
   may instead wrap it in the `{miner_id, miner_name, result, cost_usd,
   signal_hash, …}` envelope. `parseAnswerBody` in `telegraph.ts` handles both,
-  and also looks for `signal-hash` / `x-signal-hash` response headers — confirm
+  and also looks for `signal-hash` / `x-signal-hash` response headers - confirm
   which fields actually arrive once funded, especially where `signal_hash`
   lives on dispatcher responses.
 
@@ -126,7 +126,7 @@ EIP-712 signing (viem `account.signTypedData`, no RPC involved):
 
 | Variable                 | Meaning                                                                                              |
 | ------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `TELEGRAPH_PAYER_KEY`    | 0x-prefixed EVM private key. Fund its address with **Base Sepolia USDC** (`0x036CbD53842c5426634e7929541eC2318f3dCF7e`) — Circle faucet: <https://faucet.circle.com> (select Base Sepolia). No ETH needed. $0.01/request → $1 of USDC ≈ 100 requests. |
+| `TELEGRAPH_PAYER_KEY`    | 0x-prefixed EVM private key. Fund its address with **Base Sepolia USDC** (`0x036CbD53842c5426634e7929541eC2318f3dCF7e`) - Circle faucet: <https://faucet.circle.com> (select Base Sepolia). No ETH needed. $0.01/request → $1 of USDC ≈ 100 requests. |
 | `SHIELD_TRANSPORT`       | `x402` \| `direct`. Default: `x402` when `TELEGRAPH_PAYER_KEY` is set, else `direct`.                |
 | `SHIELD_MAX_PAYMENT_USDC`| Per-request price cap in USD (default `0.10`). A challenge above the cap is refused, never signed.   |
 | `TELEGRAPH_NODE_URL`     | Node override (default `https://devnode.telegraphprotocol.com`).                                     |

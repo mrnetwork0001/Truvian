@@ -1,10 +1,10 @@
 /**
- * Truvian Shield contract types — the single source of truth shared by the
+ * Truvian Shield contract types - the single source of truth shared by the
  * Telegraph transport (telegraph.ts), the verdict engine (verdict.ts), the
  * API server (server.ts) and the dashboard.
  *
  * Deliberately structural (interfaces + string-literal unions, no classes):
- * telegraph.ts may import these or declare identical shapes — either way the
+ * telegraph.ts may import these or declare identical shapes - either way the
  * modules stay assignment-compatible.
  */
 
@@ -12,8 +12,8 @@ export type ShieldIntent = 'GAS_PRICE' | 'ONCHAIN_TX_LOOKUP' | 'CRYPTO_PRICE' | 
 
 /**
  * How the answer was obtained from Telegraph:
- *  - 'x402'   — paid through the Telegraph engine/dispatcher with TELEGRAPH_PAYER_KEY
- *  - 'direct' — live miner called on its public base_url from the FREE catalog
+ *  - 'x402'   - paid through the Telegraph engine/dispatcher with TELEGRAPH_PAYER_KEY
+ *  - 'direct' - live miner called on its public base_url from the FREE catalog
  *               (still a real Telegraph miner; dev/fallback mode, labeled as such)
  */
 export type ShieldTransport = 'x402' | 'direct';
@@ -26,7 +26,7 @@ export interface IntentResult {
   minerName?: string;
   /** x402 payment cost in USD, when the transport paid for the answer */
   costUsd?: number;
-  /** Telegraph signal hash — verifiable at GET /engine/v1/signal/{hash} */
+  /** Telegraph signal hash - verifiable at GET /engine/v1/signal/{hash} */
   signalHash?: string;
   latencyMs: number;
   transport: ShieldTransport;

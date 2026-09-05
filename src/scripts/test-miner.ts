@@ -11,7 +11,7 @@ import { IntentError } from '../types/index.js';
 
 let failures = 0;
 function check(name: string, cond: boolean, detail = '') {
-  console.log(`${cond ? '✅' : '❌'} ${name}${detail ? ` — ${detail}` : ''}`);
+  console.log(`${cond ? '✅' : '❌'} ${name}${detail ? ` - ${detail}` : ''}`);
   if (!cond) failures++;
 }
 

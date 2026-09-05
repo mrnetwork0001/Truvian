@@ -73,7 +73,7 @@ export async function handleGasPrice(input: GasPriceInput): Promise<GasPriceResu
 
     return {
       answer,
-      // Full statement in the label_field — see txLookup.ts for why.
+      // Full statement in the label_field - see txLookup.ts for why.
       signal: answer,
       source: `${chainLabel} JSON-RPC eth_gasPrice + eth_feeHistory + latest block`,
       confidence: 0.99,

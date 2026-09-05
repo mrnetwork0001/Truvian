@@ -1,4 +1,4 @@
-/* Truvian Shield landing — live stats strip only.
+/* Truvian Shield landing - live stats strip only.
    GET /api/stats (same origin) -> {checksRun, telegraphRequests, byIntent}. Strip stays hidden until real numbers arrive. */
 (function () {
   'use strict';

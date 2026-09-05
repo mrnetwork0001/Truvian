@@ -1,4 +1,4 @@
-/* Truvian Shield frontend — vanilla JS against the Shield API.
+/* Truvian Shield frontend - vanilla JS against the Shield API.
    Consumes: POST /api/check -> CheckReport, GET /api/stats.
    All server strings are rendered via textContent (never innerHTML). */
 'use strict';
@@ -18,7 +18,7 @@
   var ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
   var TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
   // The node's own signal endpoint resolves a signal hash to its recorded
-  // payload — a verification anyone can perform, which is the whole point.
+  // payload - a verification anyone can perform, which is the whole point.
   var SIGNAL_VERIFY_URL = 'https://devnode.telegraphprotocol.com/engine/v1/signal/';
 
   function el(tag, className, text) {
@@ -96,11 +96,11 @@
     var protocol = document.getElementById('protocol').value.trim();
 
     if (txHash && !TX_HASH_RE.test(txHash)) {
-      showFormError('That transaction hash does not look right — expected 0x followed by 64 hex characters.');
+      showFormError('That transaction hash does not look right - expected 0x followed by 64 hex characters.');
       return null;
     }
     if (to && !ADDRESS_RE.test(to)) {
-      showFormError('That recipient address does not look right — expected 0x followed by 40 hex characters.');
+      showFormError('That recipient address does not look right - expected 0x followed by 40 hex characters.');
       return null;
     }
     if (!txHash && !to) {
@@ -182,7 +182,7 @@
 
     // Evidence cards
     evidenceHeading.textContent = checks.length
-      ? 'Evidence — ' + checks.length + (checks.length === 1 ? ' check' : ' checks') + ' against live Telegraph miners'
+      ? 'Evidence - ' + checks.length + (checks.length === 1 ? ' check' : ' checks') + ' against live Telegraph miners'
       : '';
     checksEl.textContent = '';
     checks.forEach(function (check) {
@@ -221,7 +221,7 @@
         transport === 'x402' ? 'x402 · paid' : 'direct · fallback');
       chip.title = transport === 'x402'
         ? 'Paid through the Telegraph engine via x402 (USDC on Base Sepolia)'
-        : 'Direct call to the live miner from the free Telegraph catalog — dev/fallback mode';
+        : 'Direct call to the live miner from the free Telegraph catalog - dev/fallback mode';
       meta.appendChild(chip);
     }
     if (check.signalHash) {

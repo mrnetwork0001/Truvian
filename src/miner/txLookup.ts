@@ -72,7 +72,7 @@ export function validateTxLookupInput(raw: unknown): TxLookupInput {
     chain = chainFromText(query);
   }
 
-  // a natural-language query may carry the hash inline — extract it
+  // a natural-language query may carry the hash inline - extract it
   let txHash = typeof hashRaw === 'string' ? hashRaw.trim() : '';
   if (!txHash && query) {
     txHash = query.match(/0x[0-9a-fA-F]{64}/)?.[0] ?? '';
@@ -141,7 +141,7 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
   const erc20Transfers: DecodedTransfer[] = [];
   for (const log of receipt.logs) {
     // ERC-20 Transfer: topic0 = signature, topics[1]=from, topics[2]=to, data=amount.
-    // ERC-721 Transfer shares topic0 but carries tokenId as a 4th topic — excluded here.
+    // ERC-721 Transfer shares topic0 but carries tokenId as a 4th topic - excluded here.
     if (log.topics[0] === TRANSFER_TOPIC && log.topics.length === 3 && log.topics[1] && log.topics[2]) {
       erc20Transfers.push({
         token: getAddress(log.address),
@@ -164,7 +164,7 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
   const created = receipt.contractAddress ? getAddress(receipt.contractAddress) : null;
   const selector = tx.input && tx.input.length >= 10 ? tx.input.slice(0, 10) : null;
   // Scored text covers exactly the fact scope ground truth is observed to use
-  // (tx, chain, status, block, value, from/to, selector) — the rank-1 miner
+  // (tx, chain, status, block, value, from/to, selector) - the rank-1 miner
   // scores 0.981 with this scope, and extra numerics (fees, log counts) cost
   // precision under the live scorer. Full detail stays in structured fields.
   const answerParts = [
@@ -177,7 +177,7 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
 
   return {
     answer,
-    // signal is our YAML signal_mapping.label_field — the node's "internal
+    // signal is our YAML signal_mapping.label_field - the node's "internal
     // standard" translation is built from mapped fields, so this must carry
     // the full factual statement (verified: the rank-1 miner's `signal` is
     // its complete answer sentence, not a label).

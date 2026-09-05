@@ -8,7 +8,7 @@
  *
  * E2E section (SHIELD_E2E=1): boots the real Fastify server and runs
  * /api/check + /api/verify against live Telegraph miners. Requires
- * src/shield/telegraph.ts to exist — the unit section does not.
+ * src/shield/telegraph.ts to exist - the unit section does not.
  */
 import {
   assessTxVerification,
@@ -26,7 +26,7 @@ import type { CheckReport, CheckRequest, IntentResult } from '../shield/types.js
 
 let failures = 0;
 function check(name: string, cond: boolean, detail = '') {
-  console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
+  console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${detail ? ` - ${detail}` : ''}`);
   if (!cond) failures++;
 }
 
@@ -269,7 +269,7 @@ async function main() {
   if (process.env.SHIELD_E2E === '1') {
     await e2eTests();
   } else {
-    console.log('\n(e2e skipped — set SHIELD_E2E=1 to run the real server against live Telegraph miners)');
+    console.log('\n(e2e skipped - set SHIELD_E2E=1 to run the real server against live Telegraph miners)');
   }
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);
