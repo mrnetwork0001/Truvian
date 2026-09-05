@@ -21,7 +21,10 @@
   --block: #e05c5c;
   --neutral: #8a8a8a;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  --wrap: 980px;
+  /* 980px plus three-quarters of the leftover viewport: only a small gap at
+     each side (margins are 25% of a fixed layout's) at every screen size —
+     same rule as the app's .page. */
+  --wrap: min(100%, calc(980px + 0.75 * (100vw - 980px)));
   --measure: 66ch;
 }
 

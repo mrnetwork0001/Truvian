@@ -33,10 +33,11 @@ body {
 }
 
 .page {
-  /* 880px content plus a quarter of the remaining viewport width, so the
-     side margins are 75% of a fixed-880px layout's at every screen size;
-     min(100%) keeps it from overflowing narrow viewports. */
-  max-width: min(100%, calc(880px + 0.25 * (100vw - 880px)));
+  /* 880px content plus three-quarters of the remaining viewport width, so
+     only a small gap is left at each side (margins are 25% of a fixed-880px
+     layout's) at every screen size; min(100%) prevents overflow on narrow
+     viewports. */
+  max-width: min(100%, calc(880px + 0.75 * (100vw - 880px)));
   margin: 0 auto;
   padding: 2.5rem 1.5rem 3rem;
 }
