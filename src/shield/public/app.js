@@ -16,9 +16,11 @@
   var statsMain = document.getElementById('stats-main');
   var statsDetail = document.getElementById('stats-detail');
   var payNotice = document.getElementById('pay-notice');
+  var receiptBar = document.getElementById('receipt-bar');
   var walletBtn = document.getElementById('wallet-btn');
   var walletState = document.getElementById('wallet-state');
 
+  var lastReceiptId = null;
   var ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
   var TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
   // The node's own signal endpoint resolves a signal hash to its recorded
@@ -193,6 +195,61 @@
     });
   }
 
+  /* ---- streaming: watch each paid miner answer land ----
+     The server can emit NDJSON (one JSON object per line) so the report
+     assembles itself instead of appearing after a ten-second spinner. Any
+     failure here falls back to the plain request. */
+
+  function streamSupported() {
+    return typeof ReadableStream === 'function' && typeof TextDecoder === 'function';
+  }
+
+  function postCheckStreaming(body, paymentHeader, onEvent) {
+    var headers = { 'content-type': 'application/json', accept: 'application/x-ndjson' };
+    if (paymentHeader) headers['X-PAYMENT'] = paymentHeader;
+    return fetch('/api/check?stream=1', { method: 'POST', headers: headers, body: JSON.stringify(body) }).then(function (res) {
+      // A 402 or an error is plain JSON, not a stream: hand it back unchanged.
+      var type = res.headers.get('content-type') || '';
+      if (!res.ok || type.indexOf('x-ndjson') === -1 || !res.body) {
+        return res
+          .json()
+          .catch(function () { return null; })
+          .then(function (data) { return { res: res, data: data }; });
+      }
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+      var last = { res: res, data: null };
+
+      function handleLine(line) {
+        if (!line) return;
+        var event;
+        try {
+          event = JSON.parse(line);
+        } catch (e) {
+          return;
+        }
+        if (event.type === 'report' && event.report) last.data = event.report;
+        onEvent(event);
+      }
+
+      function pump() {
+        return reader.read().then(function (chunk) {
+          if (chunk.done) {
+            handleLine(buffer.trim());
+            return last;
+          }
+          buffer += decoder.decode(chunk.value, { stream: true });
+          var lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          lines.forEach(function (line) { handleLine(line.trim()); });
+          return pump();
+        });
+      }
+      return pump();
+    });
+  }
+
   function priceOf(requirements) {
     var atomic = Number(requirements.maxAmountRequired);
     return isFinite(atomic) ? '$' + (atomic / 1e6).toFixed(2) : 'the quoted price';
@@ -203,8 +260,11 @@
    * payment requirements; the wallet signs a gasless USDC authorization and
    * the request is retried once with it.
    */
-  function runCheck(body) {
-    return postCheck(body, null).then(function (result) {
+  function runCheck(body, onEvent) {
+    var send = function (payment) {
+      return streamSupported() ? postCheckStreaming(body, payment, onEvent) : postCheck(body, payment);
+    };
+    return send(null).then(function (result) {
       if (result.res.status !== 402) return result;
 
       var challenge = result.data || {};
@@ -220,7 +280,7 @@
       setPayNotice('Free checks used. Approve ' + priceOf(requirements) + ' in your wallet to run this check.');
       return global.TruvianWallet.signPayment(requirements).then(function (header) {
         setPayNotice('Payment signed. Querying live miners…');
-        return postCheck(body, header);
+        return send(header);
       });
     });
   }
@@ -229,6 +289,68 @@
     if (!payNotice) return;
     payNotice.textContent = text || '';
     payNotice.hidden = !text;
+  }
+
+  /* ---- progressive report: rows appear, then fill in, then get graded ---- */
+
+  var liveRows = {};
+
+  function liveRow(name, intent) {
+    var card = el('div', 'check-card live');
+    var head = el('div', 'check-head');
+    head.appendChild(el('span', 'check-name', name));
+    head.appendChild(el('span', 'intent-tag', intent));
+    var chip = el('span', 'status-chip pending', 'querying');
+    head.appendChild(chip);
+    card.appendChild(head);
+    var summary = el('p', 'check-summary', 'asking a live Telegraph miner…');
+    card.appendChild(summary);
+    return { card: card, chip: chip, summary: summary };
+  }
+
+  function handleStreamEvent(event) {
+    if (!event || typeof event.type !== 'string') return;
+
+    if (event.type === 'start') {
+      liveRows = {};
+      report.hidden = false;
+      banner.className = 'verdict';
+      banner.textContent = '';
+      banner.appendChild(el('span', 'verdict-score', 'running ' + event.checks.length + ' paid miner queries…'));
+      reasonsEl.textContent = '';
+      evidenceHeading.textContent = 'Evidence';
+      checksEl.textContent = '';
+      (event.checks || []).forEach(function (planned) {
+        var row = liveRow(planned.name, planned.intent);
+        liveRows[planned.name] = row;
+        checksEl.appendChild(row.card);
+      });
+      return;
+    }
+
+    if (event.type === 'signal') {
+      var row = liveRows[event.name];
+      if (!row) return;
+      row.chip.className = 'status-chip ' + (event.ok ? 'answered' : 'error');
+      row.chip.textContent = event.ok ? 'answered' : 'no answer';
+      var bits = [];
+      if (event.minerName) bits.push(event.minerName + (event.minerId ? ' · ' + event.minerId : ''));
+      var latency = fmtLatency(event.latencyMs);
+      if (latency) bits.push(latency);
+      if (typeof event.costUsd === 'number') bits.push('$' + event.costUsd.toFixed(2));
+      if (event.transport) bits.push(event.transport);
+      row.summary.textContent = bits.join(' · ') || (event.ok ? 'answered' : 'no answer');
+      return;
+    }
+
+    if (event.type === 'payment') {
+      setPayNotice(event.success && event.transaction ? 'Paid. Settlement ' + event.transaction : event.success ? 'Payment settled.' : 'Payment could not be settled.');
+      return;
+    }
+
+    if (event.type === 'report' && event.id) {
+      lastReceiptId = event.id;
+    }
   }
 
   form.addEventListener('submit', function (event) {
@@ -240,7 +362,7 @@
     if (!body) return;
 
     setLoading(true);
-    runCheck(body)
+    runCheck(body, handleStreamEvent)
       .then(function (result) {
         var data = result.data;
         if (!result.res.ok || !data || typeof data.verdict !== 'string') {
@@ -311,10 +433,72 @@
       checksEl.appendChild(renderCheckCard(check));
     });
 
+    renderReceiptBar();
+
     report.hidden = false;
     var reduceMotion = window.matchMedia &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     report.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+  }
+
+  /* ---- shareable receipt ---- */
+
+  function renderReceiptBar() {
+    if (!receiptBar) return;
+    receiptBar.textContent = '';
+    if (!lastReceiptId) {
+      receiptBar.hidden = true;
+      return;
+    }
+    var url = global.location.origin + '/app?r=' + lastReceiptId;
+    receiptBar.hidden = false;
+    receiptBar.appendChild(el('span', null, 'Permanent link to this report:'));
+    var field = document.createElement('input');
+    field.type = 'text';
+    field.readOnly = true;
+    field.value = url;
+    field.setAttribute('aria-label', 'Permanent link to this report');
+    field.addEventListener('focus', function () { field.select(); });
+    receiptBar.appendChild(field);
+    var copy = el('button', 'copy-btn', 'Copy');
+    copy.type = 'button';
+    copy.addEventListener('click', function () {
+      var done = function () {
+        copy.textContent = 'Copied';
+        setTimeout(function () { copy.textContent = 'Copy'; }, 1800);
+      };
+      if (global.navigator && global.navigator.clipboard) {
+        global.navigator.clipboard.writeText(url).then(done, function () { field.select(); });
+      } else {
+        field.select();
+      }
+    });
+    receiptBar.appendChild(copy);
+  }
+
+  /** Open a stored report from /app?r=<id> - the shared-link entry point. */
+  function loadSharedReport() {
+    var match = /[?&]r=([0-9a-f]{10})\b/.exec(global.location.search);
+    if (!match) return;
+    var id = match[1];
+    fetch('/api/report/' + id)
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (entry) {
+        if (!entry || !entry.report) {
+          showFormError('That shared report is no longer available - the feed keeps the most recent checks only.');
+          return;
+        }
+        var request = entry.request || {};
+        if (request.chain) document.getElementById('chain').value = request.chain;
+        if (request.to) document.getElementById('to').value = request.to;
+        if (request.valueEth !== undefined) document.getElementById('valueEth').value = String(request.valueEth);
+        if (request.txHash) document.getElementById('txHash').value = request.txHash;
+        if (request.protocol) document.getElementById('protocol').value = request.protocol;
+        lastReceiptId = id;
+        renderReport(entry.report);
+        setPayNotice('Shared report from ' + entry.at + ' - every check below was paid for and answered live.');
+      })
+      .catch(function () { /* leave the form empty */ });
   }
 
   function renderCheckCard(check) {
@@ -348,12 +532,48 @@
     }
     if (check.signalHash) {
       var hash = String(check.signalHash);
-      var link = el('a', 'signal-link', 'verify signal ' + hash.slice(0, 10) + '…');
+      var link = el('a', 'signal-link', 'signal ' + hash.slice(0, 10) + '…');
       link.href = SIGNAL_VERIFY_URL + encodeURIComponent(hash);
       link.target = '_blank';
       link.rel = 'noopener';
-      link.title = 'Verify on the Telegraph node: ' + hash;
+      link.title = 'Open the raw signal on the Telegraph node: ' + hash;
       meta.appendChild(link);
+
+      // Resolve the hash on the node without leaving the page: the answer we
+      // showed either is recorded there under a miner's name, or it is not.
+      var verifyBtn = el('button', 'verify-btn', 'Verify on node');
+      verifyBtn.type = 'button';
+      var verdictLine = el('span', 'verify-result');
+      verdictLine.hidden = true;
+      verifyBtn.addEventListener('click', function () {
+        verifyBtn.disabled = true;
+        verifyBtn.textContent = 'checking node…';
+        fetch('/api/signal/' + encodeURIComponent(hash))
+          .then(function (res) { return res.json().catch(function () { return null; }); })
+          .then(function (data) {
+            verdictLine.hidden = false;
+            if (data && data.found) {
+              var who = data.minerSlug || data.minerId || 'a Telegraph miner';
+              var when = data.recordedAt ? ' at ' + data.recordedAt : '';
+              verdictLine.className = 'verify-result ok';
+              verdictLine.textContent = 'recorded by ' + who + when;
+              verifyBtn.textContent = 'verified';
+            } else {
+              verdictLine.className = 'verify-result bad';
+              verdictLine.textContent = (data && data.message) || 'the node did not recognise this hash';
+              verifyBtn.textContent = 'not found';
+            }
+          })
+          .catch(function () {
+            verdictLine.hidden = false;
+            verdictLine.className = 'verify-result bad';
+            verdictLine.textContent = 'could not reach the node';
+            verifyBtn.textContent = 'Verify on node';
+            verifyBtn.disabled = false;
+          });
+      });
+      meta.appendChild(verifyBtn);
+      meta.appendChild(verdictLine);
     }
     if (meta.childNodes.length) card.appendChild(meta);
 
@@ -402,6 +622,7 @@
   } else {
     renderWallet(null);
   }
+  loadSharedReport();
   refreshStats();
   setInterval(refreshStats, 30000);
 })(window);

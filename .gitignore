@@ -30,3 +30,6 @@ scorer/target/
 
 # Shield runtime counters (written next to the process, never source)
 .shield-stats.json
+
+# Shield receipt feed (runtime data, never source)
+.shield-receipts.json

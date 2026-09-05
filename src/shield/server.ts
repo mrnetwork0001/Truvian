@@ -29,6 +29,7 @@ import {
   type SignalOutcome,
 } from './verdict.js';
 import { createLimiter, type Limiter, type LimiterState } from './limits.js';
+import { createReceiptStore } from './receipts.js';
 import { payerAddress, payerUsdcBalance } from './payer.js';
 import {
   buildRequirements,
@@ -47,6 +48,7 @@ import type { CheckReport, CheckRequest, ShieldIntent, ShieldStats, ShieldTransp
 
 const PUBLIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'public');
 const STATS_FILE = process.env.SHIELD_STATS_FILE ?? resolve(process.cwd(), '.shield-stats.json');
+const RECEIPTS_FILE = process.env.SHIELD_RECEIPTS_FILE ?? resolve(process.cwd(), '.shield-receipts.json');
 
 /** Mirror of telegraph.ts transport selection, used only to label errored checks. */
 function defaultTransport(): ShieldTransport {
@@ -180,6 +182,7 @@ export function buildShieldServer() {
   const stats = loaded.stats;
   const limiter: Limiter = createLimiter();
   limiter.hydrate(loaded.limits);
+  const receipts = createReceiptStore(RECEIPTS_FILE);
 
   const save = (): void => persistStats(stats, limiter.serialize());
 
@@ -274,20 +277,27 @@ export function buildShieldServer() {
    * real Telegraph request whether or not it succeeds) and never rejects -
    * failures become ok:false outcomes the verdict engine renders as evidence.
    */
-  const ask = async (intent: ShieldIntent, params: Record<string, string>): Promise<SignalOutcome> => {
+  const ask = async (
+    intent: ShieldIntent,
+    params: Record<string, string>,
+    onSettled?: (outcome: SignalOutcome) => void,
+  ): Promise<SignalOutcome> => {
     stats.telegraphRequests++;
     stats.byIntent[intent]++;
     const started = Date.now();
+    let outcome: SignalOutcome;
     try {
-      return { ok: true, result: await askIntent(intent, params) };
+      outcome = { ok: true, result: await askIntent(intent, params) };
     } catch (err) {
-      return {
+      outcome = {
         ok: false,
         reason: err instanceof Error ? err.message : String(err),
         transport: defaultTransport(),
         latencyMs: Date.now() - started,
       };
     }
+    if (onSettled) onSettled(outcome);
+    return outcome;
   };
 
   app.get('/healthz', async () => ({ ok: true }));
@@ -325,14 +335,59 @@ export function buildShieldServer() {
       throw err;
     }
 
+    // A streaming caller watches each paid miner answer land instead of
+    // staring at a spinner for ten seconds. NDJSON, because unlike EventSource
+    // it works over POST and so keeps the x402 payment header flow.
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    const streaming = q.stream === '1' || String(req.headers.accept ?? '').includes('application/x-ndjson');
+    let emit: (event: Record<string, unknown>) => void = () => {};
+    if (streaming) {
+      reply.raw.setHeader('content-type', 'application/x-ndjson; charset=utf-8');
+      reply.raw.setHeader('cache-control', 'no-store');
+      reply.raw.setHeader('x-accel-buffering', 'no'); // nginx must not buffer this
+      reply.raw.flushHeaders();
+      emit = (event) => {
+        try {
+          reply.raw.write(`${JSON.stringify(event)}\n`);
+        } catch {
+          // client hung up mid-check; the work still finishes and is recorded
+        }
+      };
+    }
+
     const chain = parsed.chain ?? 'base';
     // Fan out only the intents this request can use - every one is a paid
     // (or at minimum live) Telegraph query, so unused signals are not burned.
+    const planned: Array<{ name: string; intent: ShieldIntent }> = [{ name: 'FEE', intent: 'GAS_PRICE' }];
+    if (parsed.txHash !== undefined) planned.push({ name: 'COUNTERPARTY', intent: 'ONCHAIN_TX_LOOKUP' });
+    if (parsed.valueEth !== undefined) planned.push({ name: 'VALUE', intent: 'CRYPTO_PRICE' });
+    if (parsed.protocol !== undefined) planned.push({ name: 'LIQUIDITY', intent: 'TVL_LOOKUP' });
+    emit({ type: 'start', checks: planned, startedAt: new Date().toISOString() });
+
+    /** Announce a miner answer the moment it lands, before grading. */
+    const announce = (name: string, intent: ShieldIntent) => (outcome: SignalOutcome) => {
+      emit({
+        type: 'signal',
+        name,
+        intent,
+        ok: outcome.ok,
+        minerName: outcome.ok ? outcome.result.minerName : undefined,
+        minerId: outcome.ok ? outcome.result.minerId : undefined,
+        latencyMs: outcome.ok ? outcome.result.latencyMs : outcome.latencyMs,
+        costUsd: outcome.ok ? outcome.result.costUsd : undefined,
+        transport: outcome.ok ? outcome.result.transport : outcome.transport,
+        signalHash: outcome.ok ? outcome.result.signalHash : undefined,
+        answer: outcome.ok ? outcome.result.answer : outcome.reason,
+      });
+    };
+
     const jobs: Array<Promise<SignalOutcome> | undefined> = [
-      ask('GAS_PRICE', { chain }),
-      parsed.txHash !== undefined ? ask('ONCHAIN_TX_LOOKUP', { chain, hash: parsed.txHash }) : undefined,
-      parsed.valueEth !== undefined ? ask('CRYPTO_PRICE', { symbol: 'ETH' }) : undefined,
-      parsed.protocol !== undefined ? ask('TVL_LOOKUP', { protocol: parsed.protocol }) : undefined,
+      ask('GAS_PRICE', { chain }, announce('FEE', 'GAS_PRICE')),
+      parsed.txHash !== undefined
+        ? ask('ONCHAIN_TX_LOOKUP', { chain, hash: parsed.txHash }, announce('COUNTERPARTY', 'ONCHAIN_TX_LOOKUP'))
+        : undefined,
+      parsed.valueEth !== undefined ? ask('CRYPTO_PRICE', { symbol: 'ETH' }, announce('VALUE', 'CRYPTO_PRICE')) : undefined,
+      parsed.protocol !== undefined ? ask('TVL_LOOKUP', { protocol: parsed.protocol }, announce('LIQUIDITY', 'TVL_LOOKUP')) : undefined,
     ];
     const settled = await Promise.allSettled(jobs.map((j) => j ?? Promise.resolve(undefined)));
     const outcome = (i: number): SignalOutcome | undefined => {
@@ -353,10 +408,91 @@ export function buildShieldServer() {
     stats.checksRun++;
     stats.paidUsd = Number((stats.paidUsd + spent).toFixed(6));
     limiter.recordSpend(spent);
+    const receipt = receipts.add(parsed, report);
+
+    if (streaming) {
+      emit({ type: 'report', report, id: receipt.id, url: `/app?r=${receipt.id}` });
+      if (admission.paid) {
+        const settlement = await settlePayment(admission.paid.payment, admission.paid.requirements);
+        if (settlement.success) {
+          stats.earnedUsd = Number((stats.earnedUsd + Number(admission.paid.requirements.maxAmountRequired) / 1_000_000).toFixed(6));
+          stats.paidChecks += 1;
+        } else {
+          app.log.warn({ reason: settlement.reason }, 'x402 settlement failed after work was delivered');
+        }
+        emit({ type: 'payment', success: settlement.success, transaction: settlement.transaction ?? null, reason: settlement.reason });
+      }
+      emit({ type: 'done', checksLeftToday: limiter.peek(req.ip).remainingForIp });
+      save();
+      reply.raw.end();
+      return reply;
+    }
+
     await collect(admission, reply);
     save();
     reply.header('X-Shield-Checks-Left', String(limiter.peek(req.ip).remainingForIp));
+    reply.header('X-Shield-Receipt', receipt.id);
     return report;
+  });
+
+  /** Public feed of recent checks - the "no mocked data" claim, clickable. */
+  app.get('/api/recent', async (req) => {
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    const limit = Number(q.limit);
+    return { checks: receipts.recent(Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 12), total: receipts.size() };
+  });
+
+  /** A single stored report, by permalink id. */
+  app.get('/api/report/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const entry = /^[0-9a-f]{10}$/.test(id) ? receipts.get(id) : undefined;
+    if (!entry) return reply.status(404).send({ error: 'NOT_FOUND', message: 'no stored report with that id' });
+    return entry;
+  });
+
+  /**
+   * Resolve a Telegraph signal hash on the node, so a receipt can be verified
+   * without leaving the page or trusting Truvian. Free: no miner is queried.
+   */
+  app.get('/api/signal/:hash', async (req, reply) => {
+    const { hash } = req.params as { hash: string };
+    if (!/^0x?[0-9a-fA-F]{16,128}$/.test(hash)) {
+      return reply.status(400).send({ error: 'INVALID_INPUT', message: 'that does not look like a signal hash' });
+    }
+    const node = (process.env.TELEGRAPH_NODE_URL ?? 'https://devnode.telegraphprotocol.com').replace(/\/+$/, '');
+    const url = `${node}/engine/v1/signal/${hash}`;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+      const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!res.ok || !body) {
+        return { found: false, hash, url, status: res.status, message: 'the node did not recognise this signal hash' };
+      }
+      const record = (body.signal ?? body) as Record<string, unknown>;
+      const pick = (...keys: string[]): string | undefined => {
+        for (const key of keys) {
+          const value = record[key];
+          if (typeof value === 'string' && value.trim() !== '') return value;
+        }
+        return undefined;
+      };
+      return {
+        found: true,
+        hash,
+        url,
+        minerSlug: pick('miner_slug', 'minerSlug', 'miner_name', 'minerName'),
+        minerId: pick('miner_id', 'minerId'),
+        recordedAt: pick('created_at', 'createdAt', 'timestamp', 'recorded_at'),
+        intent: pick('intent_id', 'intent', 'intentId'),
+        raw: body,
+      };
+    } catch (err) {
+      return reply.status(502).send({
+        error: 'NODE_UNREACHABLE',
+        message: err instanceof Error ? err.message : String(err),
+        hash,
+        url,
+      });
+    }
   });
 
   app.get('/api/verify/:txHash', async (req, reply) => {
