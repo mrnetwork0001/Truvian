@@ -1,5 +1,5 @@
 /**
- * Drop-in execution guard for on-chain agents.
+ * Drop-in execution guard for onchain agents.
  *
  * Wraps a viem wallet client so that every sendTransaction is checked by
  * Truvian Shield first, and refuses to sign when the verdict is BLOCK:
@@ -37,7 +37,7 @@ export interface GuardOptions {
   /** Protocol name to include, so the liquidity check runs. */
   protocol?: string;
   /**
-   * A prior on-chain transaction involving this counterparty, used as
+   * A prior onchain transaction involving this counterparty, used as
    * evidence. Supply it when your agent tracks counterparty history: it turns
    * on the COUNTERPARTY check, and it is what lets a transfer above the
    * $100,000 line pass on verified evidence instead of failing outright.

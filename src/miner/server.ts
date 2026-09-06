@@ -30,7 +30,7 @@ export function buildServer() {
   app.get('/', async (_req, reply) => {
     return reply.type('text/html').send(`<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Truvian - Exact On-Chain Truth Engine</title>
+<title>Truvian - Exact Onchain Truth Engine</title>
 <style>
 body{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#0a0a0a;color:#e8e8e8;display:flex;min-height:100vh;align-items:center;justify-content:center}
 main{max-width:640px;padding:2.5rem 1.5rem}
@@ -43,7 +43,7 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
 </style></head><body><main>
 <h1>🛡️ Truvian</h1>
 <div class="badge">🏆 champion scorer · ONCHAIN_TX_LOOKUP</div>
-<p>Exact on-chain answers for Base &amp; Ethereum, read live from JSON-RPC. Telegraph miner <code>truvian-onchain-truth</code> (reg #172) serving <code>ONCHAIN_TX_LOOKUP</code> and <code>GAS_PRICE</code>.</p>
+<p>Exact onchain answers for Base &amp; Ethereum, read live from JSON-RPC. Telegraph miner <code>truvian-onchain-truth</code> (reg #172) serving <code>ONCHAIN_TX_LOOKUP</code> and <code>GAS_PRICE</code>.</p>
 <ul>
 <li><code>GET /tx?chain=base&amp;hash=0x…</code> - full canonical transaction facts, incl. the OP-stack L1 data fee</li>
 <li><code>GET /gas?chain=base</code> - block-anchored fee snapshot with EIP-1559 percentiles</li>
@@ -78,7 +78,7 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
         return reply.status(200).send({
           answer: err.answerText,
           signal: err.answerText,
-          source: 'Truvian on-chain lookup over public JSON-RPC',
+          source: 'Truvian onchain lookup over public JSON-RPC',
           confidence: 0,
           resolved: false,
           error: err.code,

@@ -2,7 +2,7 @@
  * Empirical DEX discovery for X Layer (chain 196).
  * We do NOT assume any factory/router address. We scan real `Swap` event logs
  * from recent blocks, collect the emitting pool contracts, then introspect each
- * pool on-chain to learn its factory, tokens, fee tier and liquidity.
+ * pool onchain to learn its factory, tokens, fee tier and liquidity.
  */
 import { createPublicClient, http, parseAbi, erc20Abi, type Address, type Hex } from 'viem';
 

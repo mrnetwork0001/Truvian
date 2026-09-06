@@ -23,7 +23,7 @@ base64-encoded JSON (`x402Version: 2`). Decoded challenge from the dispatcher:
   "x402Version": 2,
   "error": "Payment required",
   "resource": {
-    "description": "Payment required for all subnet APIs. Price is the on-chain committed minPriceUsdc floor; YAML is informational only.",
+    "description": "Payment required for all subnet APIs. Price is the onchain committed minPriceUsdc floor; YAML is informational only.",
     "mimeType": "application/json",
     "url": "https://devnode.telegraphprotocol.com/miner-dispatcher/v1/8453/tx?chain=base&hash=0x…"
   },
@@ -42,7 +42,7 @@ base64-encoded JSON (`x402Version: 2`). Decoded challenge from the dispatcher:
 }
 ```
 
-- Price is `10000` atomic USDC = **$0.01 per request** (the miner's on-chain
+- Price is `10000` atomic USDC = **$0.01 per request** (the miner's onchain
   `minPriceUsdc` floor; the same amount appears on every miner probed).
 - `asset` is Circle USDC on **Base Sepolia (84532)**; `payTo` is the Telegraph
   Diamond contract. The JSON *body* of the 402 is a v1-style human summary -

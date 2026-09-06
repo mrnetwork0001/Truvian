@@ -18,13 +18,13 @@ table counts tweets mentioning @Telegraphprotoc from that handle.
 > Thread 🧵
 
 **2/** *(attach: miner.truvian.xyz landing page)*
-> The miner: exact on-chain answers read live from JSON-RPC - Base, Ethereum, Base Sepolia. Tx lookups include the OP-stack L1 data fee most implementations silently drop. Live at miner.truvian.xyz, ~0.8s median - faster than the intent's rank-1 miner.
+> The miner: exact onchain answers read live from JSON-RPC - Base, Ethereum, Base Sepolia. Tx lookups include the OP-stack L1 data fee most implementations silently drop. Live at miner.truvian.xyz, ~0.8s median - faster than the intent's rank-1 miner.
 
 **3/**
 > Track 2: each intent's judge is a WASM module anyone can challenge; the node promotes you only if you separate good answers from bad more clearly than the incumbent. Rejected twice, then promoted. Dethroned. Promoted again. Dethroned by a step-function scorer.
 
 **4/**
-> What we learned about judging on-chain answers: text similarity can't tell "reverted" from "succeeded" when the numbers match. The incumbent scored a wrong-status answer 0.998 and a value-dump 0.998. Ours: 0.006 and 0.49. Facts, not vocabulary.
+> What we learned about judging onchain answers: text similarity can't tell "reverted" from "succeeded" when the numbers match. The incumbent scored a wrong-status answer 0.998 and a value-dump 0.998. Ours: 0.006 and 0.49. Facts, not vocabulary.
 
 **5/**
 > Then the arms race went meta: a champion with a hard step function maxed the benchmark's margin metric while scoring every REAL answer near zero - the live leaderboard collapsed to ≤0.013 for everyone. We documented it, told the team, and kept challenging.
@@ -42,7 +42,7 @@ table counts tweets mentioning @Telegraphprotoc from that handle.
 ## Post 1 - entry announcement (draft, ready to post)
 
 > Building for the @Telegraphprotoc Season I hackathon: Truvian - an exact
-> on-chain truth miner for Base.
+> onchain truth miner for Base.
 >
 > Serving ONCHAIN_TX_LOOKUP + GAS_PRICE. Tier A intents are scored by exact
 > match, so the whole game is being *precisely* right - including the OP-stack
@@ -66,7 +66,7 @@ make a good visual.)*
 > Track 2 shipped: a WASM scoring module for ONCHAIN_TX_LOOKUP on
 > @Telegraphprotoc.
 >
-> The incumbent judge is generic text similarity. Ours extracts the on-chain
+> The incumbent judge is generic text similarity. Ours extracts the onchain
 > facts - tx hashes, addresses, exact uint256 wei values, status - and scores
 > factual correctness, with penalties for value-dump gaming.
 >

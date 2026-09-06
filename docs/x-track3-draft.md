@@ -9,7 +9,7 @@ Post after Shield is live at truvian.xyz.
 
 **1/** *(attach: the Shield dashboard showing a completed check with its verdict card)*
 
-> Track 3 for @Telegraphprotoc: Truvian Shield is live at truvian.xyz - an execution-safety checkpoint for AI agents. Before an agent signs a transaction, Shield asks live Telegraph miners what's true on-chain and returns a go/no-go verdict with evidence. 🧵
+> Track 3 for @Telegraphprotoc: Truvian Shield is live at truvian.xyz - an execution-safety checkpoint for AI agents. Before an agent signs a transaction, Shield asks live Telegraph miners what's true onchain and returns a go/no-go verdict with evidence. 🧵
 
 **2/** *(attach: a CheckReport JSON or the per-check breakdown in the UI)*
 
@@ -21,4 +21,4 @@ Post after Shield is live at truvian.xyz.
 
 **4/**
 
-> Shield is the thesis we mined and judged all season, applied: agents need exact, verifiable on-chain truth at decision time. Try it: truvian.xyz - code + the whole Season I arc: github.com/mrnetwork0001/Truvian @Telegraphprotoc
+> Shield is the thesis we mined and judged all season, applied: agents need exact, verifiable onchain truth at decision time. Try it: truvian.xyz - code + the whole Season I arc: github.com/mrnetwork0001/Truvian @Telegraphprotoc

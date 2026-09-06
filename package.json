@@ -1,7 +1,7 @@
 {
   "name": "truvian",
   "version": "1.0.0",
-  "description": "Truvian: exact on-chain truth engine for the Telegraph Protocol Season I Hackathon",
+  "description": "Truvian: exact onchain truth engine for the Telegraph Protocol Season I Hackathon",
   "main": "index.js",
   "scripts": {
     "typecheck": "tsc --noEmit",

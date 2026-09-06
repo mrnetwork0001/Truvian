@@ -1,4 +1,4 @@
-# 🛡️ Truvian - Exact On-Chain Truth Engine
+# 🛡️ Truvian - Exact Onchain Truth Engine
 
 > **Telegraph Protocol Season I Hackathon - corrected master blueprint (2026-08-23)**
 > *Track 1 (Miner) + Track 2 (Script Author) now · Track 3 (Application) from Aug 31*

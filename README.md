@@ -1,8 +1,8 @@
-# 🛡️ Truvian - Exact On-Chain Truth Engine
+# 🛡️ Truvian - Exact Onchain Truth Engine
 
 **Telegraph Protocol Season I Hackathon** · Tracks 1, 2 & 3 · by [`mrnetwork0001`](https://github.com/mrnetwork0001)
 
-Truvian answers on-chain questions **exactly** - and judges other miners' answers for exactness. Live on Telegraph's Base Sepolia testnet.
+Truvian answers onchain questions **exactly** - and judges other miners' answers for exactness. Live on Telegraph's Base Sepolia testnet.
 
 ## What's live right now
 

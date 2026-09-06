@@ -252,10 +252,10 @@ function evaluateCounterparty(request: CheckRequest, outcome: SignalOutcome | un
   const r = outcome.result;
   const status = parseTxStatus(r.answer);
   if (status === 'reverted') {
-    return itemFromResult(name, intent, 'fail', 'the referenced transaction REVERTED on-chain - the counterparty evidence indicates failure', r);
+    return itemFromResult(name, intent, 'fail', 'the referenced transaction REVERTED onchain - the counterparty evidence indicates failure', r);
   }
   if (status === 'not_found') {
-    return itemFromResult(name, intent, 'warn', 'the referenced transaction was not found on-chain - no usable evidence for this counterparty', r);
+    return itemFromResult(name, intent, 'warn', 'the referenced transaction was not found onchain - no usable evidence for this counterparty', r);
   }
   if (status === 'success') {
     if (request.to !== undefined && !r.answer.toLowerCase().includes(request.to.toLowerCase())) {
@@ -263,7 +263,7 @@ function evaluateCounterparty(request: CheckRequest, outcome: SignalOutcome | un
         `referenced transaction succeeded but its answer does not mention counterparty ${request.to} - evidence may be unrelated`, r);
     }
     return itemFromResult(name, intent, 'pass',
-      `referenced transaction succeeded on-chain${request.to !== undefined ? ' and involves the stated counterparty' : ''}`, r);
+      `referenced transaction succeeded onchain${request.to !== undefined ? ' and involves the stated counterparty' : ''}`, r);
   }
   return itemFromResult(name, intent, 'warn', 'could not determine the referenced transaction status from the miner answer', r);
 }
@@ -292,10 +292,10 @@ function evaluateValue(
   const usd = request.valueEth * usdPerEth;
   const label = `${request.valueEth} ETH ~ ${fmtUsd(usd)} (ETH at ${fmtUsd(usdPerEth)})`;
   if (usd > VALUE_FAIL_USD) {
-    // >$100k needs on-chain evidence: a referenced tx that actually succeeded.
+    // >$100k needs onchain evidence: a referenced tx that actually succeeded.
     const txVerified = txOutcome !== undefined && txOutcome.ok && parseTxStatus(txOutcome.result.answer) === 'success';
     if (request.txHash !== undefined && txVerified) {
-      return itemFromResult(name, intent, 'warn', `${label} exceeds ${fmtUsd(VALUE_FAIL_USD)} - allowed only because verified on-chain tx evidence was supplied`, r);
+      return itemFromResult(name, intent, 'warn', `${label} exceeds ${fmtUsd(VALUE_FAIL_USD)} - allowed only because verified onchain tx evidence was supplied`, r);
     }
     return itemFromResult(name, intent, 'fail', `${label} exceeds ${fmtUsd(VALUE_FAIL_USD)} with no verified txHash evidence`, r);
   }
@@ -400,16 +400,16 @@ export function assessTxVerification(txHash: string, outcome: SignalOutcome | un
   let verdict: ShieldVerdict;
   let score: number;
   if (status === 'reverted') {
-    check = itemFromResult(name, intent, 'fail', `transaction ${hash} REVERTED on-chain per the live Telegraph miner`, r);
+    check = itemFromResult(name, intent, 'fail', `transaction ${hash} REVERTED onchain per the live Telegraph miner`, r);
     verdict = 'BLOCK';
     score = 20;
   } else if (status === 'not_found') {
-    check = itemFromResult(name, intent, 'warn', `transaction ${hash} was not found on-chain - it may be unmined, dropped, or on another chain`, r);
+    check = itemFromResult(name, intent, 'warn', `transaction ${hash} was not found onchain - it may be unmined, dropped, or on another chain`, r);
     verdict = 'CAUTION';
     score = 60;
   } else if (status === 'success') {
     if (r.answer.toLowerCase().includes(hash)) {
-      check = itemFromResult(name, intent, 'pass', `transaction ${hash} succeeded on-chain per the live Telegraph miner`, r);
+      check = itemFromResult(name, intent, 'pass', `transaction ${hash} succeeded onchain per the live Telegraph miner`, r);
       verdict = 'SAFE';
       score = 100;
     } else {

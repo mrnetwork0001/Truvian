@@ -215,7 +215,7 @@ async function main() {
       const paid = (await paidRes.json()) as CheckReport;
       check('paying past the free tier returns a report', paidRes.status === 200 && paid.verdict !== undefined, String(paid.verdict));
       const settledHeader = paidRes.headers.get('x-payment-response');
-      check('payment settles on-chain', typeof settledHeader === 'string');
+      check('payment settles onchain', typeof settledHeader === 'string');
       if (settledHeader) {
         const settlement = JSON.parse(Buffer.from(settledHeader, 'base64').toString('utf8')) as Record<string, unknown>;
         check('settlement succeeded with a tx hash', settlement.success === true && typeof settlement.transaction === 'string', String(settlement.transaction));

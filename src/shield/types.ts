@@ -69,7 +69,7 @@ export interface CheckRequest {
   to?: string;
   /** Transaction value in ETH */
   valueEth?: number;
-  /** A prior on-chain tx referenced as evidence about the counterparty */
+  /** A prior onchain tx referenced as evidence about the counterparty */
   txHash?: string;
   /** Protocol name for the liquidity (TVL) check */
   protocol?: string;

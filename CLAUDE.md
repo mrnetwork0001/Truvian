@@ -1,9 +1,9 @@
 # 🛡️ TRUVIAN - Project Context & Developer Directives
 
 ## 📌 Core Identity & Project Goal
-**Truvian** is an exact on-chain truth engine competing in the **Telegraph Protocol Season I Hackathon** (H1: $5K USD, Aug 17 – Sep 7; season total $15K across three rounds).
+**Truvian** is an exact onchain truth engine competing in the **Telegraph Protocol Season I Hackathon** (H1: $5K USD, Aug 17 – Sep 7; season total $15K across three rounds).
 - **Track 1 (Miner):** Serve the `ONCHAIN_TX_LOOKUP` (primary) and `GAS_PRICE` (secondary) intents on **Base** with deterministic, exact-match-grade responses. Tier A intents are scored by WASM exact match - exactness wins, not vibes.
-- **Track 2 (Script Author):** Evaluation script scoring miners for on-chain intents against ground truth parsed directly from RPC receipts and logs.
+- **Track 2 (Script Author):** Evaluation script scoring miners for onchain intents against ground truth parsed directly from RPC receipts and logs.
 - **Track 3 (App, opens Aug 31):** *Truvian Shield* - an execution-safety agent/dashboard consuming live Telegraph miners (`CRYPTO_PRICE`, `GAS_PRICE`, `TVL_LOOKUP`, `ONCHAIN_TX_LOOKUP`) to decide whether an agent should sign a transaction.
 
 ## ✅ Verified Facts (do not trust marketing copy over these)
