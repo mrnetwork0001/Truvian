@@ -33,3 +33,8 @@ scorer/target/
 
 # Shield receipt feed (runtime data, never source)
 .shield-receipts.json
+
+# Remotion video workspace
+video/node_modules/
+video/out/
+video/assets/
