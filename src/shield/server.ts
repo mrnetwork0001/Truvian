@@ -264,13 +264,12 @@ export function buildShieldServer() {
     stats.paidChecks += 1;
   };
 
-  /** Refresh the payer balance in the background; never blocks a request. */
-  const refreshBalance = (): void => {
-    void payerUsdcBalance()
+  /** Refresh the payer balance; cached 60s inside payerUsdcBalance. */
+  const refreshBalance = (): Promise<void> =>
+    payerUsdcBalance()
       .then((balance) => limiter.setBalanceUsdc(balance))
       .catch(() => limiter.setBalanceUsdc(null));
-  };
-  refreshBalance();
+  void refreshBalance();
 
   /**
    * One live Telegraph query. Counts stats up-front (a launched request is a
@@ -303,7 +302,14 @@ export function buildShieldServer() {
   app.get('/healthz', async () => ({ ok: true }));
 
   app.get('/api/stats', async (req) => {
-    refreshBalance(); // cached 60s inside payerUsdcBalance
+    // The first request can arrive before the boot-time balance read lands.
+    // Wait briefly for it rather than reporting an unknown balance, but never
+    // hold the response hostage to a slow RPC.
+    if (limiter.snapshot().balanceUsdc === null) {
+      await Promise.race([refreshBalance(), new Promise((r) => setTimeout(r, 2500))]);
+    } else {
+      void refreshBalance();
+    }
     const budget = limiter.snapshot();
     const you = limiter.peek(req.ip);
     const payTo = payToAddress(payerAddress());
@@ -317,23 +323,22 @@ export function buildShieldServer() {
   });
 
   app.post('/api/check', async (req, reply) => {
-    // Brakes BEFORE any miner is paid: one script must not be able to drain
-    // the payer wallet or take the service down. A caller who pays skips them.
-    const admission = await admit(req, reply);
-    if (!admission.admitted) return reply;
-
+    // Validate first: it costs nothing, and a malformed request should hear
+    // "that input is wrong" rather than "you are out of checks".
     let parsed: CheckRequest;
     try {
       parsed = normalizeCheckRequest(req.body ?? {});
     } catch (err) {
-      // Nothing ran, so nothing is charged: give the free allowance back and
-      // never settle the payment.
-      if (!admission.paid) limiter.refund(req.ip);
       if (err instanceof ShieldInputError) {
         return reply.status(400).send({ error: 'INVALID_INPUT', message: err.message });
       }
       throw err;
     }
+
+    // Brakes BEFORE any miner is paid: one script must not be able to drain
+    // the payer wallet or take the service down. A caller who pays skips them.
+    const admission = await admit(req, reply);
+    if (!admission.admitted) return reply;
 
     // A streaming caller watches each paid miner answer land instead of
     // staring at a spinner for ten seconds. NDJSON, because unlike EventSource
