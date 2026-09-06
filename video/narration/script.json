@@ -1,0 +1,23 @@
+{
+  "voice": "CwhRBWXzGAHq8TQ4Fs17",
+  "model": "eleven_multilingual_v2",
+  "sections": [
+    { "id": "intro", "text": "Truvian Shield. Execution safety for onchain agents." },
+    { "id": "hero", "text": "An agent is about to sign a transaction. The decision is made; the signature is next. That gap is where money is lost." },
+    { "id": "tour", "text": "Shield sits in that gap. Before the signature, it asks four paid questions to live miners on the Telegraph Protocol, and returns one verdict with the evidence attached. Nothing cached. Nothing simulated." },
+    { "id": "titleCheck", "text": "Start with an ordinary transfer." },
+    { "id": "safe", "text": "One click. Four checks go out to real miners. Watch them arrive one at a time. Each names the miner that answered, how long it took, and what it cost. A cent apiece, paid in U S D C over x four zero two. The whole report is about four cents." },
+    { "id": "safeEvidence", "text": "Safe. Score one hundred. Fees are normal, the counterparty's transaction succeeded, and the value is well below the thresholds." },
+    { "id": "titleVerify", "text": "But why believe the card?" },
+    { "id": "verify", "text": "Every answer carries a Telegraph signal hash. One click resolves it on the node itself. Shield is not the source of truth here. The network is." },
+    { "id": "titleRefuse", "text": "Now the case that matters." },
+    { "id": "block", "text": "Same agent, same four checks. But this time the counterparty's last transaction reverted, and the transfer is sixty E T H. About a hundred and fifty thousand dollars." },
+    { "id": "blockEvidence", "text": "Block. Score thirty. The counterparty check fails because that transaction genuinely reverted on Base. The value check fails because a sum that size needs verified evidence, and there is none." },
+    { "id": "feed", "text": "Every report gets a permanent link, and the feed is public. Any verdict in this video can be opened and checked." },
+    { "id": "titlePays", "text": "Shield pays, and Shield gets paid." },
+    { "id": "termPay", "text": "Agents use the same endpoint. When the free allowance runs out, Shield answers four oh two with a price instead of a refusal. The agent signs a gasless authorization, and the payment settles on Base Sepolia. That is a real transaction hash." },
+    { "id": "termGuard", "text": "And this is it inside an agent. Wrap a wallet in the Truvian guard, and every transaction is checked before it is signed. The healthy transfer goes through. The reverted counterparty is refused, with reasons attached. And if Shield cannot be reached, it refuses. A safety check that fails open is not a safety check." },
+    { "id": "why", "text": "One last thing. We run the miner that answers these questions. We wrote the scoring module that grades every miner's answers, champion twice this season. And we built the app that pays for both." },
+    { "id": "outro", "text": "Truvian Shield. Live at truvian dot x y z. Live miners only. Nothing mocked. And the verdict is always advisory. The signature stays yours." }
+  ]
+}

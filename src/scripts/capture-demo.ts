@@ -24,8 +24,8 @@ import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 const SHIELD = (process.argv[2] ?? 'http://127.0.0.1:8788').replace(/\/+$/, '');
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const ASSETS = resolve(process.cwd(), 'video/public/assets');
-const WIDTH = 1600;
-const HEIGHT = 1000;
+const WIDTH = 1920;
+const HEIGHT = 1080;
 
 interface Shot {
   name: string;
@@ -95,8 +95,8 @@ async function main() {
   const browser: Browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: true,
-    defaultViewport: { width: WIDTH, height: HEIGHT, deviceScaleFactor: 2 },
-    args: [`--window-size=${WIDTH},${HEIGHT}`, '--hide-scrollbars', '--force-device-scale-factor=2'],
+    defaultViewport: { width: WIDTH, height: HEIGHT, deviceScaleFactor: 1.5 },
+    args: [`--window-size=${WIDTH},${HEIGHT}`, '--hide-scrollbars', '--force-device-scale-factor=1.5'],
   });
 
   try {
@@ -110,13 +110,13 @@ async function main() {
 
     console.log('shot: landing tour');
     await record(page, 'tour', 15000, async () => {
-      await page.evaluate(scrollScript(900, 3000));
+      await page.evaluate(scrollScript(980, 3000));
       await wait(700);
-      await page.evaluate(scrollScript(1950, 3000));
+      await page.evaluate(scrollScript(2100, 3000));
       await wait(700);
-      await page.evaluate(scrollScript(3050, 3000));
+      await page.evaluate(scrollScript(3250, 3000));
       await wait(500);
-      await page.evaluate(scrollScript(4250, 2500));
+      await page.evaluate(scrollScript(4500, 2500));
     });
 
     console.log('shot: recent checks feed');

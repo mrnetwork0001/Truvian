@@ -38,3 +38,4 @@ scorer/target/
 video/node_modules/
 video/out/
 video/assets/
+video/narration/*.mp3
