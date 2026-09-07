@@ -5,10 +5,14 @@
   "main": "index.js",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "demo:guard": "tsx src/scripts/demo-guard.ts",
     "dev": "tsx src/miner/server.ts",
-    "test:miner": "tsx src/scripts/test-miner.ts",
+    "discover:xlayer": "tsx src/scripts/discover-dex.ts",
     "probe:xlayer": "tsx src/scripts/probe-chain.ts",
-    "discover:xlayer": "tsx src/scripts/discover-dex.ts"
+    "readiness": "tsx src/scripts/readiness.ts",
+    "shield": "tsx src/shield/server.ts",
+    "test:miner": "tsx src/scripts/test-miner.ts",
+    "test:shield": "tsx src/scripts/test-shield.ts"
   },
   "keywords": [],
   "author": "",
