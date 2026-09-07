@@ -1,7 +1,7 @@
-# Truvian Shield — Track 3 Runbook
+# Truvian Shield - Track 3 Runbook
 
 Track 3 window: **Aug 31 → Sep 7** (deadline **2026-09-07T23:59:59Z**).
-Hard rule: the app **must consume real live Telegraph miners** — mocked or
+Hard rule: the app **must consume real live Telegraph miners** - mocked or
 simulated data is grounds for disqualification. The Track 1 miner
 (miner.truvian.xyz) must also stay live through Sep 7.
 
@@ -21,14 +21,14 @@ Telegraph miners** and returns a go/no-go verdict with per-check evidence.
 | Protocol sanity | `TVL_LOOKUP` | `{protocol}` | Does the target protocol have real TVL, or is it a husk? |
 
 Each check reports `pass | warn | fail | error`, the miner's answer, latency,
-transport, and (when the engine returns one) a **signal hash** — verifiable by
+transport, and (when the engine returns one) a **signal hash** - verifiable by
 anyone at `GET https://devnode.telegraphprotocol.com/engine/v1/signal/{hash}`.
 The report rolls up to `SAFE | CAUTION | BLOCK` with a 0–100 score and reasons.
 
 **Two transports** (`src/shield/telegraph.ts`, env `SHIELD_TRANSPORT`):
 
 - **`x402`** (default when `TELEGRAPH_PAYER_KEY` is set): pays per query
-  through the Telegraph node at `https://devnode.telegraphprotocol.com` —
+  through the Telegraph node at `https://devnode.telegraphprotocol.com` -
   engine auto-ask `POST /engine/v1/ask`, direct ask
   `POST /engine/v1/ask/{minerId}`, dispatcher
   `POST|GET /miner-dispatcher/v1/{minerId}{path}`. Payment: USDC on Base
@@ -36,7 +36,7 @@ The report rolls up to `SAFE | CAUTION | BLOCK` with a 0–100 score and reasons
   `https://facilitator.payai.network`.
 - **`direct`** (dev/fallback): calls live miners' public `base_url`s from the
   FREE catalog `GET https://devnode.telegraphprotocol.com/api/miners`. Still
-  real Telegraph miners — no mocks — and every check is labeled
+  real Telegraph miners - no mocks - and every check is labeled
   `transport: "direct"` so nothing masquerades as paid traffic.
 
 **Server** (`src/shield/server.ts`, Fastify, PORT 8788):
@@ -69,7 +69,7 @@ ssh <vps>
 cd /opt/truvian
 git pull
 npm install                              # tsx runs TS directly; no build step
-pm2 start deploy/ecosystem.shield.cjs    # app: truvian-shield on 127.0.0.1:8788
+pm2 start deploy/ecosystem.shield.config.cjs    # app: truvian-shield on 127.0.0.1:8788
 pm2 save
 
 sudo cp deploy/nginx-shield.conf /etc/nginx/sites-available/truvian-shield.conf
@@ -82,21 +82,21 @@ DNS + TLS:
 1. A records: `truvian.xyz` → `38.49.213.208`, `www.truvian.xyz` → same.
 2. Once resolving: `sudo certbot --nginx -d truvian.xyz -d www.truvian.xyz`.
 3. If DNS lags, use the commented fallback block in `deploy/nginx-shield.conf`
-   to serve Shield at `miner.truvian.xyz/shield/` temporarily (imperfect —
+   to serve Shield at `miner.truvian.xyz/shield/` temporarily (imperfect -
    see the caveat in that file).
 
 Smoke test: `curl -s https://truvian.xyz/healthz` → `{"ok":true}`.
 
 ## Fund the x402 payer (flip from direct to paid)
 
-1. **Fresh burner key** — never the miner registration wallet:
+1. **Fresh burner key** - never the miner registration wallet:
    ```bash
    npx tsx -e "import {generatePrivateKey, privateKeyToAccount} from 'viem/accounts'; const k = generatePrivateKey(); console.log(k, privateKeyToAccount(k).address)"
    ```
 2. **Base Sepolia USDC**: Circle faucet **https://faucet.circle.com** →
    network Base Sepolia (token `0x036CbD53842c5426634e7929541eC2318f3dCF7e`).
 3. **Base Sepolia gas ETH**: a small amount from the Coinbase or Alchemy Base
-   Sepolia faucet (same faucets used for miner registration — see
+   Sepolia faucet (same faucets used for miner registration - see
    `telegraph/REGISTRATION.md`).
 4. **Set the key** on the VPS (never commit it):
    ```bash
@@ -104,7 +104,7 @@ Smoke test: `curl -s https://truvian.xyz/healthz` → `{"ok":true}`.
    pm2 restart truvian-shield --update-env
    # or put it in /opt/truvian/.env (dotenv is a dependency), then pm2 restart
    ```
-5. **Flip transport**: with the key set, `x402` is already the default —
+5. **Flip transport**: with the key set, `x402` is already the default -
    just make sure no stray `SHIELD_TRANSPORT=direct` remains (or set
    `SHIELD_TRANSPORT=x402` explicitly in the pm2 env).
 6. **Verify**: run a check and confirm each entry reports
@@ -122,10 +122,10 @@ Smoke test: `curl -s https://truvian.xyz/healthz` → `{"ok":true}`.
       2026-09-07T23:59:59Z, using the same X handle as the posts.
 - [ ] X thread posted from `docs/x-track3-draft.md`, tagged **@Telegraphprotoc**
       (engagement is scored; the handle on the submission must match).
-- [ ] Judging criteria covered: **users** and **usage** (`GET /api/stats` —
+- [ ] Judging criteria covered: **users** and **usage** (`GET /api/stats` -
       checksRun / telegraphRequests / byIntent), **creativity** (execution-safety
       checkpoint with verifiable signal hashes), **must-use-real-miners**
       (x402 receipts + signal hashes), **engagement** (the thread).
 - [ ] Bonus: Shield's traffic counts toward the ≥100-real-request /
-      ≥3-active-miner eligibility bar for the intents it queries — real usage
+      ≥3-active-miner eligibility bar for the intents it queries - real usage
       helps the whole intent pool, our Track 1 miner included.

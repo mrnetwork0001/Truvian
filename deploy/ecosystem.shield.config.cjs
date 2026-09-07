@@ -1,7 +1,7 @@
 // pm2 process definition for Truvian Shield (Track 3).
 // SEPARATE file from ecosystem.config.cjs so miner and Shield can be
 // started/reloaded independently:
-//   pm2 start deploy/ecosystem.shield.cjs && pm2 save
+//   pm2 start deploy/ecosystem.shield.config.cjs && pm2 save
 module.exports = {
   apps: [
     {

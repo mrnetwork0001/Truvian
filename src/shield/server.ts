@@ -569,8 +569,11 @@ export function buildShieldServer() {
 // Run directly (npx tsx src/shield/server.ts)
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop()!)) {
   const app = buildShieldServer();
-  const port = Number(process.env.PORT ?? 8788);
-  const host = process.env.HOST ?? '0.0.0.0';
+  // SHIELD_* wins (that is what .env.example ships), then the generic names
+  // the pm2 config sets. Default to loopback: Shield is meant to sit behind
+  // nginx, and binding 0.0.0.0 by accident would expose it directly.
+  const port = Number(process.env.SHIELD_PORT ?? process.env.PORT ?? 8788);
+  const host = process.env.SHIELD_HOST ?? process.env.HOST ?? '127.0.0.1';
   app.listen({ port, host }).catch((err) => {
     app.log.error(err);
     process.exit(1);
