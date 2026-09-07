@@ -1,5 +1,8 @@
 # Truvian Shield - Track 3 Runbook
 
+
+Live: <https://truvian.xyz> · Demo video: <https://x.com/encrypt_wizard/status/2096818596051575158>
+
 Track 3 window: **Aug 31 → Sep 7** (deadline **2026-09-07T23:59:59Z**).
 Hard rule: the app **must consume real live Telegraph miners** - mocked or
 simulated data is grounds for disqualification. The Track 1 miner

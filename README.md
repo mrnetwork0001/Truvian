@@ -4,13 +4,15 @@
 
 Truvian answers onchain questions **exactly** - and judges other miners' answers for exactness. Live on Telegraph's Base Sepolia testnet.
 
+**▶ [Watch the 3-minute demo](https://x.com/encrypt_wizard/status/2096818596051575158)** · **[Try it live: truvian.xyz](https://truvian.xyz)**
+
 ## What's live right now
 
 | Piece | Status |
 |---|---|
 | **Miner** (Track 1) - [`truvian-onchain-truth`](https://miner.truvian.xyz/health), reg #172 | 🟢 Active · rank 2 in `ONCHAIN_TX_LOOKUP` (0.910) and `GAS_PRICE` on debut epoch |
-| **WASM scoring module** (Track 2) - reg #544 | 🏆 **Live champion** for `ONCHAIN_TX_LOOKUP` - the module validators run to score every miner in the intent |
-| **Truvian Shield** (Track 3, opens Aug 31) | 🔜 Execution-safety agent consuming live Telegraph miners |
+| **WASM scoring module** (Track 2) - reg #544, then #617 | 🏆 Held **champion** for `ONCHAIN_TX_LOOKUP` twice this season - the module validators run to score every miner in the intent - before being dethroned in an open arms race |
+| **Truvian Shield** (Track 3) - [truvian.xyz](https://truvian.xyz) | 🟢 Live · execution-safety checkpoint paying live Telegraph miners per check |
 
 ## The miner
 
@@ -32,16 +34,40 @@ A Rust → `wasm32-unknown-unknown` judge implementing `rank_answer(question, gr
 
 Build: `cd scorer && cargo build --release --target wasm32-unknown-unknown` · Test: `./test.sh` (official wazero harness).
 
+## Truvian Shield (`src/shield/`)
+
+The Track 3 app: an execution-safety checkpoint for onchain agents, live at **[truvian.xyz](https://truvian.xyz)**.
+
+Before an agent signs a transaction it POSTs the proposed action; Shield fans out to **live** Telegraph miners and returns a `SAFE` / `CAUTION` / `BLOCK` verdict with per-check evidence:
+
+| Check | Intent | Asks |
+|---|---|---|
+| FEE | `GAS_PRICE` | is gas sane on this chain right now? |
+| COUNTERPARTY | `ONCHAIN_TX_LOOKUP` | did the referenced transaction actually succeed? |
+| VALUE | `CRYPTO_PRICE` | how many dollars are at risk? |
+| LIQUIDITY | `TVL_LOOKUP` | is the named protocol still liquid? |
+
+- **Nothing mocked or cached.** Every check is a real x402 payment in USDC to a live miner at request time; an unreachable miner is graded `error`, never filled in.
+- **Verifiable.** Each answer carries a Telegraph signal hash that resolves on the node, and every report gets a permalink (`/app?r=<id>`) plus a public feed at `/api/recent`.
+- **Shield is itself an x402 service.** Past the free allowance, `POST /api/check` answers `402` with a price, so agents pay per check and the app funds the miners it depends on.
+- **Drop-in guard.** `src/agent/guard.ts` wraps a viem wallet so `sendTransaction` refuses on `BLOCK` - and fails closed if Shield is unreachable, because a safety check that fails open is not a safety check.
+
+Run `npx tsx src/scripts/readiness.ts` for the 62-check end-to-end suite against live miners, or `npx tsx src/scripts/demo-guard.ts` to watch an agent refuse to sign.
+
 ## Repo map
 
 ```
-src/miner/        Fastify miner: intent handlers + server
+src/miner/        Fastify miner: intent handlers + server        (Track 1)
+scorer/           Rust -> WASM scoring module + test harnesses      (Track 2)
+src/shield/       Shield API, verdict engine, x402 client+server,
+                  receipts, rate limiting, dashboard                (Track 3)
+src/agent/        Drop-in viem guard for autonomous agents
 src/config/       Chain registry (verified RPCs, fallback transports)
-src/scripts/      Live verification suites & chain probes
-scorer/           Track 2 WASM scoring module + test/comparison harnesses
+src/scripts/      Live verification suites, chain probes, demo capture
 telegraph/        Miner YAML, registration runbook, shipped .wasm binaries
+video/            Remotion project for the demo video
 deploy/           pm2 + nginx configs
-docs/             X update log
+docs/             Build plan + X update log
 ```
 
 ## Verified-facts engineering
