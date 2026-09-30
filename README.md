@@ -4,6 +4,8 @@
 
 Truvian answers onchain questions **exactly**, **judges** other miners' answers for exactness, and **pays** for both. One codebase across all three tracks: the supply, the grading, and the demand.
 
+> 🏆 **Season I result: 3rd place, Miner track - $600.** [Winners announced by @Telegraphprotoc](https://x.com/Telegraphprotoc/status/2104484144684098021)
+
 **▶ [Watch the 3-minute demo](https://x.com/encrypt_wizard/status/2096818596051575158)** · **[Try it live at truvian.xyz](https://truvian.xyz)**
 
 ---
@@ -12,7 +14,7 @@ Truvian answers onchain questions **exactly**, **judges** other miners' answers 
 
 | Piece | Status |
 |---|---|
-| **Miner** - Track 1 · [`truvian-onchain-truth`](https://miner.truvian.xyz/health) · reg #172 | 🟢 **Active** - rank 2 in `ONCHAIN_TX_LOOKUP` (0.910) and `GAS_PRICE` on its debut epoch |
+| **Miner** - Track 1 · [`truvian-onchain-truth`](https://miner.truvian.xyz/health) · reg #172 | 🏆 **3rd place, Season I - $600** · 🟢 Active - rank 2 in `ONCHAIN_TX_LOOKUP` (0.910) and `GAS_PRICE` on its debut epoch |
 | **WASM scoring module** - Track 2 · reg #544, then #617 | 🏆 **Held champion twice** for `ONCHAIN_TX_LOOKUP` - the module validators run to score every miner in the intent - before being dethroned in an open arms race |
 | **Truvian Shield** - Track 3 · [truvian.xyz](https://truvian.xyz) | 🟢 **Live** - execution-safety checkpoint that pays live Telegraph miners per check |
 

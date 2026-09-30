@@ -12,7 +12,8 @@
 - **A miner = any HTTP API + YAML descriptor + one `registerMiner` tx** (gas-only, permissionless). YAML schema is `additionalProperties:false` everywhere - see `telegraph/truvian-miner.yaml`. Track 2 = a Rust→WASM scoring module (`scorer/`), registered per-intent via `registerWasm`, which must beat the incumbent champion on a node-internal benchmark.
 - **Base mainnet data layer** (chain 8453). Working RPCs: `https://mainnet.base.org`, `https://base-rpc.publicnode.com` (`base.llamarpc.com` is dead). Payments settle via x402.
 - **Intents are finalized** - 40 total (18 Tier A deterministic/WASM-exact-match, 22 Tier B LLM-judge). A miner MUST serve a listed intent; there is no slippage/execution-verification intent.
-- **Timeline:** Tracks 1 & 2: Aug 17–31. Track 3: Aug 31–Sep 7. Winners: announced from Sep 19.
+- **Timeline:** Tracks 1 & 2: Aug 17–31. Track 3: Aug 31–Sep 7. Winners announced 2026-09-30.
+- **RESULT (Season I):** Truvian placed **3rd in the Miner track - $600**. Announcement: <https://x.com/Telegraphprotoc/status/2104484144684098021>. H2 opens in October.
 - **Prizes (H1):** Miner $2,000 / $1,000 / $600 / $400 · Scripts $1,000 · Apps $2,000. Total $5,000. H2 (Oct): $10K. H3 (Dec): mainnet.
 - **Scoring (Track 1):** 75% Normalized Performance within your intent (your avg canonical score ÷ best miner's avg in that intent) + 25% X engagement, posts tagged **@Telegraphprotoc** (NOT @TelegraphProto).
 - **Eligibility guardrail:** an intent needs ≥3 active miners and ≥100 real Track 3 requests for cash-prize eligibility.
