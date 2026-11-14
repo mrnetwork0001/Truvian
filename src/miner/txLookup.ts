@@ -1,10 +1,17 @@
 /**
  * ONCHAIN_TX_LOOKUP intent handler.
- * Pure (input) -> payload against live RPC; no Telegraph envelope knowledge.
+ * Pure (input) -> payload against live RPC. The payload carries the fields of
+ * Telegraph's V2 response format by name; telegraph/truvian-miner.yaml maps them.
  */
 import { formatEther, getAddress, isHex } from 'viem';
 import { SUPPORTED_CHAINS, chainMeta, getClient, isSupportedChain, type SupportedChain } from '../config/chains.js';
-import { IntentError, type DecodedTransfer, type TxLookupInput, type TxLookupResult } from '../types/index.js';
+import {
+  IntentError,
+  type DecodedTransfer,
+  type TxLookupInput,
+  type TxLookupResult,
+  type TxPendingResult,
+} from '../types/index.js';
 
 /** keccak256("Transfer(address,address,uint256)") */
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
@@ -119,7 +126,7 @@ export function validateTxLookupInput(raw: unknown): TxLookupInput {
  * Searching concurrently keeps latency at roughly one RPC round-trip instead
  * of summing one per chain, which matters because validators score on a deadline.
  */
-export async function handleTxLookup(input: TxLookupInput): Promise<TxLookupResult> {
+export async function handleTxLookup(input: TxLookupInput): Promise<TxLookupResult | TxPendingResult> {
   if (input.chain) return lookupOnChain(input.chain, input.txHash);
 
   // Fire every chain at once, then await in priority order so a Base hit
@@ -137,7 +144,7 @@ export async function handleTxLookup(input: TxLookupInput): Promise<TxLookupResu
     settled.push(outcome.error);
   }
   // Surface a real upstream failure rather than reporting "not found" when
-  // every chain errored for an infrastructure reason.
+  // a chain could not be searched: absence is only proven by every chain answering.
   const rpcFailure = settled.find(
     (e) => e instanceof IntentError && e.code === 'UPSTREAM_RPC_ERROR',
   );
@@ -148,23 +155,71 @@ export async function handleTxLookup(input: TxLookupInput): Promise<TxLookupResu
   );
 }
 
-async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Promise<TxLookupResult> {
+function isNotFound(err: any): boolean {
+  return err?.name === 'TransactionReceiptNotFoundError' || err?.name === 'TransactionNotFoundError';
+}
+
+async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Promise<TxLookupResult | TxPendingResult> {
   const client = getClient(chain);
   const meta = chainMeta(chain);
 
-  let receipt, tx, latestBlock;
-  try {
-    [receipt, tx, latestBlock] = await Promise.all([
-      client.getTransactionReceipt({ hash: txHash }),
-      client.getTransaction({ hash: txHash }),
-      client.getBlockNumber(),
-    ]);
-  } catch (err: any) {
-    if (err?.name === 'TransactionReceiptNotFoundError' || err?.name === 'TransactionNotFoundError') {
-      throw new IntentError('TX_NOT_FOUND', `transaction ${txHash} not found on ${chain}`);
+  // The transaction and its receipt are separate facts: a transaction the
+  // node knows with no receipt yet is pending, not missing.
+  const [txOutcome, receiptOutcome, latestOutcome] = await Promise.allSettled([
+    client.getTransaction({ hash: txHash }),
+    client.getTransactionReceipt({ hash: txHash }),
+    client.getBlockNumber(),
+  ]);
+  for (const outcome of [txOutcome, receiptOutcome, latestOutcome]) {
+    if (outcome.status === 'rejected' && !isNotFound(outcome.reason)) {
+      const err: any = outcome.reason;
+      throw new IntentError('UPSTREAM_RPC_ERROR', err?.shortMessage ?? err?.message ?? 'rpc failure');
     }
-    throw new IntentError('UPSTREAM_RPC_ERROR', err?.shortMessage ?? err?.message ?? 'rpc failure');
   }
+  if (txOutcome.status === 'rejected') {
+    throw new IntentError('TX_NOT_FOUND', `transaction ${txHash} not found on ${chain}`);
+  }
+  const tx = txOutcome.value;
+  const chainLabel = meta.label;
+  const hash = tx.hash.toLowerCase();
+  const from = getAddress(tx.from);
+  const valueText = `${formatEther(tx.value)} ${meta.nativeSymbol} (${tx.value} wei)`;
+  // formatEther is exact; Number() of it is the nearest double, the same for the same value
+  const valueEth = Number(formatEther(tx.value));
+
+  if (receiptOutcome.status === 'rejected' || latestOutcome.status === 'rejected') {
+    if (latestOutcome.status === 'rejected') {
+      // getBlockNumber has no not-found error, so this cannot happen; fail loudly if it does
+      throw new IntentError('UPSTREAM_RPC_ERROR', 'latest block number unavailable');
+    }
+    const to = tx.to ? getAddress(tx.to) : null;
+    const answer = [
+      `Transaction ${hash} on ${chainLabel} (chain id ${meta.chainId}) is pending: it has been broadcast but is not yet included in a block.`,
+      to
+        ? `It would transfer ${valueText} from ${from} to the recipient ${to}.`
+        : `It was sent from ${from} to create a contract, with a value of ${valueText}.`,
+    ].join(' ');
+    return {
+      answer,
+      signal: answer,
+      source: `${chainLabel} JSON-RPC eth_getTransactionByHash (no receipt yet)`,
+      confidence: 0.9,
+      tx_hash: hash,
+      status: 'pending',
+      from,
+      to,
+      block_number: null,
+      value_eth: valueEth,
+      chain,
+      chainId: meta.chainId,
+      txHash: hash,
+      valueWei: tx.value.toString(),
+      nonce: tx.nonce,
+      inputData: tx.input,
+    };
+  }
+  const receipt = receiptOutcome.value;
+  const latestBlock = latestOutcome.value;
 
   const erc20Transfers: DecodedTransfer[] = [];
   for (const log of receipt.logs) {
@@ -185,9 +240,8 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
   const l1Fee = meta.isOpStack ? BigInt((receipt as any).l1Fee ?? 0) : 0n;
   const totalFee = receipt.gasUsed * receipt.effectiveGasPrice + l1Fee;
 
-  const chainLabel = meta.label;
-  const statusWord = receipt.status === 'success' ? 'succeeded' : 'reverted';
-  const from = getAddress(receipt.from);
+  const succeeded = receipt.status === 'success';
+  const statusWord = succeeded ? 'succeeded' : 'reverted';
   const to = receipt.to ? getAddress(receipt.to) : null;
   const created = receipt.contractAddress ? getAddress(receipt.contractAddress) : null;
   const selector = tx.input && tx.input.length >= 10 ? tx.input.slice(0, 10) : null;
@@ -196,10 +250,10 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
   // scores 0.981 with this scope, and extra numerics (fees, log counts) cost
   // precision under the live scorer. Full detail stays in structured fields.
   const answerParts = [
-    `Transaction ${receipt.transactionHash.toLowerCase()} on ${chainLabel} (chain id ${meta.chainId}) ${statusWord} in block ${receipt.blockNumber}.`,
+    `Transaction ${hash} on ${chainLabel} (chain id ${meta.chainId}) ${statusWord} in block ${receipt.blockNumber}.`,
     to
-      ? `It transferred ${formatEther(tx.value)} ${meta.nativeSymbol} (${tx.value} wei) from ${from} to the recipient ${to}${selector && selector !== '0x' ? `, invoking function selector ${selector}` : ''}.`
-      : `It was sent from ${from} and created contract ${created} with a value of ${formatEther(tx.value)} ${meta.nativeSymbol} (${tx.value} wei).`,
+      ? `It transferred ${valueText} from ${from} to the recipient ${to}${selector && selector !== '0x' ? `, invoking function selector ${selector}` : ''}.`
+      : `It was sent from ${from} and created contract ${created} with a value of ${valueText}.`,
   ];
   const answer = answerParts.join(' ');
 
@@ -212,19 +266,26 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
     signal: answer,
     source: `${chainLabel} JSON-RPC eth_getTransactionReceipt + eth_getTransactionByHash`,
     confidence: 0.99,
+    tx_hash: hash,
+    // The intent's vocabulary: a mined transaction is `confirmed` unless its
+    // execution reverted. The receipt's own word is in execution_status.
+    status: succeeded ? 'confirmed' : 'reverted',
+    from,
+    to,
+    // Block heights are far below 2^53, so the number is exact
+    block_number: Number(receipt.blockNumber),
+    value_eth: valueEth,
     chain,
     chainId: meta.chainId,
-    txHash: receipt.transactionHash.toLowerCase(),
-    status: receipt.status === 'success' ? 'success' : 'reverted',
-    blockNumber: receipt.blockNumber.toString(),
-    blockHash: receipt.blockHash.toLowerCase(),
-    transactionIndex: receipt.transactionIndex,
-    from: getAddress(receipt.from),
-    to: receipt.to ? getAddress(receipt.to) : null,
-    contractAddress: receipt.contractAddress ? getAddress(receipt.contractAddress) : null,
+    txHash: hash,
     valueWei: tx.value.toString(),
     nonce: tx.nonce,
     inputData: tx.input,
+    execution_status: succeeded ? 'success' : 'reverted',
+    blockNumber: receipt.blockNumber.toString(),
+    blockHash: receipt.blockHash.toLowerCase(),
+    transactionIndex: receipt.transactionIndex,
+    contractAddress: created,
     gasUsed: receipt.gasUsed.toString(),
     effectiveGasPrice: receipt.effectiveGasPrice.toString(),
     l1FeeWei: l1Fee.toString(),

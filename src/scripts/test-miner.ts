@@ -35,10 +35,29 @@ async function main() {
   const txInput = validateTxLookupInput({ chain: 'base', txHash: sampleHash });
   const tx = await handleTxLookup(txInput);
   console.log(JSON.stringify(tx, null, 2).slice(0, 1200), '\n...');
+  if (tx.status === 'pending') throw new Error('a mined sample transaction was reported pending');
 
   const rawReceipt = await client.getTransactionReceipt({ hash: sampleHash });
   const rawL1Fee = BigInt((rawReceipt as any).l1Fee ?? 0);
-  check('status matches raw receipt', tx.status === rawReceipt.status);
+  check('execution_status matches raw receipt', tx.execution_status === rawReceipt.status);
+
+  // Telegraph V2 response format (GET /engine/v1/intents/ONCHAIN_TX_LOOKUP):
+  // tx_hash, status, from, to, block_number (scored), value_eth
+  const rawTx = await client.getTransaction({ hash: sampleHash });
+  check('V2 tx_hash is the lowercase hash', tx.tx_hash === sampleHash.toLowerCase());
+  check('V2 status uses the intent enum', tx.status === 'confirmed', tx.status);
+  check(
+    'V2 block_number is the exact height as a JSON number',
+    typeof tx.block_number === 'number' && BigInt(tx.block_number) === rawReceipt.blockNumber,
+    String(tx.block_number),
+  );
+  check(
+    'V2 value_eth is a JSON number equal to the wei value',
+    typeof tx.value_eth === 'number' && Math.abs(tx.value_eth - Number(rawTx.value) / 1e18) < 1e-9,
+    String(tx.value_eth),
+  );
+  check('V2 from/to are the receipt addresses', tx.from.toLowerCase() === rawReceipt.from.toLowerCase()
+    && (tx.to ?? '').toLowerCase() === (rawReceipt.to ?? '').toLowerCase());
   check('blockNumber matches', tx.blockNumber === rawReceipt.blockNumber.toString());
   check(
     'fee invariant: totalFee = gasUsed*effectiveGasPrice + l1Fee',
@@ -73,6 +92,7 @@ async function main() {
 
   // determinism: same input twice -> identical scored payload (confirmations may differ)
   const tx2 = await handleTxLookup(txInput);
+  if (tx2.status === 'pending') throw new Error('a mined sample transaction was reported pending');
   const scrub = ({ confirmations, ...rest }: typeof tx) => rest;
   check('deterministic: identical payload on repeat call', JSON.stringify(scrub(tx)) === JSON.stringify(scrub(tx2)));
 
