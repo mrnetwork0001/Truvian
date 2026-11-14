@@ -7,7 +7,9 @@
  * maps Telegraph's contract onto these once recon confirms it.
  *
  * Determinism rules (Tier A intents are scored by exact match):
- *  - every big number is a decimal string, never a JS number or hex
+ *  - every big number is a decimal string, never a JS number or hex; the only
+ *    JSON numbers are the fields Telegraph's response format types as numbers
+ *    (block_number, value_eth, gas_price_gwei), each beside its exact string
  *  - addresses are EIP-55 checksummed
  *  - hashes are lowercase 0x-hex
  *  - no wall-clock timestamps inside scored fields
@@ -32,13 +34,19 @@ export interface DecodedTransfer {
   logIndex: number;
 }
 
-export interface TxLookupResult {
+/**
+ * Lifecycle status in the vocabulary of the Telegraph intent's response
+ * format (GET /engine/v1/intents/ONCHAIN_TX_LOOKUP -> response.fields.status).
+ * `not_found` is reported through IntentError, never through a result.
+ */
+export type TxStatus = 'confirmed' | 'reverted' | 'pending';
+
+/** Fields every found transaction carries, mined or not. */
+interface TxLookupBase {
   /**
    * Number-first natural-language statement of the facts, FIRST field on
-   * purpose: Telegraph validators score miner responses against ground truth
-   * as text. Verified empirically (epoch 267): miners returning bare JSON
-   * score ~0; the two miners leading ONCHAIN_TX_LOOKUP (0.88 / 0.83) answer
-   * with concise exact-figure statements.
+   * purpose: nodes without an intent_mapping have a parser model read the
+   * whole answer, and the Season I text scorer read this field.
    */
   answer: string;
   /**
@@ -52,21 +60,45 @@ export interface TxLookupResult {
   source: string;
   /** Static per-intent confidence for signal_mapping.confidence_field */
   confidence: number;
+
+  // ---- Telegraph V2 response format: the names and types the node reads by
+  // path through intent_mapping (telegraph/truvian-miner.yaml). Verified
+  // 2026-11-12 against GET /engine/v1/intents/ONCHAIN_TX_LOOKUP.
+  /** Lowercase 0x-hex transaction hash */
+  tx_hash: string;
+  status: TxStatus;
+  /** EIP-55 sender */
+  from: string;
+  /** EIP-55 recipient; null for contract creations */
+  to: string | null;
+  /** Inclusion height (the intent's scored field); null while pending */
+  block_number: number | null;
+  /**
+   * The transaction's native value in whole coins. A JSON number because the
+   * intent types it as one (6 decimals); the exact figure is `valueWei`.
+   */
+  value_eth: number;
+
+  // ---- Truvian's own exact, raw-faithful fields
   chain: SupportedChain;
   chainId: number;
   txHash: string;
-  status: 'success' | 'reverted';
-  blockNumber: string;
-  blockHash: string;
-  transactionIndex: number;
-  from: string;
-  /** null for contract creations */
-  to: string | null;
-  /** non-null only for contract creations */
-  contractAddress: string | null;
   valueWei: string;
   nonce: number;
   inputData: string;
+}
+
+/** A mined transaction: everything the receipt proves. */
+export interface TxLookupResult extends TxLookupBase {
+  status: 'confirmed' | 'reverted';
+  block_number: number;
+  /** Receipt execution outcome, in the receipt's own words */
+  execution_status: 'success' | 'reverted';
+  blockNumber: string;
+  blockHash: string;
+  transactionIndex: number;
+  /** non-null only for contract creations */
+  contractAddress: string | null;
   gasUsed: string;
   effectiveGasPrice: string;
   /** OP-stack L1 data fee in wei; "0" on non-OP-stack chains */
@@ -79,6 +111,12 @@ export interface TxLookupResult {
   confirmations: string;
 }
 
+/** A transaction the node knows about that is not yet in a block. */
+export interface TxPendingResult extends TxLookupBase {
+  status: 'pending';
+  block_number: null;
+}
+
 // ---------- GAS_PRICE ----------
 
 export interface GasPriceInput {
@@ -86,7 +124,7 @@ export interface GasPriceInput {
 }
 
 export interface GasPriceResult {
-  /** Number-first natural-language answer - see TxLookupResult.answer */
+  /** Number-first natural-language answer - see TxLookupBase.answer */
   answer: string;
   signal: string;
   source: string;
@@ -104,6 +142,15 @@ export interface GasPriceResult {
   priorityFeePercentilesWei: { p25: string; p50: string; p75: string };
   /** L1 gas price observed by the OP-stack chain; "0" elsewhere */
   l1GasPriceWei: string;
+
+  // ---- Telegraph V2 response format (GET /engine/v1/intents/GAS_PRICE)
+  /**
+   * eth_gasPrice in gwei (the intent's scored field). A JSON number because
+   * the intent types it as one (6 decimals); the exact figure is `gasPriceWei`.
+   */
+  gas_price_gwei: number;
+  /** Timestamp of the anchoring block (ISO 8601, UTC) - chain time, not wall-clock */
+  as_of: string;
 }
 
 // ---------- errors ----------
@@ -116,6 +163,12 @@ export class IntentError extends Error {
       | 'CHAIN_UNSUPPORTED'
       | 'UPSTREAM_RPC_ERROR',
     message: string,
+    /**
+     * Structured fields to return beside the answer text when the outcome is
+     * itself an answer (a transaction that does not exist has status
+     * `not_found` in the intent's response format).
+     */
+    public readonly fields: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = 'IntentError';
@@ -131,7 +184,7 @@ export class IntentError extends Error {
       case 'TX_NOT_FOUND':
         return `${this.message.charAt(0).toUpperCase()}${this.message.slice(1)}. The transaction hash is well formed but no matching transaction exists on the chains searched, so it was never mined there or belongs to a chain this miner does not serve.`;
       case 'CHAIN_UNSUPPORTED':
-        return `This miner serves Base, Ethereum, Base Sepolia and X Layer. ${this.message}.`;
+        return `The requested chain is not served by this miner. ${this.message.charAt(0).toUpperCase()}${this.message.slice(1)}.`;
       case 'INVALID_INPUT':
         return `The request did not identify a transaction to look up. ${this.message}.`;
       default:

@@ -6,80 +6,20 @@ protocol: generic
 name: Truvian Exact On-Chain Truth Engine
 base_url: https://miner.truvian.xyz
 description: >
-  Deterministic, exactly-verifiable on-chain answers for Base and Ethereum,
-  read live from JSON-RPC at request time. ONCHAIN_TX_LOOKUP returns the full
-  canonical facts of a transaction — status, block, addresses, value, gas, and
-  the true total fee including the OP-stack L1 data fee that naive
-  implementations drop — decoded ERC-20 transfers included. GAS_PRICE returns
-  a block-anchored fee snapshot with EIP-1559 percentiles and L1 base fee.
-  Every response leads with a number-first plain-language answer followed by
-  the complete structured payload, and every figure is independently
-  reproducible from public RPC.
+  Exact, independently reproducible on-chain answers read live from public
+  JSON-RPC at request time, on Base, Ethereum, Arbitrum One, OP Mainnet,
+  Polygon, BNB Smart Chain, Avalanche C-Chain, X Layer, Ethereum Sepolia and
+  Base Sepolia. Transaction lookup returns the receipt-proven facts of a
+  transaction: inclusion block, status, sender, recipient and native value,
+  plus gas used, the true total fee including the OP-stack L1 data fee, and
+  decoded ERC-20 transfers. A transaction with no receipt is reported pending
+  and an unknown hash is reported not_found, never guessed. Gas price returns
+  eth_gasPrice anchored to an explicit block, with base fee, priority-fee
+  percentiles and the L1 base fee on OP-stack chains. Every response carries
+  the intent's fields by name and a plain-language statement of the same facts.
 
 docs:
   repository: https://github.com/mrnetwork0001/Truvian
-
-input_schema:
-  type: object
-  properties:
-    chain:
-      type: string
-      description: "Chain name: base (default), ethereum, or xlayer. Aliases accepted: eth, mainnet."
-    hash:
-      type: string
-      description: "0x-prefixed 32-byte transaction hash (for /tx)."
-    query:
-      type: string
-      description: "Natural-language question; a contained tx hash or chain name is extracted."
-
-output_schema:
-  type: object
-  properties:
-    answer:
-      type: string
-      description: Number-first natural-language statement of the exact on-chain facts.
-    signal:
-      type: string
-      description: Short label (transaction status word, or gas-price).
-    source:
-      type: string
-      description: The JSON-RPC methods and chain the answer was derived from.
-    confidence:
-      type: number
-      minimum: 0
-      maximum: 1
-      description: Confidence that live RPC reads completed successfully.
-    chainId:
-      type: integer
-      description: EVM chain id the answer refers to.
-    blockNumber:
-      type: string
-      description: Block the answer is anchored to.
-    totalFeeWei:
-      type: string
-      description: "ONCHAIN_TX_LOOKUP: exact total cost in wei = gasUsed * effectiveGasPrice + l1Fee."
-    gasPriceWei:
-      type: string
-      description: "GAS_PRICE: current eth_gasPrice as a decimal wei string."
-
-endpoints:
-  - path: /tx
-    external_path: /tx
-    method: GET
-    description: >
-      Look up a transaction by hash (ONCHAIN_TX_LOOKUP). Params: hash (or
-      tx_hash/txHash, or a query containing one), chain (default base).
-      Returns status, block, from/to, value, gas used, effective gas price,
-      exact total fee in wei including L1 data fee, and decoded ERC-20
-      transfers.
-  - path: /gas
-    external_path: /gas
-    method: GET
-    description: >
-      Current gas prices for a chain (GAS_PRICE). Params: chain (default
-      base) or a natural-language query. Returns eth_gasPrice, base fee,
-      priority fee, 5-block EIP-1559 percentiles, and L1 base fee, all
-      anchored to an explicit block number.
 
 auth:
   type: none
@@ -89,11 +29,152 @@ cache_ttl_sec: 2
 circuit_threshold: 5
 circuit_cooldown_seconds: 30
 
+endpoints:
+  - path: /tx
+    external_path: /tx
+    method: GET
+    description: >
+      Look up one transaction by its hash on an EVM chain and return its
+      status (confirmed, reverted, pending or not_found), inclusion block
+      number, sender, recipient and native value transferred.
+    intents: [ONCHAIN_TX_LOOKUP_GENERAL]
+    params:
+      query:
+        required:
+          - name: tx_hash
+            type: string
+            intents: ["*"]
+            description: "Complete transaction hash: 0x followed by exactly 64 hexadecimal characters."
+        optional:
+          - name: chain
+            type: string
+            intents: ["*"]
+            description: >-
+              Chain the transaction is on, as a name or EIP-155 chain id. One of
+              base (8453), ethereum (1), arbitrum (42161), optimism (10),
+              polygon (137), bsc (56), avalanche (43114), xlayer (196),
+              sepolia (11155111), base-sepolia (84532). When omitted, every
+              listed chain is searched.
+  - path: /gas
+    external_path: /gas
+    method: GET
+    description: >
+      Current gas price on an EVM chain in gwei, read from eth_gasPrice and
+      anchored to the latest block, with base fee and priority-fee percentiles.
+    intents: [GAS_PRICE_GENERAL]
+    params:
+      query:
+        required:
+          - name: chain
+            type: string
+            intents: ["*"]
+            description: >-
+              Chain to read, as a name or EIP-155 chain id. One of base (8453),
+              ethereum (1), arbitrum (42161), optimism (10), polygon (137),
+              bsc (56), avalanche (43114), xlayer (196), sepolia (11155111),
+              base-sepolia (84532).
+
+input_schema:
+  type: object
+  properties:
+    tx_hash:
+      type: string
+      pattern: "^0x[0-9a-fA-F]{64}$"
+      description: 0x-prefixed 32-byte transaction hash (for /tx).
+    chain:
+      type: string
+      description: >-
+        Chain name or EIP-155 chain id: base, ethereum, arbitrum, optimism,
+        polygon, bsc, avalanche, xlayer, sepolia, base-sepolia.
+
+output_schema:
+  type: object
+  properties:
+    answer:
+      type: string
+      description: Plain-language statement of the exact on-chain facts.
+    tx_hash:
+      type: string
+      description: "/tx: the transaction hash looked up, lower case."
+    status:
+      type: string
+      enum: [confirmed, reverted, pending, not_found]
+      description: "/tx: transaction status."
+    from:
+      type: string
+      description: "/tx: sender address, EIP-55."
+    to:
+      type: string
+      description: "/tx: recipient or contract address, EIP-55; null for a contract creation."
+    block_number:
+      type: integer
+      description: "/tx: block the transaction was included in; null while pending or not found."
+    value_eth:
+      type: number
+      description: "/tx: native value of the transaction in whole coins; the exact figure is valueWei."
+    totalFeeWei:
+      type: string
+      description: "/tx: exact total cost in wei = gasUsed * effectiveGasPrice + l1Fee."
+    chain:
+      type: string
+      description: Chain the answer refers to.
+    chainId:
+      type: integer
+      description: EIP-155 id of that chain.
+    gas_price_gwei:
+      type: number
+      description: "/gas: eth_gasPrice in gwei; the exact figure is gasPriceWei."
+    as_of:
+      type: string
+      description: "/gas: timestamp of the block the reading is anchored to, ISO 8601 UTC."
+    blockNumber:
+      type: string
+      description: Block the answer is anchored to, as a decimal string.
+    source:
+      type: string
+      description: The JSON-RPC methods and chain the answer was derived from.
+    confidence:
+      type: number
+      description: Confidence that live RPC reads completed successfully.
+      minimum: 0
+      maximum: 1
+
+# Where each field of the intent's response format sits in our answer
+# (GET /engine/v1/intents/<INTENT> -> response.fields). Our fields already use
+# the intent's names and units, so every path is a direct read.
+intent_mapping:
+  ONCHAIN_TX_LOOKUP_GENERAL:
+    endpoint: /tx
+    input:
+      tx_hash:
+        from: tx_hash
+        how: "Copy the complete 0x-prefixed 64-hex-character transaction hash exactly."
+      chain:
+        from: chain
+        how: "Lower-case chain name such as ethereum, base, arbitrum, optimism, polygon, bsc, avalanche, or the EIP-155 chain id."
+    output:
+      tx_hash: { path: tx_hash }
+      status: { path: status }
+      from: { path: from }
+      to: { path: to }
+      block_number: { path: block_number, unit: "block height" }
+      value_eth: { path: value_eth, unit: "whole native units" }
+  GAS_PRICE_GENERAL:
+    endpoint: /gas
+    input:
+      chain:
+        from: chain
+        how: "Lower-case chain name such as ethereum, base, arbitrum, optimism, polygon, bsc, avalanche, or the EIP-155 chain id."
+    output:
+      chain: { path: chain }
+      gas_price_gwei: { path: gas_price_gwei, unit: gwei }
+      as_of: { path: as_of }
+
 semantics:
-  supported_intents:
-    - ONCHAIN_TX_LOOKUP
-    - GAS_PRICE
   signal_mapping:
     confidence_field: confidence
     label_field: signal
     reason_field: source
+  supported_intents:
+    - ONCHAIN_TX_LOOKUP_GENERAL
+    - GAS_PRICE_GENERAL

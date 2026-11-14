@@ -4,8 +4,9 @@
  * fee-math invariant against the raw RPC receipt, then runs GAS_PRICE and
  * checks internal consistency. Exits non-zero on any failure.
  */
-import { getClient } from '../config/chains.js';
-import { handleTxLookup, validateTxLookupInput } from '../miner/txLookup.js';
+import { SUPPORTED_CHAINS, chainMeta, getClient } from '../config/chains.js';
+import { buildServer } from '../miner/server.js';
+import { chainFromText, handleTxLookup, normalizeChain, validateTxLookupInput } from '../miner/txLookup.js';
 import { handleGasPrice, validateGasPriceInput } from '../miner/gasPrice.js';
 import { IntentError } from '../types/index.js';
 
@@ -35,10 +36,29 @@ async function main() {
   const txInput = validateTxLookupInput({ chain: 'base', txHash: sampleHash });
   const tx = await handleTxLookup(txInput);
   console.log(JSON.stringify(tx, null, 2).slice(0, 1200), '\n...');
+  if (tx.status === 'pending') throw new Error('a mined sample transaction was reported pending');
 
   const rawReceipt = await client.getTransactionReceipt({ hash: sampleHash });
   const rawL1Fee = BigInt((rawReceipt as any).l1Fee ?? 0);
-  check('status matches raw receipt', tx.status === rawReceipt.status);
+  check('execution_status matches raw receipt', tx.execution_status === rawReceipt.status);
+
+  // Telegraph V2 response format (GET /engine/v1/intents/ONCHAIN_TX_LOOKUP):
+  // tx_hash, status, from, to, block_number (scored), value_eth
+  const rawTx = await client.getTransaction({ hash: sampleHash });
+  check('V2 tx_hash is the lowercase hash', tx.tx_hash === sampleHash.toLowerCase());
+  check('V2 status uses the intent enum', tx.status === 'confirmed', tx.status);
+  check(
+    'V2 block_number is the exact height as a JSON number',
+    typeof tx.block_number === 'number' && BigInt(tx.block_number) === rawReceipt.blockNumber,
+    String(tx.block_number),
+  );
+  check(
+    'V2 value_eth is a JSON number equal to the wei value',
+    typeof tx.value_eth === 'number' && Math.abs(tx.value_eth - Number(rawTx.value) / 1e18) < 1e-9,
+    String(tx.value_eth),
+  );
+  check('V2 from/to are the receipt addresses', tx.from.toLowerCase() === rawReceipt.from.toLowerCase()
+    && (tx.to ?? '').toLowerCase() === (rawReceipt.to ?? '').toLowerCase());
   check('blockNumber matches', tx.blockNumber === rawReceipt.blockNumber.toString());
   check(
     'fee invariant: totalFee = gasUsed*effectiveGasPrice + l1Fee',
@@ -73,6 +93,7 @@ async function main() {
 
   // determinism: same input twice -> identical scored payload (confirmations may differ)
   const tx2 = await handleTxLookup(txInput);
+  if (tx2.status === 'pending') throw new Error('a mined sample transaction was reported pending');
   const scrub = ({ confirmations, ...rest }: typeof tx) => rest;
   check('deterministic: identical payload on repeat call', JSON.stringify(scrub(tx)) === JSON.stringify(scrub(tx2)));
 
@@ -81,6 +102,50 @@ async function main() {
     validateTxLookupInput({ chain: 'base', txHash: `0x${'ab'.repeat(32)}` }),
   ).then(() => null, (e) => e);
   check('unknown tx -> TX_NOT_FOUND', missing instanceof IntentError && missing.code === 'TX_NOT_FOUND');
+  check(
+    'TX_NOT_FOUND carries V2 status not_found and the hash',
+    missing instanceof IntentError && missing.fields.status === 'not_found' && missing.fields.tx_hash === `0x${'ab'.repeat(32)}`,
+  );
+
+  // chain names: aliases, EIP-155 ids, CAIP-2, free text
+  const aliasCases: Array<[string, string]> = [
+    ['Ethereum', 'ethereum'], ['1', 'ethereum'], ['eip155:8453', 'base'], ['Arbitrum One', 'arbitrum'],
+    ['42161', 'arbitrum'], ['OP Mainnet', 'optimism'], ['matic', 'polygon'], ['BNB Smart Chain', 'bsc'],
+    ['avalanche_c_chain', 'avalanche'], ['sepolia', 'sepolia'], ['Base Sepolia', 'base-sepolia'], ['X Layer', 'xlayer'],
+  ];
+  const aliasMisses = aliasCases.filter(([raw, want]) => normalizeChain(raw) !== want);
+  check('chain aliases, ids and CAIP-2 resolve', aliasMisses.length === 0, aliasMisses.map(([r]) => r).join(', '));
+  const textCases: Array<[string, string | null]> = [
+    ['gas on base sepolia?', 'base-sepolia'], ['on sepolia testnet', 'sepolia'], ['the Arbitrum network', 'arbitrum'],
+    ['on Polygon', 'polygon'], ['BSC fees', 'bsc'], ['ethereum mainnet', 'ethereum'], ['on base', 'base'], ['no chain here', null],
+  ];
+  const textMisses = textCases.filter(([raw, want]) => chainFromText(raw) !== want);
+  check('chain named in free text is detected', textMisses.length === 0, textMisses.map(([r]) => r).join(' | '));
+  const unsupported = (() => { try { validateTxLookupInput({ chain: 'solana', txHash: sampleHash }); return null; } catch (e) { return e; } })();
+  check('unserved chain rejected by name', unsupported instanceof IntentError && unsupported.code === 'CHAIN_UNSUPPORTED');
+
+  // every registered chain answers a real lookup: newest block's first transaction
+  for (const name of SUPPORTED_CHAINS) {
+    try {
+      const c = getClient(name);
+      let hash: `0x${string}` | undefined;
+      const tip = await c.getBlockNumber();
+      for (let back = 2n; back <= 12n && !hash; back++) {
+        hash = (await c.getBlock({ blockNumber: tip - back })).transactions[0];
+      }
+      if (!hash) { check(`${name}: found a recent transaction to look up`, false); continue; }
+      const got = await handleTxLookup(validateTxLookupInput({ chain: String(chainMeta(name).chainId), tx_hash: hash }));
+      const raw = await c.getTransactionReceipt({ hash });
+      check(
+        `${name}: lookup by chain id returns the receipt's block`,
+        got.status !== 'pending' && BigInt(got.block_number) === raw.blockNumber && got.chain === name
+          && got.answer.includes(` ${chainMeta(name).nativeSymbol} (`),
+        `${got.status} block ${got.block_number}`,
+      );
+    } catch (e: any) {
+      check(`${name}: lookup`, false, e?.message ?? String(e));
+    }
+  }
 
   // error path: bad input
   const bad = (() => { try { validateTxLookupInput({ chain: 'base', txHash: '0x123' }); return null; } catch (e) { return e; } })();
@@ -106,6 +171,42 @@ async function main() {
   check('gas answer states fee level', /(low|normal|high) transaction fee level/.test(gas.answer));
   const gasViaQuery = validateGasPriceInput({ query: 'what is the current gas price on ethereum mainnet?' });
   check('gas chain inferred from query', gasViaQuery.chain === 'ethereum');
+  check('gas defaults to Base when no chain is named', validateGasPriceInput({}).chain === 'base');
+
+  // Telegraph V2 response format (GET /engine/v1/intents/GAS_PRICE): chain, gas_price_gwei (scored), as_of
+  check(
+    'V2 gas_price_gwei is a JSON number equal to gasPriceWei',
+    typeof gas.gas_price_gwei === 'number' && Math.abs(gas.gas_price_gwei * 1e9 - Number(gas.gasPriceWei)) < 1,
+    String(gas.gas_price_gwei),
+  );
+  const anchor = await client.getBlock({ blockNumber: BigInt(gas.blockNumber) });
+  check('V2 as_of is the anchoring block time', gas.as_of === new Date(Number(anchor.timestamp) * 1000).toISOString(), gas.as_of);
+  for (const name of SUPPORTED_CHAINS) {
+    try {
+      const g = await handleGasPrice(validateGasPriceInput({ chain: name }));
+      check(`${name}: gas snapshot`, g.gas_price_gwei >= 0 && BigInt(g.blockNumber) > 0n && g.chain === name, `${g.gas_price_gwei} gwei`);
+    } catch (e: any) {
+      check(`${name}: gas snapshot`, false, e?.message ?? String(e));
+    }
+  }
+
+  // --- HTTP surface: the exact bodies the node reads through intent_mapping ---
+  console.log('');
+  const app = buildServer();
+  const viaHttp = await app.inject({ method: 'GET', url: `/tx?tx_hash=${sampleHash}&chain=base` });
+  const body = viaHttp.json();
+  check('GET /tx returns the V2 fields at top level', viaHttp.statusCode === 200 && body.tx_hash === sampleHash.toLowerCase()
+    && body.status === 'confirmed' && typeof body.block_number === 'number' && typeof body.value_eth === 'number');
+  const gone = await app.inject({ method: 'GET', url: `/tx?tx_hash=0x${'ab'.repeat(32)}&chain=base` });
+  const goneBody = gone.json();
+  check('GET /tx for an unknown hash returns 200 with status not_found and answer text',
+    gone.statusCode === 200 && goneBody.status === 'not_found' && goneBody.tx_hash === `0x${'ab'.repeat(32)}`
+      && goneBody.block_number === null && typeof goneBody.answer === 'string' && goneBody.answer.length > 40);
+  const gasHttp = await app.inject({ method: 'GET', url: '/gas?chain=ethereum' });
+  const gasBody = gasHttp.json();
+  check('GET /gas returns the V2 fields at top level', gasHttp.statusCode === 200 && gasBody.chain === 'ethereum'
+    && typeof gasBody.gas_price_gwei === 'number' && typeof gasBody.as_of === 'string');
+  await app.close();
 
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

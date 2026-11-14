@@ -1,10 +1,10 @@
 /**
  * Truvian Miner HTTP server.
  *
- * Routes expose our envelope-agnostic intent handlers directly. When recon
- * confirms Telegraph's actual miner contract (registration + request/response
- * envelope), a thin adapter route is added alongside these - the handlers do
- * not change.
+ * Routes expose the intent handlers directly: the response body is the
+ * payload, carrying the fields of Telegraph's V2 response format by name.
+ * telegraph/truvian-miner.yaml tells the node how to call these routes and
+ * where each field sits (intent_mapping).
  */
 import Fastify from 'fastify';
 import { handleGasPrice, validateGasPriceInput } from './gasPrice.js';
@@ -42,20 +42,20 @@ ul{list-style:none;padding:0}li{margin:.6rem 0}
 a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
 </style></head><body><main>
 <h1>🛡️ Truvian</h1>
-<div class="badge">🏆 champion scorer · ONCHAIN_TX_LOOKUP</div>
-<p>Exact onchain answers for Base &amp; Ethereum, read live from JSON-RPC. Telegraph miner <code>truvian-onchain-truth</code> (reg #172) serving <code>ONCHAIN_TX_LOOKUP</code> and <code>GAS_PRICE</code>.</p>
+<div class="badge">Telegraph miner · truvian-onchain-truth</div>
+<p>Exact onchain answers read live from public JSON-RPC on Base, Ethereum, Arbitrum One, OP Mainnet, Polygon, BNB Smart Chain, Avalanche, X Layer, Ethereum Sepolia and Base Sepolia. Serves the Telegraph intents <code>ONCHAIN_TX_LOOKUP_GENERAL</code> and <code>GAS_PRICE_GENERAL</code>.</p>
 <ul>
-<li><code>GET /tx?chain=base&amp;hash=0x…</code> - full canonical transaction facts, incl. the OP-stack L1 data fee</li>
-<li><code>GET /gas?chain=base</code> - block-anchored fee snapshot with EIP-1559 percentiles</li>
+<li><code>GET /tx?tx_hash=0x…&amp;chain=base</code> - status, inclusion block, sender, recipient and value of a transaction, plus the exact total fee incl. the OP-stack L1 data fee</li>
+<li><code>GET /gas?chain=base</code> - block-anchored gas price in gwei with EIP-1559 percentiles</li>
 <li><code>GET /health</code> - liveness</li>
 </ul>
-<p><a href="https://github.com/mrnetwork0001/Truvian">source &amp; methodology</a> · <a href="https://explorer.telegraphprotocol.com/">telegraph explorer</a> · built for the <a href="https://hackathon.telegraphprotocol.com/">Telegraph Season I hackathon</a></p>
+<p><a href="https://github.com/mrnetwork0001/Truvian">source &amp; methodology</a> · <a href="https://explorer.telegraphprotocol.com/">telegraph explorer</a> · 3rd place, Miner track, Telegraph Season I</p>
 </main></body></html>`);
   });
 
-  // Primary Telegraph-facing endpoints (GET + query params, the shape used by
-  // the miners that actually score). The response body IS the payload - the
-  // `answer` field leads so text-based validator scoring sees the facts first.
+  // Primary Telegraph-facing endpoints (GET + query params). The response
+  // body IS the payload: `answer` leads for nodes that read the whole answer
+  // with a parser model; the intent's own fields follow for nodes that read by path.
   app.get('/tx', async (req) => handleTxLookup(validateTxLookupInput(req.query)));
   app.get('/gas', async (req) => handleGasPrice(validateGasPriceInput(req.query ?? {})));
 
@@ -80,6 +80,7 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
           signal: err.answerText,
           source: 'Truvian onchain lookup over public JSON-RPC',
           confidence: 0,
+          ...err.fields,
           resolved: false,
           error: err.code,
           message: err.message,
