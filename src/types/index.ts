@@ -154,6 +154,12 @@ export class IntentError extends Error {
       | 'CHAIN_UNSUPPORTED'
       | 'UPSTREAM_RPC_ERROR',
     message: string,
+    /**
+     * Structured fields to return beside the answer text when the outcome is
+     * itself an answer (a transaction that does not exist has status
+     * `not_found` in the intent's response format).
+     */
+    public readonly fields: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = 'IntentError';

@@ -80,6 +80,7 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
           signal: err.answerText,
           source: 'Truvian onchain lookup over public JSON-RPC',
           confidence: 0,
+          ...err.fields,
           resolved: false,
           error: err.code,
           message: err.message,

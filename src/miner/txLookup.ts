@@ -118,6 +118,11 @@ export function validateTxLookupInput(raw: unknown): TxLookupInput {
   return { chain, txHash: txHash.toLowerCase() as `0x${string}` };
 }
 
+/** Fields that make a not-found outcome readable as the intent's `status: not_found`. */
+function notFoundFields(txHash: string) {
+  return { tx_hash: txHash, status: 'not_found', from: null, to: null, block_number: null, value_eth: null };
+}
+
 /**
  * Resolve a transaction. When the caller named a chain we query only that
  * chain; otherwise we search every supported chain concurrently and return
@@ -152,6 +157,7 @@ export async function handleTxLookup(input: TxLookupInput): Promise<TxLookupResu
   throw new IntentError(
     'TX_NOT_FOUND',
     `transaction ${input.txHash} not found on any supported chain (${SEARCH_CHAINS.join(', ')})`,
+    notFoundFields(input.txHash),
   );
 }
 
@@ -177,7 +183,7 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
     }
   }
   if (txOutcome.status === 'rejected') {
-    throw new IntentError('TX_NOT_FOUND', `transaction ${txHash} not found on ${chain}`);
+    throw new IntentError('TX_NOT_FOUND', `transaction ${txHash} not found on ${chain}`, notFoundFields(txHash));
   }
   const tx = txOutcome.value;
   const chainLabel = meta.label;

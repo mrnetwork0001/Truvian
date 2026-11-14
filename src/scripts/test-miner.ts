@@ -101,6 +101,10 @@ async function main() {
     validateTxLookupInput({ chain: 'base', txHash: `0x${'ab'.repeat(32)}` }),
   ).then(() => null, (e) => e);
   check('unknown tx -> TX_NOT_FOUND', missing instanceof IntentError && missing.code === 'TX_NOT_FOUND');
+  check(
+    'TX_NOT_FOUND carries V2 status not_found and the hash',
+    missing instanceof IntentError && missing.fields.status === 'not_found' && missing.fields.tx_hash === `0x${'ab'.repeat(32)}`,
+  );
 
   // chain names: aliases, EIP-155 ids, CAIP-2, free text
   const aliasCases: Array<[string, string]> = [
