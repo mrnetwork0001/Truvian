@@ -1,0 +1,62 @@
+version: '1'
+kind: miner
+id: 0
+slug: truth-metamask-base-fee
+protocol: generic
+name: MetaMask gas API estimated base fee (Ethereum, Arbitrum One, Avalanche)
+description: >-
+  Free, public, no-key MetaMask gas API. Returns the estimated base fee of
+  the next block in gwei for the chain named by its EIP-155 chain id. Served
+  only for Ethereum, Arbitrum One and Avalanche C-Chain, where the base fee
+  and eth_gasPrice agree; on chains with a mandatory priority fee (Polygon,
+  OP Mainnet, Base, BNB Chain) the base fee understates the gas price, so
+  those chains are not offered.
+base_url: https://gas.api.cx.metamask.io
+auth:
+  type: none
+rate_limit_per_sec: 1
+cache_ttl_sec: 0
+errors:
+  message_path: message
+endpoints:
+- path: /networks/{chain_id}/suggestedGasFees
+  external_path: /networks/{chain_id}/suggestedGasFees
+  method: GET
+  description: >-
+    Current gas fee estimates in gwei for the chain named by its EIP-155 chain
+    id, including the estimated base fee. USE THIS for the current gas price.
+  intents:
+  - GAS_PRICE_GENERAL
+  params:
+    path:
+      required:
+      - name: chain_id
+        type: string
+        intents: ['*']
+        description: >-
+          EIP-155 chain id of the chain to read: 1 for ethereum, 42161 for
+          arbitrum, 43114 for avalanche. No other chain is served.
+        accepted_fields:
+        - value: '1'
+          intents: ['*']
+          description: Ethereum mainnet (chain "ethereum", "eth", "mainnet").
+        - value: '42161'
+          intents: ['*']
+          description: Arbitrum One (chain "arbitrum").
+        - value: '43114'
+          intents: ['*']
+          description: Avalanche C-Chain (chain "avalanche", "avax").
+intent_mapping:
+  GAS_PRICE_GENERAL:
+    endpoint: /networks/{chain_id}/suggestedGasFees
+    input:
+      chain_id:
+        from: chain
+        how: 'Write the EIP-155 chain id: ethereum -> 1, arbitrum -> 42161, avalanche -> 43114. Any other chain is not served: leave it empty.'
+    output:
+      gas_price_gwei:
+        path: estimatedBaseFee
+        unit: gwei
+semantics:
+  supported_intents:
+  - GAS_PRICE_GENERAL

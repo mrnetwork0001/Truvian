@@ -4,7 +4,6 @@
   "description": "Truvian: exact onchain truth engine for the Telegraph Protocol Season I Hackathon",
   "main": "index.js",
   "scripts": {
-    "typecheck": "tsc --noEmit",
     "demo:guard": "tsx src/scripts/demo-guard.ts",
     "dev": "tsx src/miner/server.ts",
     "discover:xlayer": "tsx src/scripts/discover-dex.ts",
@@ -12,7 +11,9 @@
     "readiness": "tsx src/scripts/readiness.ts",
     "shield": "tsx src/shield/server.ts",
     "test:miner": "tsx src/scripts/test-miner.ts",
-    "test:shield": "tsx src/scripts/test-shield.ts"
+    "test:shield": "tsx src/scripts/test-shield.ts",
+    "typecheck": "tsc --noEmit",
+    "verify:truth": "tsx src/scripts/verify-truth-sources.ts"
   },
   "keywords": [],
   "author": "",
@@ -27,6 +28,7 @@
     "@types/node": "^26.1.2",
     "puppeteer-core": "^25.10.0",
     "tsx": "^4.23.5",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "yaml": "^2.9.1"
   }
 }

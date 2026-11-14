@@ -1,0 +1,79 @@
+version: '1'
+kind: miner
+id: 0
+slug: truth-routescan-balance-at-block
+protocol: generic
+name: Routescan native balance at a block (Ethereum)
+description: >-
+  Free, public, no-key Routescan explorer API. Returns the native-coin balance
+  of an address at a given block height on Ethereum mainnet, in wei, as an
+  exact decimal string. Other chains are answered with status 0 "chain not
+  supported", so this source gives no value for them.
+base_url: https://api.routescan.io
+auth:
+  type: none
+rate_limit_per_sec: 1
+cache_ttl_sec: 0
+errors:
+  message_path: message
+  status_path: status
+  success_values: ["1"]
+endpoints:
+- path: /v2/network/mainnet/evm/{chain_id}/etherscan/api
+  external_path: /v2/network/mainnet/evm/{chain_id}/etherscan/api?module=account&action=balancehistory
+  method: GET
+  description: >-
+    Native-coin balance, in wei, of one address at one block height on the
+    chain named by its EIP-155 chain id. USE THIS for a balance at a stated
+    block.
+  intents:
+  - ONCHAIN_METRIC_VERIFY_GENERAL
+  params:
+    path:
+      required:
+      - name: chain_id
+        type: string
+        intents: ['*']
+        description: >-
+          EIP-155 chain id of the chain to read: 1 for ethereum, 137 for
+          polygon, 42161 for arbitrum.
+        accepted_fields:
+        - value: '1'
+          intents: ['*']
+          description: Ethereum mainnet (chain "ethereum", also the default when no chain is given).
+        - value: '137'
+          intents: ['*']
+          description: Polygon PoS (chain "polygon").
+        - value: '42161'
+          intents: ['*']
+          description: Arbitrum One (chain "arbitrum").
+    query:
+      required:
+      - name: address
+        type: string
+        intents: ['*']
+        description: The wallet address, 0x followed by 40 hexadecimal characters.
+      - name: blockno
+        type: integer
+        intents: ['*']
+        description: Block number to read the balance at, as a decimal integer.
+intent_mapping:
+  ONCHAIN_METRIC_VERIFY_GENERAL:
+    endpoint: /v2/network/mainnet/evm/{chain_id}/etherscan/api
+    input:
+      chain_id:
+        from: chain
+        how: 'Write the EIP-155 chain id: ethereum -> 1, polygon -> 137, arbitrum -> 42161. When no chain is given use 1.'
+      address:
+        from: address
+        how: Copy the complete 0x-prefixed address exactly.
+      blockno:
+        from: block
+        how: The block number as a decimal integer.
+    output:
+      balance_gwei:
+        path: result
+        unit: wei
+semantics:
+  supported_intents:
+  - ONCHAIN_METRIC_VERIFY_GENERAL
