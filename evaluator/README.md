@@ -28,8 +28,9 @@ archive RPC reads.
   `status 0, chain not supported`, which the descriptor marks as a failure,
   so the source gives no value there instead of another chain's number.
 - **Gas price.** On Ethereum, Arbitrum One and Avalanche the estimated base
-  fee is within 15% of `eth_gasPrice` (measured 2026-11-14: 0.00%, 0.06% and
-  2.87%).
+  fee is within 15% of `eth_gasPrice`. Two runs on 2026-11-14 measured
+  between 0.00% and 4.97% off: the API estimates the next block's base fee,
+  which can move up to 12.5% from the current one.
 
 ## Known limits
 
@@ -52,6 +53,22 @@ archive RPC reads.
 - Hex-returning endpoints (`eth_gasPrice`, `eth_getTransactionCount` through
   explorer proxies) were not used: the mapping converts units in code and
   has no conversion from hex.
+
+## What the node's schema refuses
+
+The first upload of both sources (2026-11-14) was stored and then rejected
+with `source_unparseable`. The pool does not say which rule failed. The cause
+was `accepted_fields` on a parameter, written as a list the way the YAML docs
+show it: the node's schema answers `accepted_fields: Invalid type. Expected:
+object, given: array` (its verdict on another operator's miner registration,
+read from `GET /api/miners/{registrationId}`), and no active miner on the
+network uses the field.
+
+The allowed chain ids are now an `enum` in the top-level `input_schema`,
+which the node also checks a built request against. Before the second
+upload, every key in both descriptors was compared with 366 descriptors the
+node has active: none is unseen. `verify:truth` fails if `accepted_fields`
+comes back.
 
 ## Uploading
 
