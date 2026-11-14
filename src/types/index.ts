@@ -9,7 +9,7 @@
  * Determinism rules (Tier A intents are scored by exact match):
  *  - every big number is a decimal string, never a JS number or hex; the only
  *    JSON numbers are the fields Telegraph's response format types as numbers
- *    (block_number, value_eth), each beside its exact string
+ *    (block_number, value_eth, gas_price_gwei), each beside its exact string
  *  - addresses are EIP-55 checksummed
  *  - hashes are lowercase 0x-hex
  *  - no wall-clock timestamps inside scored fields
@@ -142,6 +142,15 @@ export interface GasPriceResult {
   priorityFeePercentilesWei: { p25: string; p50: string; p75: string };
   /** L1 gas price observed by the OP-stack chain; "0" elsewhere */
   l1GasPriceWei: string;
+
+  // ---- Telegraph V2 response format (GET /engine/v1/intents/GAS_PRICE)
+  /**
+   * eth_gasPrice in gwei (the intent's scored field). A JSON number because
+   * the intent types it as one (6 decimals); the exact figure is `gasPriceWei`.
+   */
+  gas_price_gwei: number;
+  /** Timestamp of the anchoring block (ISO 8601, UTC) - chain time, not wall-clock */
+  as_of: string;
 }
 
 // ---------- errors ----------

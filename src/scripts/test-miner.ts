@@ -149,6 +149,15 @@ async function main() {
   check('gas chain inferred from query', gasViaQuery.chain === 'ethereum');
   check('gas defaults to Base when no chain is named', validateGasPriceInput({}).chain === 'base');
 
+  // Telegraph V2 response format (GET /engine/v1/intents/GAS_PRICE): chain, gas_price_gwei (scored), as_of
+  check(
+    'V2 gas_price_gwei is a JSON number equal to gasPriceWei',
+    typeof gas.gas_price_gwei === 'number' && Math.abs(gas.gas_price_gwei * 1e9 - Number(gas.gasPriceWei)) < 1,
+    String(gas.gas_price_gwei),
+  );
+  const anchor = await client.getBlock({ blockNumber: BigInt(gas.blockNumber) });
+  check('V2 as_of is the anchoring block time', gas.as_of === new Date(Number(anchor.timestamp) * 1000).toISOString(), gas.as_of);
+
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);
 }

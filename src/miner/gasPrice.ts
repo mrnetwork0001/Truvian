@@ -1,6 +1,7 @@
 /**
  * GAS_PRICE intent handler.
  * Snapshot anchored to an explicit block number so any answer is verifiable.
+ * `gas_price_gwei` and `as_of` are the names of Telegraph's V2 response format.
  */
 import { formatGwei } from 'viem';
 import { chainMeta, getClient, type SupportedChain } from '../config/chains.js';
@@ -81,6 +82,9 @@ export async function handleGasPrice(input: GasPriceInput): Promise<GasPriceResu
       maxPriorityFeePerGasWei: maxPriorityFee.toString(),
       priorityFeePercentilesWei: { p25: median(0).toString(), p50: median(1).toString(), p75: median(2).toString() },
       l1GasPriceWei: l1BaseFee.toString(),
+      // formatGwei is exact; Number() of it is the nearest double, the same for the same value
+      gas_price_gwei: Number(formatGwei(gasPrice)),
+      as_of: new Date(Number(block.timestamp) * 1000).toISOString(),
     };
   } catch (err: any) {
     if (err instanceof IntentError) throw err;
