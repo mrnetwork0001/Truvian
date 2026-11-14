@@ -4,7 +4,8 @@
  * fee-math invariant against the raw RPC receipt, then runs GAS_PRICE and
  * checks internal consistency. Exits non-zero on any failure.
  */
-import { getClient } from '../config/chains.js';
+import { SUPPORTED_CHAINS, chainMeta, getClient } from '../config/chains.js';
+import { buildServer } from '../miner/server.js';
 import { chainFromText, handleTxLookup, normalizeChain, validateTxLookupInput } from '../miner/txLookup.js';
 import { handleGasPrice, validateGasPriceInput } from '../miner/gasPrice.js';
 import { IntentError } from '../types/index.js';
@@ -123,6 +124,29 @@ async function main() {
   const unsupported = (() => { try { validateTxLookupInput({ chain: 'solana', txHash: sampleHash }); return null; } catch (e) { return e; } })();
   check('unserved chain rejected by name', unsupported instanceof IntentError && unsupported.code === 'CHAIN_UNSUPPORTED');
 
+  // every registered chain answers a real lookup: newest block's first transaction
+  for (const name of SUPPORTED_CHAINS) {
+    try {
+      const c = getClient(name);
+      let hash: `0x${string}` | undefined;
+      const tip = await c.getBlockNumber();
+      for (let back = 2n; back <= 12n && !hash; back++) {
+        hash = (await c.getBlock({ blockNumber: tip - back })).transactions[0];
+      }
+      if (!hash) { check(`${name}: found a recent transaction to look up`, false); continue; }
+      const got = await handleTxLookup(validateTxLookupInput({ chain: String(chainMeta(name).chainId), tx_hash: hash }));
+      const raw = await c.getTransactionReceipt({ hash });
+      check(
+        `${name}: lookup by chain id returns the receipt's block`,
+        got.status !== 'pending' && BigInt(got.block_number) === raw.blockNumber && got.chain === name
+          && got.answer.includes(` ${chainMeta(name).nativeSymbol} (`),
+        `${got.status} block ${got.block_number}`,
+      );
+    } catch (e: any) {
+      check(`${name}: lookup`, false, e?.message ?? String(e));
+    }
+  }
+
   // error path: bad input
   const bad = (() => { try { validateTxLookupInput({ chain: 'base', txHash: '0x123' }); return null; } catch (e) { return e; } })();
   check('malformed hash rejected', bad instanceof IntentError && bad.code === 'INVALID_INPUT');
@@ -157,6 +181,32 @@ async function main() {
   );
   const anchor = await client.getBlock({ blockNumber: BigInt(gas.blockNumber) });
   check('V2 as_of is the anchoring block time', gas.as_of === new Date(Number(anchor.timestamp) * 1000).toISOString(), gas.as_of);
+  for (const name of SUPPORTED_CHAINS) {
+    try {
+      const g = await handleGasPrice(validateGasPriceInput({ chain: name }));
+      check(`${name}: gas snapshot`, g.gas_price_gwei >= 0 && BigInt(g.blockNumber) > 0n && g.chain === name, `${g.gas_price_gwei} gwei`);
+    } catch (e: any) {
+      check(`${name}: gas snapshot`, false, e?.message ?? String(e));
+    }
+  }
+
+  // --- HTTP surface: the exact bodies the node reads through intent_mapping ---
+  console.log('');
+  const app = buildServer();
+  const viaHttp = await app.inject({ method: 'GET', url: `/tx?tx_hash=${sampleHash}&chain=base` });
+  const body = viaHttp.json();
+  check('GET /tx returns the V2 fields at top level', viaHttp.statusCode === 200 && body.tx_hash === sampleHash.toLowerCase()
+    && body.status === 'confirmed' && typeof body.block_number === 'number' && typeof body.value_eth === 'number');
+  const gone = await app.inject({ method: 'GET', url: `/tx?tx_hash=0x${'ab'.repeat(32)}&chain=base` });
+  const goneBody = gone.json();
+  check('GET /tx for an unknown hash returns 200 with status not_found and answer text',
+    gone.statusCode === 200 && goneBody.status === 'not_found' && goneBody.tx_hash === `0x${'ab'.repeat(32)}`
+      && goneBody.block_number === null && typeof goneBody.answer === 'string' && goneBody.answer.length > 40);
+  const gasHttp = await app.inject({ method: 'GET', url: '/gas?chain=ethereum' });
+  const gasBody = gasHttp.json();
+  check('GET /gas returns the V2 fields at top level', gasHttp.statusCode === 200 && gasBody.chain === 'ethereum'
+    && typeof gasBody.gas_price_gwei === 'number' && typeof gasBody.as_of === 'string');
+  await app.close();
 
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);
