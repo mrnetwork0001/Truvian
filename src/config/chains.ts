@@ -5,85 +5,125 @@ import { arbitrum, avalanche, base, baseSepolia, bsc, mainnet, optimism, polygon
  * Chain registry. Base is primary; the rest cover the chains Telegraph
  * Season II questions name (the intent's `chain` input is free text).
  *
- * RPC endpoints verified live with eth_chainId:
- *  - 2026-08-23: mainnet.base.org, base-rpc.publicnode.com (base.llamarpc.com is dead);
- *    rpc.xlayer.tech (caps eth_getLogs at 100 blocks)
- *  - 2026-11-12: every arbitrum / optimism / polygon / bsc / avalanche / sepolia URL below
+ * Public RPCs differ in how much history they keep, and the ones that prune
+ * do not say so: asked for an old transaction or receipt they answer `null`,
+ * exactly as they would for one that never existed. Each endpoint is
+ * therefore marked `fullHistory` only if it returned both the transaction
+ * and the receipt for a one-year-old, a 60-day-old and a 2-day-old
+ * transaction when probed on 2026-11-14. Only a full-history endpoint can
+ * prove a transaction absent; see searchRpcs in src/miner/txLookup.ts.
+ *
+ * Probe results worth remembering (2026-11-14):
+ *  - publicnode.com prunes on every chain and is inconsistent between calls
+ *    (it is load balanced): Ethereum returned no receipt at one year and,
+ *    once, at two days; Avalanche returned null for transactions that exist;
+ *    Arbitrum, OP Mainnet and BNB Chain refuse receipts as "archive requests".
+ *    It is kept only where it serves recent data, never as full history.
+ *  - eth.merkle.io and bsc.drpc.org rate-limit every call; blastapi.io is
+ *    shutting down; base.llamarpc.com is dead.
+ *  - rpc.xlayer.tech caps eth_getLogs at 100 blocks.
  */
 export type SupportedChain =
   | 'base' | 'ethereum' | 'arbitrum' | 'optimism' | 'polygon' | 'bsc' | 'avalanche'
   | 'sepolia' | 'base-sepolia' | 'xlayer';
 
+interface RpcEndpoint {
+  url: string;
+  /** True only if the endpoint served year-old transactions and receipts when probed. */
+  fullHistory: boolean;
+}
+
 interface ChainEntry {
   chain: Chain;
   /** Display name used in composed answers */
   label: string;
-  rpcUrls: string[];
+  /** Tried in this order; full-history endpoints first. */
+  rpcs: RpcEndpoint[];
   /** OP-stack chains carry l1Fee fields on receipts; total cost must include them. */
   isOpStack: boolean;
 }
+
+const full = (url: string): RpcEndpoint => ({ url, fullHistory: true });
+const recent = (url: string): RpcEndpoint => ({ url, fullHistory: false });
 
 const REGISTRY: Record<SupportedChain, ChainEntry> = {
   base: {
     chain: base,
     label: 'Base',
-    rpcUrls: ['https://mainnet.base.org', 'https://base-rpc.publicnode.com'],
+    rpcs: [full('https://mainnet.base.org'), full('https://base.drpc.org'), recent('https://base-rpc.publicnode.com')],
     isOpStack: true,
   },
   ethereum: {
     chain: mainnet,
     label: 'Ethereum',
-    rpcUrls: ['https://ethereum-rpc.publicnode.com', 'https://eth.merkle.io'],
+    rpcs: [full('https://eth.drpc.org'), full('https://rpc.mevblocker.io'), recent('https://ethereum-rpc.publicnode.com')],
     isOpStack: false,
   },
   // Arbitrum folds its L1 data cost into gasUsed, so there is no separate l1Fee to add.
   arbitrum: {
     chain: arbitrum,
     label: 'Arbitrum One',
-    rpcUrls: ['https://arbitrum-one-rpc.publicnode.com', 'https://arb1.arbitrum.io/rpc'],
+    rpcs: [full('https://arb1.arbitrum.io/rpc'), full('https://arbitrum.drpc.org')],
     isOpStack: false,
   },
   optimism: {
     chain: optimism,
     label: 'OP Mainnet',
-    rpcUrls: ['https://optimism-rpc.publicnode.com', 'https://mainnet.optimism.io'],
+    rpcs: [full('https://mainnet.optimism.io'), full('https://optimism.drpc.org')],
     isOpStack: true,
   },
   polygon: {
     chain: polygon,
     label: 'Polygon',
-    rpcUrls: ['https://polygon-bor-rpc.publicnode.com', 'https://polygon.drpc.org'],
+    rpcs: [
+      full('https://polygon.drpc.org'),
+      full('https://rpc-mainnet.matic.quiknode.pro'),
+      recent('https://polygon-bor-rpc.publicnode.com'),
+    ],
     isOpStack: false,
   },
   bsc: {
     chain: bsc,
     label: 'BNB Smart Chain',
-    rpcUrls: ['https://bsc-rpc.publicnode.com', 'https://bsc-dataseed.binance.org'],
+    rpcs: [
+      full('https://bsc-dataseed.binance.org'),
+      full('https://bsc-dataseed1.defibit.io'),
+      full('https://bsc-dataseed1.ninicoin.io'),
+    ],
     isOpStack: false,
   },
   avalanche: {
     chain: avalanche,
     label: 'Avalanche C-Chain',
-    rpcUrls: ['https://avalanche-c-chain-rpc.publicnode.com', 'https://api.avax.network/ext/bc/C/rpc'],
+    rpcs: [full('https://api.avax.network/ext/bc/C/rpc'), full('https://avalanche.drpc.org')],
     isOpStack: false,
   },
   // Ethereum Sepolia: Telegraph's home chain since V2 (was Base Sepolia in Season I)
   sepolia: {
     chain: sepolia,
     label: 'Ethereum Sepolia',
-    rpcUrls: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://1rpc.io/sepolia'],
+    rpcs: [
+      full('https://sepolia.gateway.tenderly.co'),
+      full('https://1rpc.io/sepolia'),
+      // serves transactions and current state but never returned a receipt
+      recent('https://ethereum-sepolia-rpc.publicnode.com'),
+    ],
     isOpStack: false,
   },
   'base-sepolia': {
     chain: baseSepolia,
     label: 'Base Sepolia',
-    rpcUrls: ['https://sepolia.base.org', 'https://base-sepolia-rpc.publicnode.com'],
+    rpcs: [
+      full('https://sepolia.base.org'),
+      full('https://base-sepolia.drpc.org'),
+      recent('https://base-sepolia-rpc.publicnode.com'),
+    ],
     isOpStack: true,
   },
   xlayer: {
     chain: xLayer,
     label: 'X Layer',
-    rpcUrls: ['https://rpc.xlayer.tech'],
+    rpcs: [full('https://rpc.xlayer.tech'), full('https://xlayerrpc.okx.com')],
     isOpStack: false,
   },
 };
@@ -92,6 +132,14 @@ const REGISTRY: Record<SupportedChain, ChainEntry> = {
 export const SUPPORTED_CHAINS = Object.keys(REGISTRY) as SupportedChain[];
 
 const clients = new Map<SupportedChain, PublicClient>();
+const rpcClients = new Map<SupportedChain, RpcClient[]>();
+
+/** One endpoint of a chain, with a client that talks to that endpoint only. */
+export interface RpcClient {
+  url: string;
+  fullHistory: boolean;
+  client: PublicClient;
+}
 
 export function isSupportedChain(value: string): value is SupportedChain {
   return Object.hasOwn(REGISTRY, value);
@@ -113,6 +161,15 @@ export function chainMeta(name: SupportedChain): {
   };
 }
 
+/**
+ * Client for reads of current state (gas price, latest block), where every
+ * endpoint is equally able to answer: viem fails over on errors, in order.
+ *
+ * Do not use it to look up historical records. viem's fallback only moves on
+ * when an endpoint errors, and a pruned endpoint answers `null` without
+ * erroring, so the first endpoint's gap would be reported as the truth.
+ * Use getRpcClients for those.
+ */
 export function getClient(name: SupportedChain): PublicClient {
   let client = clients.get(name);
   if (!client) {
@@ -122,10 +179,32 @@ export function getClient(name: SupportedChain): PublicClient {
     client = createPublicClient({
       chain: entry.chain,
       transport: fallback(
-        entry.rpcUrls.map((url) => http(url, { timeout: 15_000, retryCount: 2 })),
+        entry.rpcs.map(({ url }) => http(url, { timeout: 15_000, retryCount: 2 })),
       ),
     }) as unknown as PublicClient;
     clients.set(name, client);
   }
   return client;
+}
+
+/**
+ * The chain's endpoints one by one, in registry order, for lookups of
+ * historical records where the caller must see each endpoint's own answer.
+ * Short timeout and a single retry: the caller fails over itself.
+ */
+export function getRpcClients(name: SupportedChain): RpcClient[] {
+  let list = rpcClients.get(name);
+  if (!list) {
+    const entry = REGISTRY[name];
+    list = entry.rpcs.map(({ url, fullHistory }) => ({
+      url,
+      fullHistory,
+      client: createPublicClient({
+        chain: entry.chain,
+        transport: http(url, { timeout: 8_000, retryCount: 1 }),
+      }) as unknown as PublicClient,
+    }));
+    rpcClients.set(name, list);
+  }
+  return list;
 }

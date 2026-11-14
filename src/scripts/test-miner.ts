@@ -4,9 +4,9 @@
  * fee-math invariant against the raw RPC receipt, then runs GAS_PRICE and
  * checks internal consistency. Exits non-zero on any failure.
  */
-import { SUPPORTED_CHAINS, chainMeta, getClient } from '../config/chains.js';
+import { SUPPORTED_CHAINS, chainMeta, getClient, getRpcClients, type SupportedChain } from '../config/chains.js';
 import { buildServer } from '../miner/server.js';
-import { chainFromText, handleTxLookup, normalizeChain, validateTxLookupInput } from '../miner/txLookup.js';
+import { chainFromText, handleTxLookup, normalizeChain, searchRpcs, validateTxLookupInput } from '../miner/txLookup.js';
 import { handleGasPrice, validateGasPriceInput } from '../miner/gasPrice.js';
 import { IntentError } from '../types/index.js';
 
@@ -144,6 +144,67 @@ async function main() {
       );
     } catch (e: any) {
       check(`${name}: lookup`, false, e?.message ?? String(e));
+    }
+  }
+
+  // --- history: pruned endpoints must not turn old transactions into "not found" or "pending" ---
+  console.log('');
+  // searchRpcs rules, with stand-in endpoints (a pruned node answers "not found" for records it dropped)
+  const notFound = () => Promise.reject(Object.assign(new Error('nf'), { name: 'TransactionNotFoundError' }));
+  const broken = () => Promise.reject(new Error('rate limited'));
+  const ep = (fullHistory: boolean, read: () => Promise<string>) => ({ fullHistory, client: { read } as any });
+  const ask = (c: any) => c.read() as Promise<string>;
+  const prunedThenFull = await searchRpcs([ep(false, notFound), ep(true, async () => 'record')], ask);
+  check('a pruned endpoint\'s "not found" falls through to the next endpoint', prunedThenFull.found === 'record');
+  const fullSaysNo = await searchRpcs([ep(true, notFound), ep(false, async () => 'never asked')], ask);
+  check('a full-history "not found" proves absence', fullSaysNo.found === null && fullSaysNo.provenAbsent);
+  const onlyPrunedAnswered = await searchRpcs([ep(true, broken), ep(false, notFound)], ask);
+  check(
+    'absence is not claimed when only a pruned endpoint answered',
+    onlyPrunedAnswered.found === null && !onlyPrunedAnswered.provenAbsent && onlyPrunedAnswered.error instanceof Error,
+  );
+  const errorThenFound = await searchRpcs([ep(true, broken), ep(true, async () => 'record')], ask);
+  check('an endpoint error falls through to the next endpoint', errorThenFound.found === 'record');
+
+  // The transaction that exposed the bug: confirmed in Ethereum block 26398402,
+  // reported "pending" once the first endpoint had pruned its receipt.
+  const regression = await handleTxLookup(validateTxLookupInput({
+    chain: 'ethereum', tx_hash: '0xa1c4b88b9ab5f6efc19a52f9d9d0c8ebd63023598f0bbbb7654bcdf44f7e2a36',
+  }));
+  check('regression: mined Ethereum tx with a pruned receipt is confirmed, not pending',
+    regression.status === 'confirmed' && regression.block_number === 26398402, `${regression.status} ${regression.block_number}`);
+
+  // every chain answers for transactions 60 days and one year old (approximate block times, seconds)
+  const blockSeconds: Record<SupportedChain, number> = {
+    base: 2, ethereum: 12, arbitrum: 0.25, optimism: 2, polygon: 2, bsc: 0.75, avalanche: 1.5,
+    sepolia: 12, 'base-sepolia': 2, xlayer: 1,
+  };
+  for (const name of SUPPORTED_CHAINS) {
+    for (const [age, days] of [['60 days', 60], ['1 year', 365]] as const) {
+      try {
+        const tip = await getClient(name).getBlockNumber();
+        const target = tip - BigInt(Math.round((days * 86_400) / blockSeconds[name]));
+        // Read the old block from whichever endpoint still has it. Some keep
+        // transactions by hash but prune blocks by number (sepolia.base.org
+        // answers 4444 "pruned history unavailable"), and free tiers drop
+        // requests, so try several neighbouring blocks.
+        let sample: { hash: `0x${string}`; block: bigint } | undefined;
+        for (let off = 0n; off < 12n && !sample; off++) {
+          for (const { client: c } of getRpcClients(name)) {
+            const block = await c.getBlock({ blockNumber: target + off }).catch(() => null);
+            if (block?.transactions[0]) { sample = { hash: block.transactions[0], block: block.number }; break; }
+          }
+        }
+        if (!sample) { check(`${name}: found a ${age} old transaction to look up`, false); continue; }
+        const got = await handleTxLookup(validateTxLookupInput({ chain: name, tx_hash: sample.hash }));
+        check(
+          `${name}: ${age} old transaction returns its block`,
+          got.status !== 'pending' && BigInt(got.block_number) === sample.block,
+          `${got.status} block ${got.block_number}`,
+        );
+      } catch (e: any) {
+        check(`${name}: ${age} old transaction`, false, e?.message ?? String(e));
+      }
     }
   }
 
