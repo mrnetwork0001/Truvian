@@ -1,6 +1,6 @@
 version: '1'
 kind: miner
-id: 0
+id: 8453087
 slug: truth-routescan-balance-at-block
 protocol: generic
 name: Routescan native balance at a block (Ethereum)
@@ -37,16 +37,6 @@ endpoints:
         description: >-
           EIP-155 chain id of the chain to read: 1 for ethereum, 137 for
           polygon, 42161 for arbitrum.
-        accepted_fields:
-        - value: '1'
-          intents: ['*']
-          description: Ethereum mainnet (chain "ethereum", also the default when no chain is given).
-        - value: '137'
-          intents: ['*']
-          description: Polygon PoS (chain "polygon").
-        - value: '42161'
-          intents: ['*']
-          description: Arbitrum One (chain "arbitrum").
     query:
       required:
       - name: address
@@ -57,6 +47,24 @@ endpoints:
         type: integer
         intents: ['*']
         description: Block number to read the balance at, as a decimal integer.
+# The node checks a built request against this schema before sending it, so
+# the enum is what keeps chain_id to the three chains the intent allows.
+# (accepted_fields on the param would say the same, but the node's schema
+# refuses it as a list: "Expected: object, given: array".)
+input_schema:
+  type: object
+  required: [chain_id, address, blockno]
+  properties:
+    chain_id:
+      type: string
+      enum: ['1', '137', '42161']
+      description: 'EIP-155 chain id: 1 ethereum, 137 polygon, 42161 arbitrum.'
+    address:
+      type: string
+      pattern: '^0x[0-9a-fA-F]{40}$'
+    blockno:
+      type: integer
+      minimum: 0
 intent_mapping:
   ONCHAIN_METRIC_VERIFY_GENERAL:
     endpoint: /v2/network/mainnet/evm/{chain_id}/etherscan/api
