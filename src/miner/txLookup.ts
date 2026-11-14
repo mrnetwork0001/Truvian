@@ -4,7 +4,15 @@
  * Telegraph's V2 response format by name; telegraph/truvian-miner.yaml maps them.
  */
 import { formatEther, getAddress, isHex } from 'viem';
-import { SUPPORTED_CHAINS, chainMeta, getClient, isSupportedChain, type SupportedChain } from '../config/chains.js';
+import {
+  SUPPORTED_CHAINS,
+  chainMeta,
+  getClient,
+  getRpcClients,
+  isSupportedChain,
+  type RpcClient,
+  type SupportedChain,
+} from '../config/chains.js';
 import {
   IntentError,
   type DecodedTransfer,
@@ -165,27 +173,69 @@ function isNotFound(err: any): boolean {
   return err?.name === 'TransactionReceiptNotFoundError' || err?.name === 'TransactionNotFoundError';
 }
 
-async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Promise<TxLookupResult | TxPendingResult> {
-  const client = getClient(chain);
-  const meta = chainMeta(chain);
+/** What a chain's endpoints, asked in order, had to say about one record. */
+export type RpcSearch<T> =
+  | { found: T }
+  /**
+   * `provenAbsent`: a full-history endpoint answered that the record does not
+   * exist. False means no endpoint able to prove absence answered (they
+   * errored, or only pruned endpoints replied), and `error` is the last failure.
+   */
+  | { found: null; provenAbsent: boolean; error: unknown };
 
-  // The transaction and its receipt are separate facts: a transaction the
-  // node knows with no receipt yet is pending, not missing.
-  const [txOutcome, receiptOutcome, latestOutcome] = await Promise.allSettled([
-    client.getTransaction({ hash: txHash }),
-    client.getTransactionReceipt({ hash: txHash }),
-    client.getBlockNumber(),
-  ]);
-  for (const outcome of [txOutcome, receiptOutcome, latestOutcome]) {
-    if (outcome.status === 'rejected' && !isNotFound(outcome.reason)) {
-      const err: any = outcome.reason;
-      throw new IntentError('UPSTREAM_RPC_ERROR', err?.shortMessage ?? err?.message ?? 'rpc failure');
+/**
+ * Ask each endpoint in turn for a record and return the first one found.
+ *
+ * "Not found" is only evidence of absence from an endpoint that keeps full
+ * history: a pruned node answers the same way about a year-old transaction
+ * as about one that never existed. So a not-found from a pruned endpoint
+ * moves on to the next, a not-found from a full-history endpoint settles
+ * it, and an error is remembered and moves on.
+ */
+export async function searchRpcs<T>(
+  endpoints: Pick<RpcClient, 'fullHistory' | 'client'>[],
+  read: (client: RpcClient['client']) => Promise<T>,
+): Promise<RpcSearch<T>> {
+  let error: unknown = null;
+  for (const { client, fullHistory } of endpoints) {
+    try {
+      return { found: await read(client) };
+    } catch (err) {
+      if (!isNotFound(err)) error = err;
+      else if (fullHistory) return { found: null, provenAbsent: true, error: null };
     }
   }
-  if (txOutcome.status === 'rejected') {
-    throw new IntentError('TX_NOT_FOUND', `transaction ${txHash} not found on ${chain}`, notFoundFields(txHash));
+  return { found: null, provenAbsent: false, error };
+}
+
+function upstream(what: string, err?: any): IntentError {
+  const detail = err?.shortMessage ?? err?.message;
+  return new IntentError('UPSTREAM_RPC_ERROR', detail ? `${what}: ${detail}` : what);
+}
+
+async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Promise<TxLookupResult | TxPendingResult> {
+  const meta = chainMeta(chain);
+  const endpoints = getRpcClients(chain);
+
+  // The transaction and its receipt are separate records and are searched
+  // separately: an endpoint can hold one and have pruned the other.
+  const [txSearch, receiptSearch, latestBlock] = await Promise.all([
+    searchRpcs(endpoints, (c) => c.getTransaction({ hash: txHash })),
+    searchRpcs(endpoints, (c) => c.getTransactionReceipt({ hash: txHash })),
+    getClient(chain).getBlockNumber().catch((err) => { throw upstream(`${chain} latest block unavailable`, err); }),
+  ]);
+
+  if (!txSearch.found) {
+    if (receiptSearch.found) {
+      throw upstream(`${chain} returned a receipt for ${txHash} but no endpoint returned the transaction itself`);
+    }
+    if (txSearch.provenAbsent) {
+      throw new IntentError('TX_NOT_FOUND', `transaction ${txHash} not found on ${chain}`, notFoundFields(txHash));
+    }
+    // No endpoint that could prove absence answered, so absence is not claimed.
+    throw upstream(`${chain} lookup of ${txHash} could not be completed`, txSearch.error);
   }
-  const tx = txOutcome.value;
+  const tx = txSearch.found;
   const chainLabel = meta.label;
   const hash = tx.hash.toLowerCase();
   const from = getAddress(tx.from);
@@ -193,10 +243,16 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
   // formatEther is exact; Number() of it is the nearest double, the same for the same value
   const valueEth = Number(formatEther(tx.value));
 
-  if (receiptOutcome.status === 'rejected' || latestOutcome.status === 'rejected') {
-    if (latestOutcome.status === 'rejected') {
-      // getBlockNumber has no not-found error, so this cannot happen; fail loudly if it does
-      throw new IntentError('UPSTREAM_RPC_ERROR', 'latest block number unavailable');
+  if (!receiptSearch.found) {
+    // Pending means the node itself says the transaction is in no block. A
+    // transaction that has a block but whose receipt no endpoint returned is
+    // mined; its outcome is unknown to us, and that is an upstream failure,
+    // not a pending transaction.
+    if (tx.blockNumber !== null) {
+      throw upstream(
+        `${chain} transaction ${txHash} is mined in block ${tx.blockNumber} but no endpoint returned its receipt`,
+        receiptSearch.error,
+      );
     }
     const to = tx.to ? getAddress(tx.to) : null;
     const answer = [
@@ -224,8 +280,7 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
       inputData: tx.input,
     };
   }
-  const receipt = receiptOutcome.value;
-  const latestBlock = latestOutcome.value;
+  const receipt = receiptSearch.found;
 
   const erc20Transfers: DecodedTransfer[] = [];
   for (const log of receipt.logs) {
