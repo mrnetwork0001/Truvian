@@ -59,6 +59,11 @@ function checkDescriptor(src: Source, intent: string) {
   check(`${file}: needs no key (auth.type none, no inject)`, doc.auth?.type === 'none' && doc.auth.inject === undefined);
   check(`${file}: base_url is public https`, /^https:\/\/[a-z0-9.-]+\.[a-z]+$/.test(doc.base_url) && !/localhost|\.local$|\.internal$/.test(doc.base_url));
   check(`${file}: an endpoint lists ${intent}`, doc.endpoints.some((e: any) => e.intents?.includes(intent)));
+  // The node's schema refuses accepted_fields written as a list, the form its
+  // docs show: "accepted_fields: Invalid type. Expected: object, given: array".
+  // Two uploads were rejected as source_unparseable for it on 2026-11-14.
+  check(`${file}: no accepted_fields (the node's schema refuses the documented list form)`, !/accepted_fields/.test(text.replace(/^\s*#.*$/gm, '')));
+  check(`${file}: id is not 0`, Number.isInteger(doc.id) && doc.id > 0);
   const map = doc.intent_mapping?.[intent];
   const ep = doc.endpoints.find((e: any) => e.path === map?.endpoint);
   const declared = ep ? Object.values(ep.params ?? {}).flatMap((g: any) => [...(g.required ?? []), ...(g.optional ?? [])].map((p: any) => p.name)) : [];
@@ -69,7 +74,7 @@ function checkDescriptor(src: Source, intent: string) {
 /**
  * Build and send the request the descriptor describes, then read the mapped
  * output field. Returns null when the source gives no value: a parameter is
- * outside its accepted values, the HTTP call fails, or the API reports
+ * outside the input_schema enum, the HTTP call fails, or the API reports
  * failure at errors.status_path.
  */
 async function ask(src: Source, intent: string, inputs: Record<string, string | number>): Promise<{ value: string; url: string } | { value: null; why: string }> {
@@ -82,8 +87,9 @@ async function ask(src: Source, intent: string, inputs: Record<string, string | 
     for (const p of [...(lists.required ?? []), ...(lists.optional ?? [])]) {
       const value = inputs[p.name];
       if (value === undefined) return { value: null, why: `no value for ${p.name}` };
-      if (p.accepted_fields && !p.accepted_fields.some((a: any) => a.value === String(value))) {
-        return { value: null, why: `${p.name}=${value} is not an accepted value` };
+      const allowed: unknown[] | undefined = doc.input_schema?.properties?.[p.name]?.enum;
+      if (allowed && !allowed.includes(String(value))) {
+        return { value: null, why: `${p.name}=${value} is not in the input_schema enum` };
       }
       if (group === 'path') path = path.replace(`{${p.name}}`, encodeURIComponent(String(value)));
       else query.set(p.name, String(value));

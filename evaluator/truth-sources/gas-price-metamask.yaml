@@ -1,6 +1,6 @@
 version: '1'
 kind: miner
-id: 0
+id: 8453179
 slug: truth-metamask-base-fee
 protocol: generic
 name: MetaMask gas API estimated base fee (Ethereum, Arbitrum One, Avalanche)
@@ -36,16 +36,18 @@ endpoints:
         description: >-
           EIP-155 chain id of the chain to read: 1 for ethereum, 42161 for
           arbitrum, 43114 for avalanche. No other chain is served.
-        accepted_fields:
-        - value: '1'
-          intents: ['*']
-          description: Ethereum mainnet (chain "ethereum", "eth", "mainnet").
-        - value: '42161'
-          intents: ['*']
-          description: Arbitrum One (chain "arbitrum").
-        - value: '43114'
-          intents: ['*']
-          description: Avalanche C-Chain (chain "avalanche", "avax").
+# The node checks a built request against this schema before sending it, so
+# the enum is what keeps this source to the three chains where the base fee
+# is the gas price. (accepted_fields on the param would say the same, but the
+# node's schema refuses it as a list: "Expected: object, given: array".)
+input_schema:
+  type: object
+  required: [chain_id]
+  properties:
+    chain_id:
+      type: string
+      enum: ['1', '42161', '43114']
+      description: 'EIP-155 chain id: 1 ethereum, 42161 arbitrum, 43114 avalanche. No other chain is served.'
 intent_mapping:
   GAS_PRICE_GENERAL:
     endpoint: /networks/{chain_id}/suggestedGasFees
