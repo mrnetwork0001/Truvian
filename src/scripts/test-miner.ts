@@ -5,7 +5,7 @@
  * checks internal consistency. Exits non-zero on any failure.
  */
 import { getClient } from '../config/chains.js';
-import { handleTxLookup, validateTxLookupInput } from '../miner/txLookup.js';
+import { chainFromText, handleTxLookup, normalizeChain, validateTxLookupInput } from '../miner/txLookup.js';
 import { handleGasPrice, validateGasPriceInput } from '../miner/gasPrice.js';
 import { IntentError } from '../types/index.js';
 
@@ -82,6 +82,23 @@ async function main() {
   ).then(() => null, (e) => e);
   check('unknown tx -> TX_NOT_FOUND', missing instanceof IntentError && missing.code === 'TX_NOT_FOUND');
 
+  // chain names: aliases, EIP-155 ids, CAIP-2, free text
+  const aliasCases: Array<[string, string]> = [
+    ['Ethereum', 'ethereum'], ['1', 'ethereum'], ['eip155:8453', 'base'], ['Arbitrum One', 'arbitrum'],
+    ['42161', 'arbitrum'], ['OP Mainnet', 'optimism'], ['matic', 'polygon'], ['BNB Smart Chain', 'bsc'],
+    ['avalanche_c_chain', 'avalanche'], ['sepolia', 'sepolia'], ['Base Sepolia', 'base-sepolia'], ['X Layer', 'xlayer'],
+  ];
+  const aliasMisses = aliasCases.filter(([raw, want]) => normalizeChain(raw) !== want);
+  check('chain aliases, ids and CAIP-2 resolve', aliasMisses.length === 0, aliasMisses.map(([r]) => r).join(', '));
+  const textCases: Array<[string, string | null]> = [
+    ['gas on base sepolia?', 'base-sepolia'], ['on sepolia testnet', 'sepolia'], ['the Arbitrum network', 'arbitrum'],
+    ['on Polygon', 'polygon'], ['BSC fees', 'bsc'], ['ethereum mainnet', 'ethereum'], ['on base', 'base'], ['no chain here', null],
+  ];
+  const textMisses = textCases.filter(([raw, want]) => chainFromText(raw) !== want);
+  check('chain named in free text is detected', textMisses.length === 0, textMisses.map(([r]) => r).join(' | '));
+  const unsupported = (() => { try { validateTxLookupInput({ chain: 'solana', txHash: sampleHash }); return null; } catch (e) { return e; } })();
+  check('unserved chain rejected by name', unsupported instanceof IntentError && unsupported.code === 'CHAIN_UNSUPPORTED');
+
   // error path: bad input
   const bad = (() => { try { validateTxLookupInput({ chain: 'base', txHash: '0x123' }); return null; } catch (e) { return e; } })();
   check('malformed hash rejected', bad instanceof IntentError && bad.code === 'INVALID_INPUT');
@@ -106,6 +123,7 @@ async function main() {
   check('gas answer states fee level', /(low|normal|high) transaction fee level/.test(gas.answer));
   const gasViaQuery = validateGasPriceInput({ query: 'what is the current gas price on ethereum mainnet?' });
   check('gas chain inferred from query', gasViaQuery.chain === 'ethereum');
+  check('gas defaults to Base when no chain is named', validateGasPriceInput({}).chain === 'base');
 
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

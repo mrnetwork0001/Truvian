@@ -131,7 +131,7 @@ export class IntentError extends Error {
       case 'TX_NOT_FOUND':
         return `${this.message.charAt(0).toUpperCase()}${this.message.slice(1)}. The transaction hash is well formed but no matching transaction exists on the chains searched, so it was never mined there or belongs to a chain this miner does not serve.`;
       case 'CHAIN_UNSUPPORTED':
-        return `This miner serves Base, Ethereum, Base Sepolia and X Layer. ${this.message}.`;
+        return `The requested chain is not served by this miner. ${this.message.charAt(0).toUpperCase()}${this.message.slice(1)}.`;
       case 'INVALID_INPUT':
         return `The request did not identify a transaction to look up. ${this.message}.`;
       default:

@@ -3,7 +3,7 @@
  * Pure (input) -> payload against live RPC; no Telegraph envelope knowledge.
  */
 import { formatEther, getAddress, isHex } from 'viem';
-import { chainMeta, getClient, isSupportedChain, type SupportedChain } from '../config/chains.js';
+import { SUPPORTED_CHAINS, chainMeta, getClient, isSupportedChain, type SupportedChain } from '../config/chains.js';
 import { IntentError, type DecodedTransfer, type TxLookupInput, type TxLookupResult } from '../types/index.js';
 
 /** keccak256("Transfer(address,address,uint256)") */
@@ -13,37 +13,69 @@ function topicToAddress(topic: `0x${string}`): string {
   return getAddress(`0x${topic.slice(26)}`);
 }
 
-const CHAIN_ALIASES: Record<string, string> = {
-  eth: 'ethereum', mainnet: 'ethereum', 'ethereum-mainnet': 'ethereum',
-  'base-mainnet': 'base', 'x-layer': 'xlayer', okx: 'xlayer',
-  basesepolia: 'base-sepolia', 'base sepolia': 'base-sepolia', sepolia: 'base-sepolia',
-};
-
-export function normalizeChain(raw: unknown): string {
-  const s = String(raw ?? '').trim().toLowerCase();
-  return CHAIN_ALIASES[s] ?? s;
-}
-
-/** Chain display names used in composed answers */
-export const CHAIN_LABEL: Record<string, string> = {
-  base: 'Base', ethereum: 'Ethereum', xlayer: 'X Layer', 'base-sepolia': 'Base Sepolia',
+/**
+ * Names and EIP-155 ids callers use for each chain. Keys are in the form
+ * normalizeChain produces: lower case, words joined by hyphens.
+ *
+ * `sepolia` means Ethereum Sepolia (it meant Base Sepolia in Season I, when
+ * that was Telegraph's home chain; V2 moved to Ethereum Sepolia).
+ */
+const CHAIN_ALIASES: Record<string, SupportedChain> = {
+  '1': 'ethereum', eth: 'ethereum', mainnet: 'ethereum', 'ethereum-mainnet': 'ethereum', 'eth-mainnet': 'ethereum',
+  '8453': 'base', 'base-mainnet': 'base',
+  '42161': 'arbitrum', arb: 'arbitrum', 'arbitrum-one': 'arbitrum', 'arbitrum-mainnet': 'arbitrum',
+  '10': 'optimism', op: 'optimism', 'op-mainnet': 'optimism', 'optimism-mainnet': 'optimism',
+  '137': 'polygon', matic: 'polygon', 'polygon-pos': 'polygon', 'polygon-mainnet': 'polygon',
+  '56': 'bsc', bnb: 'bsc', binance: 'bsc', 'bnb-chain': 'bsc', 'bnb-smart-chain': 'bsc',
+  'binance-smart-chain': 'bsc', 'bsc-mainnet': 'bsc',
+  '43114': 'avalanche', avax: 'avalanche', 'avalanche-c-chain': 'avalanche', 'avalanche-c': 'avalanche',
+  '11155111': 'sepolia', 'ethereum-sepolia': 'sepolia', 'eth-sepolia': 'sepolia',
+  '84532': 'base-sepolia', basesepolia: 'base-sepolia',
+  '196': 'xlayer', 'x-layer': 'xlayer', okx: 'xlayer', 'xlayer-mainnet': 'xlayer',
 };
 
 /**
- * Chains searched, in priority order, when the caller names none.
- * Base first (Telegraph's data focus), then Ethereum, then Telegraph's own
- * testnet, then X Layer.
+ * Canonical chain name for a caller-supplied value, or the cleaned input
+ * when nothing matches (the caller then rejects it by name). Accepts names,
+ * aliases, EIP-155 ids and CAIP-2 strings ("eip155:8453").
  */
-export const SEARCH_CHAINS: SupportedChain[] = ['base', 'ethereum', 'base-sepolia', 'xlayer'];
+export function normalizeChain(raw: unknown): string {
+  const s = String(raw ?? '').trim().toLowerCase().replace(/^eip155:/, '').replace(/[\s_]+/g, '-');
+  return CHAIN_ALIASES[s] ?? s;
+}
+
+/**
+ * Chains searched, in priority order, when the caller names none: Base first
+ * (Truvian's data focus), then Ethereum and the other mainnets, then testnets.
+ */
+export const SEARCH_CHAINS: SupportedChain[] = [
+  'base', 'ethereum', 'arbitrum', 'optimism', 'polygon', 'bsc', 'avalanche', 'sepolia', 'base-sepolia', 'xlayer',
+];
 
 /** Detect a chain named in free text; null when nothing matches. */
 export function chainFromText(text: string): SupportedChain | null {
   const q = text.toLowerCase();
-  if (/\bbase[\s-]?sepolia\b|\bsepolia\b/.test(q)) return 'base-sepolia';
+  // most specific first: "base sepolia" before "sepolia" before "base"
+  if (/\bbase[\s-]?sepolia\b/.test(q)) return 'base-sepolia';
+  if (/\bsepolia\b/.test(q)) return 'sepolia';
   if (/\bx[\s-]?layer\b|\bokx\b/.test(q)) return 'xlayer';
+  if (/\barbitrum\b/.test(q)) return 'arbitrum';
+  if (/\boptimism\b|\bop[\s-]mainnet\b/.test(q)) return 'optimism';
+  if (/\bpolygon\b|\bmatic\b/.test(q)) return 'polygon';
+  if (/\bbnb\b|\bbsc\b|\bbinance\b/.test(q)) return 'bsc';
+  if (/\bavalanche\b|\bavax\b/.test(q)) return 'avalanche';
   if (/\bethereum\b|\bmainnet\b|\beth\b|\bl1\b/.test(q)) return 'ethereum';
   if (/\bbase\b/.test(q)) return 'base';
   return null;
+}
+
+/** Resolve an explicit chain parameter, rejecting names this miner does not serve. */
+export function requireChain(raw: unknown): SupportedChain {
+  const normalized = normalizeChain(raw);
+  if (!isSupportedChain(normalized)) {
+    throw new IntentError('CHAIN_UNSUPPORTED', `chain must be one of ${SUPPORTED_CHAINS.join(', ')}; got ${String(raw)}`);
+  }
+  return normalized;
 }
 
 export function validateTxLookupInput(raw: unknown): TxLookupInput {
@@ -63,11 +95,7 @@ export function validateTxLookupInput(raw: unknown): TxLookupInput {
   const chainRaw = body.chain ?? body.network;
   let chain: SupportedChain | null = null;
   if (chainRaw !== undefined && chainRaw !== null && String(chainRaw).trim() !== '') {
-    const normalized = normalizeChain(chainRaw);
-    if (!isSupportedChain(normalized)) {
-      throw new IntentError('CHAIN_UNSUPPORTED', `chain must be one of base|ethereum|xlayer|base-sepolia, got ${String(chainRaw)}`);
-    }
-    chain = normalized;
+    chain = requireChain(chainRaw);
   } else if (query) {
     chain = chainFromText(query);
   }
@@ -89,7 +117,7 @@ export function validateTxLookupInput(raw: unknown): TxLookupInput {
  * the first hit in SEARCH_CHAINS priority order.
  *
  * Searching concurrently keeps latency at roughly one RPC round-trip instead
- * of summing four, which matters because validators score on a deadline.
+ * of summing one per chain, which matters because validators score on a deadline.
  */
 export async function handleTxLookup(input: TxLookupInput): Promise<TxLookupResult> {
   if (input.chain) return lookupOnChain(input.chain, input.txHash);
@@ -157,7 +185,7 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
   const l1Fee = meta.isOpStack ? BigInt((receipt as any).l1Fee ?? 0) : 0n;
   const totalFee = receipt.gasUsed * receipt.effectiveGasPrice + l1Fee;
 
-  const chainLabel = CHAIN_LABEL[chain] ?? chain;
+  const chainLabel = meta.label;
   const statusWord = receipt.status === 'success' ? 'succeeded' : 'reverted';
   const from = getAddress(receipt.from);
   const to = receipt.to ? getAddress(receipt.to) : null;
@@ -170,8 +198,8 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
   const answerParts = [
     `Transaction ${receipt.transactionHash.toLowerCase()} on ${chainLabel} (chain id ${meta.chainId}) ${statusWord} in block ${receipt.blockNumber}.`,
     to
-      ? `It transferred ${formatEther(tx.value)} ETH (${tx.value} wei) from ${from} to the recipient ${to}${selector && selector !== '0x' ? `, invoking function selector ${selector}` : ''}.`
-      : `It was sent from ${from} and created contract ${created} with a value of ${formatEther(tx.value)} ETH (${tx.value} wei).`,
+      ? `It transferred ${formatEther(tx.value)} ${meta.nativeSymbol} (${tx.value} wei) from ${from} to the recipient ${to}${selector && selector !== '0x' ? `, invoking function selector ${selector}` : ''}.`
+      : `It was sent from ${from} and created contract ${created} with a value of ${formatEther(tx.value)} ${meta.nativeSymbol} (${tx.value} wei).`,
   ];
   const answer = answerParts.join(' ');
 
