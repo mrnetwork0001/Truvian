@@ -1,17 +1,17 @@
-# Truvian — Telegraph Registration Runbook
+# Truvian - Telegraph Registration Runbook
 
 All facts below were verified live on 2026-08-23 (not taken from marketing pages).
 
 ## Prerequisites
 1. **Miner API publicly reachable over HTTPS** at the `base_url` in
    `truvian-miner.yaml` (deploy `npm run dev` behind a reverse proxy on the
-   VPS; must stay live through Sep 7 — uptime is judged).
+   VPS; must stay live through Sep 7 - uptime is judged).
 2. **A wallet on Base Sepolia (chain 84532)** with a little gas ETH
    (registration is gas-only, no bond). Faucets: Coinbase/Alchemy Base Sepolia
    faucets.
 3. Replace `base_url` in `truvian-miner.yaml` with the real VPS domain first.
 
-## Track 1 — Register the miner (portal path, recommended)
+## Track 1 - Register the miner (portal path, recommended)
 1. Open **https://integrate.telegraphprotocol.com** → "Connect API"
    (email OTP + wallet connect). **Registering here auto-enters the
    hackathon.**
@@ -36,7 +36,7 @@ cast send $DIAMOND "registerMiner(string,bytes32,address,uint256,string[])" \
 ```
 `10000` = $0.01 USDC floor price (protocol minimum, 6 decimals).
 Note: `0xac683bFa8F1C892E23e8300d14c20678C6FC0CA3` (in older READMEs) is a
-DEAD registry — it rejects every intent. Do not use it.
+DEAD registry - it rejects every intent. Do not use it.
 
 ## ⚠️ Hosting rule for WASM binaries (learned the hard way)
 The VPS uploads at ~130 KB/s. That is fine for the miner's small JSON
@@ -44,7 +44,7 @@ responses (`/tx` and `/gas` answer in ~0.7s) but NOT for large scorer
 binaries: v8 (23 MB, MiniLM weights) took >4 minutes to fetch and the
 node's evaluation stalled in `pending` indefinitely (registration 947).
 
-**Host any scorer binary over ~1 MB on commit-pinned GitHub raw instead** —
+**Host any scorer binary over ~1 MB on commit-pinned GitHub raw instead** -
 the repo is public, the URL is immutable, and it serves at ~3.6 MB/s
 (verified byte-identical by keccak):
 
@@ -53,18 +53,18 @@ the repo is public, the URL is immutable, and it serves at ~3.6 MB/s
 Get the SHA with `git rev-parse HEAD` after pushing. This is also how the
 competing champion hosts its 24 MB binary.
 
-## Track 2 — Register the WASM scorer
-Built artifact: `telegraph/truvian_scorer.wasm` (112,236 bytes) —
+## Track 2 - Register the WASM scorer
+Built artifact: `telegraph/truvian_scorer.wasm` (112,236 bytes) -
 keccak256 `0x3b581da2712e2ad7f01b08919e646a44afebea944bdc7d13f65b58645dd22c16`.
 1. Host it at a stable public URL serving the EXACT bytes. Plan A:
    `https://miner.truvian.xyz/truvian_scorer.wasm` (nginx static location in
    `deploy/nginx-miner.conf`; re-download and keccak-verify after upload).
    Plan B (if the repo is made public): a commit-pinned
-   raw.githubusercontent.com URL — immutable by construction. The repo is
+   raw.githubusercontent.com URL - immutable by construction. The repo is
    currently PRIVATE, so raw URLs 404.
 2. Portal: "Submit WASM" flow at integrate.telegraphprotocol.com, **or**
    directly: `registerWasm(bytes32 wasmHash, string wasmUrl, string intent)`
-   on the Diamond — `wasmHash` = **keccak256** of the exact hosted bytes
+   on the Diamond - `wasmHash` = **keccak256** of the exact hosted bytes
    (the node re-downloads and re-hashes; any mismatch = rejection),
    `intent` = `ONCHAIN_TX_LOOKUP` (one intent per module).
 3. It must then pass the promotion gauntlet: structural checks, then beat the
@@ -78,12 +78,12 @@ keccak256 `0x3b581da2712e2ad7f01b08919e646a44afebea944bdc7d13f65b58645dd22c16`.
 - Canonical intents + miner counts: https://devnode.telegraphprotocol.com/engine/v1/intents
 
 ## Current competition (epoch 267, verified)
-- ONCHAIN_TX_LOOKUP: 6 miners — chainsight-oracle 0.884, degenlens-onchain 0.830,
+- ONCHAIN_TX_LOOKUP: 6 miners - chainsight-oracle 0.884, degenlens-onchain 0.830,
   then 0.017 / 0.009 / 0 / 0. Target: rank 1.
-- GAS_PRICE: 3 miners — top score 0.0073 (effectively broken). Registering makes
+- GAS_PRICE: 3 miners - top score 0.0073 (effectively broken). Registering makes
   4 miners (≥3 guardrail met); scoring even moderately ≈ rank 1.
 
 ## Mandatory non-code judging items
 - Join Discord: https://discord.gg/telegraphprotocol (required by rules)
-- X updates tagged @Telegraphprotoc (25% of Track 1 score) — drafts in
+- X updates tagged @Telegraphprotoc (25% of Track 1 score) - drafts in
   `docs/x-updates.md`
