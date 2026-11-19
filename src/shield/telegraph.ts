@@ -793,6 +793,28 @@ async function askRoutedApiKey(
   }
 }
 
+/**
+ * The API-key ask, retried once when the connection broke rather than the
+ * question failing. Seen live on 2026-11-19: one of four parallel streams
+ * ended with "terminated" (the server closed it) while the other three
+ * answered. A miner that answered badly is not retried: that is a real answer.
+ */
+async function askApiKeyWithRetry(
+  intent: ShieldIntent,
+  sent: Record<string, string>,
+  key: string,
+  question: string,
+): Promise<{ body: unknown; headers: Headers; latencyMs: number }> {
+  try {
+    return await askRoutedApiKey(intent, sent, key, question);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const transient = /^(terminated|fetch failed)$|^http 5\d\d|api stream ended without a miner answer/.test(message);
+    if (!transient) throw err;
+    return askRoutedApiKey(intent, sent, key, question);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Response parsing
 // ---------------------------------------------------------------------------
@@ -1052,7 +1074,7 @@ export async function askIntent(intent: ShieldIntent, params: Record<string, str
           const done: { body: unknown; headers: Headers; paidAtomic?: bigint; settlement?: unknown; latencyMs: number } =
             route === 'x402'
               ? await askRoutedX402(intent, sent, account!)
-              : await askRoutedApiKey(intent, sent, key!, questionFor(intent, params));
+              : await askApiKeyWithRetry(intent, sent, key!, questionFor(intent, params));
           const parsed = parseAnswerBody(done.body, done.headers, { intent, sent });
           let raw: unknown = done.body;
           if (done.settlement !== undefined) {
