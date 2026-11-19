@@ -44,6 +44,11 @@ const CHAIN_ALIASES: Record<string, SupportedChain> = {
   '56': 'bsc', bnb: 'bsc', binance: 'bsc', 'bnb-chain': 'bsc', 'bnb-smart-chain': 'bsc',
   'binance-smart-chain': 'bsc', 'bsc-mainnet': 'bsc',
   '43114': 'avalanche', avax: 'avalanche', 'avalanche-c-chain': 'avalanche', 'avalanche-c': 'avalanche',
+  '534352': 'scroll', 'scroll-mainnet': 'scroll',
+  '59144': 'linea', 'linea-mainnet': 'linea',
+  '100': 'gnosis', xdai: 'gnosis', 'gnosis-chain': 'gnosis', 'gnosis-mainnet': 'gnosis',
+  '324': 'zksync', 'zksync-era': 'zksync', 'zksync-mainnet': 'zksync', 'zksync-era-mainnet': 'zksync', 'zk-sync': 'zksync',
+  era: 'zksync',
   '11155111': 'sepolia', 'ethereum-sepolia': 'sepolia', 'eth-sepolia': 'sepolia',
   '84532': 'base-sepolia', basesepolia: 'base-sepolia',
   '196': 'xlayer', 'x-layer': 'xlayer', okx: 'xlayer', 'xlayer-mainnet': 'xlayer',
@@ -64,7 +69,8 @@ export function normalizeChain(raw: unknown): string {
  * (Truvian's data focus), then Ethereum and the other mainnets, then testnets.
  */
 export const SEARCH_CHAINS: SupportedChain[] = [
-  'base', 'ethereum', 'arbitrum', 'optimism', 'polygon', 'bsc', 'avalanche', 'sepolia', 'base-sepolia', 'xlayer',
+  'base', 'ethereum', 'arbitrum', 'optimism', 'polygon', 'bsc', 'avalanche',
+  'scroll', 'linea', 'gnosis', 'zksync', 'sepolia', 'base-sepolia', 'xlayer',
 ];
 
 /** Detect a chain named in free text; null when nothing matches. */
@@ -79,6 +85,10 @@ export function chainFromText(text: string): SupportedChain | null {
   if (/\bpolygon\b|\bmatic\b/.test(q)) return 'polygon';
   if (/\bbnb\b|\bbsc\b|\bbinance\b/.test(q)) return 'bsc';
   if (/\bavalanche\b|\bavax\b/.test(q)) return 'avalanche';
+  if (/\bscroll\b/.test(q)) return 'scroll';
+  if (/\blinea\b/.test(q)) return 'linea';
+  if (/\bgnosis\b|\bxdai\b/.test(q)) return 'gnosis';
+  if (/\bzk[\s-]?sync\b/.test(q)) return 'zksync';
   if (/\bethereum\b|\bmainnet\b|\beth\b|\bl1\b/.test(q)) return 'ethereum';
   if (/\bbase\b/.test(q)) return 'base';
   return null;
@@ -297,8 +307,12 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
     }
   }
 
-  // OP-stack receipts carry l1Fee (viem types don't surface it on generic clients)
-  const l1Fee = meta.isOpStack ? BigInt((receipt as any).l1Fee ?? 0) : 0n;
+  // Rollups that bill L1 data separately put it on the receipt as l1Fee: the
+  // OP-stack chains and Scroll do, the others here do not (checked against
+  // raw receipts 2026-11-19). Read it from the receipt rather than from a
+  // per-chain flag, so the total is right wherever the field appears. viem's
+  // types don't surface it on generic clients.
+  const l1Fee = BigInt((receipt as any).l1Fee ?? 0);
   const totalFee = receipt.gasUsed * receipt.effectiveGasPrice + l1Fee;
 
   const succeeded = receipt.status === 'success';

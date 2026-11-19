@@ -1,5 +1,7 @@
 import { createPublicClient, fallback, http, type Chain, type PublicClient } from 'viem';
-import { arbitrum, avalanche, base, baseSepolia, bsc, mainnet, optimism, polygon, sepolia, xLayer } from 'viem/chains';
+import {
+  arbitrum, avalanche, base, baseSepolia, bsc, gnosis, linea, mainnet, optimism, polygon, scroll, sepolia, xLayer, zksync,
+} from 'viem/chains';
 
 /**
  * Chain registry. Base is primary; the rest cover the chains Telegraph
@@ -22,9 +24,15 @@ import { arbitrum, avalanche, base, baseSepolia, bsc, mainnet, optimism, polygon
  *  - eth.merkle.io and bsc.drpc.org rate-limit every call; blastapi.io is
  *    shutting down; base.llamarpc.com is dead.
  *  - rpc.xlayer.tech caps eth_getLogs at 100 blocks.
+ *
+ * Scroll, Linea, Gnosis and ZKsync Era were added on 2026-11-19 because the
+ * node asks for them (nginx access log: 46 of 570 gas requests), probed the
+ * same way. gnosis.drpc.org and gnosis-rpc.publicnode.com prune;
+ * zksync.drpc.org answers null for every transaction.
  */
 export type SupportedChain =
   | 'base' | 'ethereum' | 'arbitrum' | 'optimism' | 'polygon' | 'bsc' | 'avalanche'
+  | 'scroll' | 'linea' | 'gnosis' | 'zksync'
   | 'sepolia' | 'base-sepolia' | 'xlayer';
 
 interface RpcEndpoint {
@@ -39,7 +47,12 @@ interface ChainEntry {
   label: string;
   /** Tried in this order; full-history endpoints first. */
   rpcs: RpcEndpoint[];
-  /** OP-stack chains carry l1Fee fields on receipts; total cost must include them. */
+  /**
+   * OP-stack chains expose the L1 base fee through the GasPriceOracle
+   * predeploy, which the gas snapshot reads. (Whether a receipt carries an
+   * L1 fee is read from the receipt itself, not from this flag: Scroll's do
+   * and it is not OP-stack.)
+   */
   isOpStack: boolean;
 }
 
@@ -98,6 +111,34 @@ const REGISTRY: Record<SupportedChain, ChainEntry> = {
     rpcs: [full('https://api.avax.network/ext/bc/C/rpc'), full('https://avalanche.drpc.org')],
     isOpStack: false,
   },
+  scroll: {
+    chain: scroll,
+    label: 'Scroll',
+    rpcs: [full('https://rpc.scroll.io'), full('https://scroll.drpc.org'), full('https://1rpc.io/scroll')],
+    isOpStack: false,
+  },
+  linea: {
+    chain: linea,
+    label: 'Linea',
+    rpcs: [full('https://rpc.linea.build'), full('https://linea.drpc.org'), full('https://1rpc.io/linea')],
+    isOpStack: false,
+  },
+  gnosis: {
+    chain: gnosis,
+    label: 'Gnosis',
+    rpcs: [
+      full('https://rpc.gnosischain.com'),
+      full('https://rpc.gnosis.gateway.fm'),
+      recent('https://gnosis-rpc.publicnode.com'),
+    ],
+    isOpStack: false,
+  },
+  zksync: {
+    chain: zksync,
+    label: 'ZKsync Era',
+    rpcs: [full('https://mainnet.era.zksync.io'), full('https://1rpc.io/zksync2-era')],
+    isOpStack: false,
+  },
   // Ethereum Sepolia: Telegraph's home chain since V2 (was Base Sepolia in Season I)
   sepolia: {
     chain: sepolia,
@@ -149,7 +190,7 @@ export function chainMeta(name: SupportedChain): {
   chainId: number;
   isOpStack: boolean;
   label: string;
-  /** Ticker of the chain's native coin (ETH, POL, BNB, AVAX, OKB) */
+  /** Ticker of the chain's native coin (ETH, POL, BNB, AVAX, XDAI, OKB) */
   nativeSymbol: string;
 } {
   const entry = REGISTRY[name];

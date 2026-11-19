@@ -43,9 +43,9 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
 </style></head><body><main>
 <h1>🛡️ Truvian</h1>
 <div class="badge">Telegraph miner · truvian-onchain-truth</div>
-<p>Exact onchain answers read live from public JSON-RPC on Base, Ethereum, Arbitrum One, OP Mainnet, Polygon, BNB Smart Chain, Avalanche, X Layer, Ethereum Sepolia and Base Sepolia. Serves the Telegraph intents <code>ONCHAIN_TX_LOOKUP_GENERAL</code> and <code>GAS_PRICE_GENERAL</code>.</p>
+<p>Exact onchain answers read live from public JSON-RPC on Base, Ethereum, Arbitrum One, OP Mainnet, Polygon, BNB Smart Chain, Avalanche, Scroll, Linea, Gnosis, ZKsync Era, X Layer, Ethereum Sepolia and Base Sepolia. Serves the Telegraph intents <code>ONCHAIN_TX_LOOKUP_GENERAL</code> and <code>GAS_PRICE_GENERAL</code>.</p>
 <ul>
-<li><code>GET /tx?tx_hash=0x…&amp;chain=base</code> - status, inclusion block, sender, recipient and value of a transaction, plus the exact total fee incl. the OP-stack L1 data fee</li>
+<li><code>GET /tx?tx_hash=0x…&amp;chain=base</code> - status, inclusion block, sender, recipient and value of a transaction, plus the exact total fee incl. the L1 data fee on rollups that bill it</li>
 <li><code>GET /gas?chain=base</code> - block-anchored gas price in gwei with EIP-1559 percentiles</li>
 <li><code>GET /health</code> - liveness</li>
 </ul>
