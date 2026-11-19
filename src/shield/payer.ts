@@ -5,6 +5,8 @@
  * needs to say how many more checks that wallet can fund, and the limiter needs
  * to stop before the wallet is empty, so this module derives the payer ADDRESS
  * from TELEGRAPH_PAYER_KEY and reads its USDC balance on the x402 chain.
+ * When Shield pays through the Anjoman API key instead, the balance that
+ * funds checks is the account's escrow balance, and that is what is read.
  *
  * The private key never leaves this module: only the derived address, and only
  * the balance, are exposed. Balance reads are cached and never throw - an
@@ -12,6 +14,7 @@
  * as zero.
  */
 import { privateKeyToAccount } from 'viem/accounts';
+import { apiKeyBalanceUsd, resolveTransport } from './telegraph.js';
 import type { Address, Hex } from 'viem';
 import { getClient, isSupportedChain, type SupportedChain } from '../config/chains.js';
 
@@ -64,6 +67,11 @@ function usdcAddress(): Address {
 export async function payerUsdcBalance(force = false): Promise<number | null> {
   const now = Date.now();
   if (!force && cache && now - cache.at < BALANCE_TTL_MS) return cache.balance;
+  if (resolveTransport() === 'apikey') {
+    const balance = await apiKeyBalanceUsd();
+    cache = { at: now, balance: balance ?? cache?.balance ?? null };
+    return cache.balance;
+  }
   const address = payerAddress();
   if (!address) {
     cache = { at: now, balance: null };

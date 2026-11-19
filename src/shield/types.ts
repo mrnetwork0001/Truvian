@@ -12,24 +12,37 @@ export type ShieldIntent = 'GAS_PRICE' | 'ONCHAIN_TX_LOOKUP' | 'CRYPTO_PRICE' | 
 
 /**
  * How the answer was obtained from Telegraph:
- *  - 'x402'   - paid through the Telegraph engine/dispatcher with TELEGRAPH_PAYER_KEY
+ *  - 'x402'   - routed by the Telegraph engine and paid per request by x402 with TELEGRAPH_PAYER_KEY
+ *  - 'apikey' - routed the same way through Anjoman's API with TELEGRAPH_API_KEY, paid from escrow
  *  - 'direct' - live miner called on its public base_url from the FREE catalog
  *               (still a real Telegraph miner; dev/fallback mode, labeled as such)
  */
-export type ShieldTransport = 'x402' | 'direct';
+export type ShieldTransport = 'x402' | 'apikey' | 'direct';
+
+/** Transports on which the answer was paid for. */
+export function isPaidTransport(t: ShieldTransport): boolean {
+  return t === 'x402' || t === 'apikey';
+}
 
 /** One live Telegraph miner answer, as returned by askIntent(). */
 export interface IntentResult {
-  /** Natural-language answer text exactly as the miner returned it */
+  /**
+   * The answer in words. Since Telegraph V2 the node returns the intent's
+   * typed fields, and this sentence is composed from them in a fixed wording
+   * (telegraph.ts composeAnswer). On the direct transport it is the miner's
+   * own text.
+   */
   answer: string;
   minerId?: string;
   minerName?: string;
-  /** x402 payment cost in USD, when the transport paid for the answer */
+  /** What the answer cost in USD, when the transport paid for it */
   costUsd?: number;
   /** Telegraph signal hash - verifiable at GET /engine/v1/signal/{hash} */
   signalHash?: string;
   latencyMs: number;
   transport: ShieldTransport;
+  /** The intent's V2 response fields, when the node returned them in that shape */
+  fields?: Record<string, unknown>;
   /** Untouched upstream response body, kept for evidence display */
   raw: unknown;
 }
