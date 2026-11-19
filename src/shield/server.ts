@@ -286,7 +286,15 @@ export function buildShieldServer() {
     const started = Date.now();
     let outcome: SignalOutcome;
     try {
-      outcome = { ok: true, result: await askIntent(intent, params) };
+      const result = await askIntent(intent, params);
+      // askIntent reports a failure as an answer starting "unavailable:"
+      // rather than throwing. It must reach the verdict engine as a failure:
+      // read as an answer, the error text was parsed for figures, and a
+      // "$0.01" price quoted in a payment error became "ETH at $0.01" and a
+      // passing VALUE check.
+      outcome = result.answer.startsWith('unavailable:')
+        ? { ok: false, reason: result.answer.slice('unavailable:'.length).trim(), transport: result.transport, latencyMs: result.latencyMs }
+        : { ok: true, result };
     } catch (err) {
       outcome = {
         ok: false,
