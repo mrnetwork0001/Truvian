@@ -23,6 +23,7 @@ import {
   type SignalSet,
 } from '../shield/verdict.js';
 import { createLimiter, utcDay } from '../shield/limits.js';
+import { composeAnswer, V2_INTENT, v2Params } from '../shield/telegraph.js';
 import type { CheckReport, CheckRequest, IntentResult } from '../shield/types.js';
 
 let failures = 0;
@@ -400,8 +401,48 @@ async function e2eTests() {
   }
 }
 
+/**
+ * Telegraph V2 returns typed fields, not prose. composeAnswer states them in
+ * words for the verdict engine; these check the sentence carries exactly what
+ * the fields say, and that the existing parsers read it back. Field values
+ * are the ones the live node returned on 2026-11-19.
+ */
+function v2Tests() {
+  console.log('');
+  check('V2 intent names', V2_INTENT.GAS_PRICE === 'GAS_PRICE_GENERAL' && V2_INTENT.ONCHAIN_TX_LOOKUP === 'ONCHAIN_TX_LOOKUP_GENERAL'
+    && V2_INTENT.CRYPTO_PRICE === 'CRYPTO_PRICE_USD' && V2_INTENT.TVL_LOOKUP === 'TVL_LOOKUP_GENERAL');
+  const txSent = v2Params('ONCHAIN_TX_LOOKUP', { chain: 'ethereum', hash: '0xab' });
+  check('V2 params use the schema names (tx_hash, not hash)', txSent.tx_hash === '0xab' && txSent.chain === 'ethereum' && !('hash' in txSent));
+  check('V2 params upper-case the symbol', v2Params('CRYPTO_PRICE', { symbol: 'eth' }).symbol === 'ETH');
+
+  const gas = composeAnswer('GAS_PRICE', { chain: 'base', gas_price_gwei: 0.006041, transfer_fee_usd: 0.0002, as_of: 'x' }, { chain: 'base' });
+  check('gas sentence carries the gwei figure the parser reads back', gas !== null && parseFirstGwei(gas) === 0.006041, String(gas));
+  const tiny = composeAnswer('GAS_PRICE', { chain: 'gnosis', gas_price_gwei: 1.1e-8 }, { chain: 'gnosis' });
+  check('tiny gas price is written in plain decimals, never exponent form', tiny !== null && !/e-/.test(tiny) && parseFirstGwei(tiny) === 1.1e-8, String(tiny));
+  const price = composeAnswer('CRYPTO_PRICE', { price_usd: 1797.55 }, { symbol: 'ETH' });
+  check('price sentence parses back to the field value', price !== null && parseUsdAmount(price) === 1797.55, String(price));
+  const tvl = composeAnswer('TVL_LOOKUP', { protocol_or_chain: 'Aave', tvl_usd: 15086924825.327763, chain_tvl_usd: null }, { protocol: 'aave' });
+  check('TVL sentence parses back to the field value (to the cent)', tvl !== null && parseUsdAmount(tvl) === 15086924825.33, String(tvl));
+  const fields = { tx_hash: '0xa1', status: 'confirmed', from: '0x05ff', to: '0x2744', block_number: 26398402, value_eth: 0 };
+  const sent = { tx_hash: '0xa1', chain: 'ethereum' };
+  const confirmed = composeAnswer('ONCHAIN_TX_LOOKUP', fields, sent);
+  check('confirmed tx reads as success and names the block and recipient',
+    confirmed !== null && parseTxStatus(confirmed) === 'success' && confirmed.includes('block 26398402') && confirmed.includes('0x2744'), String(confirmed));
+  const reverted = composeAnswer('ONCHAIN_TX_LOOKUP', { ...fields, status: 'reverted' }, sent);
+  check('reverted tx reads as reverted', reverted !== null && parseTxStatus(reverted) === 'reverted', String(reverted));
+  const missing = composeAnswer('ONCHAIN_TX_LOOKUP', { tx_hash: '0xa1', status: 'not_found', from: null, to: null, block_number: null, value_eth: null }, sent);
+  check('not_found tx reads as not found', missing !== null && parseTxStatus(missing) === 'not_found', String(missing));
+  check('a missing scored field yields no sentence, never a guessed one',
+    composeAnswer('GAS_PRICE', { chain: 'base', gas_price_gwei: null }, { chain: 'base' }) === null
+    && composeAnswer('CRYPTO_PRICE', {}, { symbol: 'ETH' }) === null
+    && composeAnswer('ONCHAIN_TX_LOOKUP', { status: null }, sent) === null);
+  const again = composeAnswer('ONCHAIN_TX_LOOKUP', fields, sent);
+  check('same fields give the same sentence', again === confirmed);
+}
+
 async function main() {
   unitTests();
+  v2Tests();
   limiterTests();
   await guardTests();
   if (process.env.SHIELD_E2E === '1') {
