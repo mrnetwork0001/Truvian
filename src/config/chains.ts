@@ -93,11 +93,8 @@ const REGISTRY: Record<SupportedChain, ChainEntry> = {
   polygon: {
     chain: polygon,
     label: 'Polygon',
-    rpcs: [
-      full('https://polygon.drpc.org'),
-      full('https://rpc-mainnet.matic.quiknode.pro'),
-      recent('https://polygon-bor-rpc.publicnode.com'),
-    ],
+    // polygon-bor-rpc.publicnode.com was a recent-data fallback; it now times out
+    rpcs: [full('https://polygon.drpc.org'), full('https://rpc-mainnet.matic.quiknode.pro')],
     isOpStack: false,
   },
   bsc: {
@@ -152,9 +149,10 @@ const REGISTRY: Record<SupportedChain, ChainEntry> = {
       // Re-probed 2026-11-19: sepolia.gateway.tenderly.co had stopped
       // answering and 1rpc.io/sepolia had begun pruning (no receipt at one
       // year) and rate-limiting; both were listed as full history.
-      full('https://rpc.sepolia.ethpandaops.io'),
+      // fastest first: ethpandaops takes about 2 s to answer
       full('https://ethereum-sepolia.gateway.tatum.io'),
       full('https://sepolia.rpc.thirdweb.com'),
+      full('https://rpc.sepolia.ethpandaops.io'),
       // serves recent transactions and current state; no receipts past ~60 days
       recent('https://ethereum-sepolia-rpc.publicnode.com'),
     ],
@@ -173,7 +171,8 @@ const REGISTRY: Record<SupportedChain, ChainEntry> = {
   xlayer: {
     chain: xLayer,
     label: 'X Layer',
-    rpcs: [full('https://rpc.xlayer.tech'), full('https://xlayerrpc.okx.com')],
+    // xlayerrpc.okx.com stopped answering (every call timed out, 2026-11-19)
+    rpcs: [full('https://rpc.xlayer.tech'), full('https://xlayer.drpc.org')],
     isOpStack: false,
   },
 };
@@ -228,8 +227,12 @@ export function getClient(name: SupportedChain): PublicClient {
     // PublicClient we hand out; behavior is identical.
     client = createPublicClient({
       chain: entry.chain,
+      // 4 s per endpoint and no per-endpoint retry: with the earlier 15 s and
+      // two retries, one throttled endpoint held a request for a minute.
+      // fallback moves to the next endpoint on error and makes one more pass.
       transport: fallback(
-        entry.rpcs.map(({ url }) => http(url, { timeout: 15_000, retryCount: 2 })),
+        entry.rpcs.map(({ url }) => http(url, { timeout: 4_000, retryCount: 0 })),
+        { retryCount: 1 },
       ),
     }) as unknown as PublicClient;
     clients.set(name, client);
@@ -240,7 +243,11 @@ export function getClient(name: SupportedChain): PublicClient {
 /**
  * The chain's endpoints one by one, in registry order, for lookups of
  * historical records where the caller must see each endpoint's own answer.
- * Short timeout and a single retry: the caller fails over itself.
+ *
+ * Three-second timeout and no retry: the caller fails over itself, and a
+ * dead endpoint must cost little. With the previous 8 s and one retry, a
+ * single endpoint that had stopped answering added 16 s to every lookup
+ * that reached it. Healthy endpoints answer in 0.1 to 1 s.
  */
 export function getRpcClients(name: SupportedChain): RpcClient[] {
   let list = rpcClients.get(name);
@@ -251,7 +258,7 @@ export function getRpcClients(name: SupportedChain): RpcClient[] {
       fullHistory,
       client: createPublicClient({
         chain: entry.chain,
-        transport: http(url, { timeout: 8_000, retryCount: 1 }),
+        transport: http(url, { timeout: 3_000, retryCount: 0 }),
       }) as unknown as PublicClient,
     }));
     rpcClients.set(name, list);
