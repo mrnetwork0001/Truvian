@@ -1,0 +1,72 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  :root { --bg:#0a0a0a; --panel:#131313; --line:#262626; --text:#ededed; --dim:#8f8f8f; --gold:#d4a53a; --gold-soft:#f0cf7a; --ok:#6fcf97; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { width:1600px; height:900px; background:var(--bg); color:var(--text); font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif; overflow:hidden; }
+  .mono { font-family:"SF Mono",Menlo,Monaco,monospace; }
+  .page { position:relative; width:1600px; height:900px; padding:64px 76px 0; background:
+     radial-gradient(900px 520px at 88% -8%, rgba(212,165,58,.16), transparent 62%),
+     radial-gradient(700px 480px at -6% 108%, rgba(212,165,58,.08), transparent 60%), var(--bg); }
+  .grid { position:absolute; inset:0; background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px); background-size:80px 80px; opacity:.22; mask-image:linear-gradient(180deg,rgba(0,0,0,.9),transparent 78%); }
+  .top { position:relative; display:flex; align-items:center; justify-content:space-between; }
+  .brand { display:flex; align-items:center; gap:18px; }
+  .mark { display:flex; flex-direction:column; gap:5px; }
+  .mark i { display:block; width:46px; height:11px; border-radius:3px; background:linear-gradient(90deg,#f4f4f4,#9c9c9c); }
+  .mark i:nth-child(2) { background:linear-gradient(90deg,var(--gold-soft),var(--gold)); }
+  .word { font-size:30px; letter-spacing:.42em; font-weight:300; }
+  .tag { font-size:17px; letter-spacing:.2em; color:var(--gold); border:1px solid rgba(212,165,58,.45); padding:10px 18px; border-radius:999px; text-transform:uppercase; }
+  .cols { position:relative; display:grid; grid-template-columns:1.02fr .98fr; gap:64px; margin-top:80px; }
+  h1 { font-size:76px; line-height:1.04; font-weight:700; letter-spacing:-.022em; }
+  h1 span { color:var(--gold); display:block; }
+  .lede { margin-top:30px; font-size:25px; line-height:1.45; color:#bdbdbd; max-width:640px; }
+  .swap { margin-top:48px; display:flex; align-items:center; gap:20px; font-size:22px; }
+  .old { color:#6a6a6a; text-decoration:line-through; text-decoration-color:#8a3b3b; }
+  .arrow { color:var(--gold); font-size:28px; }
+  .new { color:var(--gold-soft); border:1px solid rgba(212,165,58,.5); background:rgba(212,165,58,.08); padding:8px 14px; border-radius:8px; }
+  .lab { display:block; font-size:13px; letter-spacing:.16em; color:var(--dim); text-transform:uppercase; margin-bottom:8px; font-family:-apple-system,"Helvetica Neue",sans-serif; }
+  .cards { display:flex; flex-direction:column; gap:22px; }
+  .card { display:flex; gap:22px; align-items:flex-start; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:24px 26px; }
+  .tick { flex:none; width:44px; height:44px; border-radius:50%; background:rgba(111,207,151,.12); border:1.5px solid rgba(111,207,151,.6); display:grid; place-items:center; }
+  .tick svg { width:22px; height:22px; }
+  .card b { display:block; font-size:27px; font-weight:650; letter-spacing:-.01em; }
+  .card p { margin-top:7px; font-size:20px; line-height:1.4; color:#a9a9a9; }
+  .changed { margin-top:22px; border:1px dashed #3a3a3a; border-radius:16px; padding:18px 26px; font-size:19px; color:#b5b5b5; }
+  .changed em { font-style:normal; color:var(--gold); letter-spacing:.14em; font-size:14px; text-transform:uppercase; display:block; margin-bottom:6px; }
+  .foot { position:absolute; left:0; right:0; bottom:0; height:76px; padding:0 76px; display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--line); background:rgba(10,10,10,.72); font-size:19px; color:var(--dim); }
+  .foot .mono { color:#d9d9d9; }
+  .foot span b { color:var(--gold); font-weight:600; }
+</style></head>
+<body><div class="page">
+  <div class="grid"></div>
+  <div class="top">
+    <div class="brand"><div class="mark"><i></i><i></i><i></i></div><div class="word">TRUVIAN</div></div>
+    <div class="tag">Telegraph Season II &nbsp;·&nbsp; 17 Nov 2026</div>
+  </div>
+  <div class="cols">
+    <div>
+      <h1>Telegraph moved contracts.<span>We checked instead of assuming.</span></h1>
+      <p class="lede">A transaction sent to the old address still succeeds on&#8209;chain. Nothing tells you it no longer counts.</p>
+      <div class="swap mono">
+        <div><span class="lab">Retired</span><span class="old">0x3624…eb99b</span></div>
+        <div class="arrow">→</div>
+        <div><span class="lab">Live since 17 Nov</span><span class="new">0x72a7…a08b</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="cards">
+        <div class="card"><div class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#6fcf97" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+          <div><b>Miner imported</b><p>We read our registration back from the new contract, and the node lists it as active.</p></div></div>
+        <div class="card"><div class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#6fcf97" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+          <div><b>Truth sources still eligible</b><p>Both of ours remain in the evaluation pool after the move.</p></div></div>
+        <div class="card"><div class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#6fcf97" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+          <div><b>Runbook hardened</b><p>One place for the address, and a check that node and contract agree before every transaction.</p></div></div>
+      </div>
+      <div class="changed"><em>What did change</em>Scores and epoch numbers restarted. Bonds are now paid in test USDC.</div>
+    </div>
+  </div>
+  <div class="foot">
+    <span>Exact on-chain truth engine &nbsp;·&nbsp; miner and evaluator entry, <b>@Telegraphprotoc</b> Season II hackathon</span>
+    <span class="mono">github.com/mrnetwork0001/Truvian</span>
+  </div>
+</div></body></html>
