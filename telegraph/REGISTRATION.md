@@ -103,9 +103,11 @@ registered on a family prefix with a $5 bond (test USDC since 17 November) and a
 evaluation material uploaded to `POST $NODE/api/evalpool/submissions` signed
 by the contributor wallet. Work was tracked per intent family as issues in
 `telegraphprotocol/bounties` until 15 November, when those were closed and
-replaced by 15 mission issues (#189 to #203); our evaluator claim continues
-on #190 (Stablecoin), linking the closed #179 and #87. See
-`evaluator/README.md` for our truth sources.
+replaced by 15 mission issues (#189 to #203). Our claims and progress
+updates remain on the closed #179 and #87; to continue, claim on a mission
+issue and link them. #190 (Stablecoin) lists both of our intents. As of
+2026-11-19 we have not claimed there and no `/submit` has been posted for
+the truth sources. See `evaluator/README.md` for the sources themselves.
 
 ---
 
