@@ -65,6 +65,26 @@ curl -s -X POST localhost:8788/api/check \
   -d '{"chain":"base","txHash":"0x<some-base-tx>","protocol":"aave","valueEth":"0.5"}'
 ```
 
+## Paying for Telegraph since V2 (2026-11-19)
+
+Shield asks Telegraph V2 by intent (`GAS_PRICE_GENERAL`,
+`ONCHAIN_TX_LOOKUP_GENERAL`, `CRYPTO_PRICE_USD`, `TVL_LOOKUP_GENERAL`) and
+pays through an Anjoman API key by default. x402 settlement on the node has
+failed since 17 November (bounties#214), so the x402 steps further down only
+apply once that is fixed.
+
+On the VPS, in `/opt/truvian/.env`:
+
+```bash
+TELEGRAPH_API_KEY=anjoman_...      # from anjoman.ai/dashboard/api-keys
+SHIELD_TRANSPORT=apikey            # or delete the line: apikey is the default when the key is set
+```
+
+then `git pull && pm2 restart truvian-shield`. Check:
+`curl -s https://truvian.xyz/api/stats | jq .budget.balanceUsdc` shows the
+Anjoman escrow balance. Each check costs $0.01 per question it asks (up to
+four), so 1 test USDC funds about 25 checks; the faucet gives 1 a day.
+
 ## Deploy to the VPS (38.49.213.208, repo at /opt/truvian)
 
 ```bash

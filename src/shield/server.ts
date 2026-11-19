@@ -45,6 +45,7 @@ import {
   type PaymentRequirements,
 } from './x402server.js';
 import type { CheckReport, CheckRequest, ShieldIntent, ShieldStats, ShieldTransport } from './types.js';
+import { isPaidTransport } from './types.js';
 
 const PUBLIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'public');
 const STATS_FILE = process.env.SHIELD_STATS_FILE ?? resolve(process.cwd(), '.shield-stats.json');
@@ -53,8 +54,8 @@ const RECEIPTS_FILE = process.env.SHIELD_RECEIPTS_FILE ?? resolve(process.cwd(),
 /** Mirror of telegraph.ts transport selection, used only to label errored checks. */
 function defaultTransport(): ShieldTransport {
   const t = process.env.SHIELD_TRANSPORT;
-  if (t === 'direct') return 'direct';
-  if (t === 'x402') return 'x402';
+  if (t === 'direct' || t === 'x402' || t === 'apikey') return t;
+  if (process.env.TELEGRAPH_API_KEY?.trim()) return 'apikey';
   return process.env.TELEGRAPH_PAYER_KEY ? 'x402' : 'direct';
 }
 
@@ -105,11 +106,11 @@ function persistStats(stats: ShieldStats, limits: LimiterState): void {
   persistChain = persistChain.then(() => writeFile(STATS_FILE, snapshot, 'utf8')).catch(() => {});
 }
 
-/** Real USD a finished report paid to miners (x402 settlements only). */
+/** Real USD a finished report paid to miners (paid transports only). */
 function reportSpendUsd(report: CheckReport): number {
   let total = 0;
   for (const check of report.checks) {
-    if (check.transport === 'x402' && typeof check.costUsd === 'number' && Number.isFinite(check.costUsd)) {
+    if (isPaidTransport(check.transport) && typeof check.costUsd === 'number' && Number.isFinite(check.costUsd)) {
       total += check.costUsd;
     }
   }
@@ -286,7 +287,15 @@ export function buildShieldServer() {
     const started = Date.now();
     let outcome: SignalOutcome;
     try {
-      outcome = { ok: true, result: await askIntent(intent, params) };
+      const result = await askIntent(intent, params);
+      // askIntent reports a failure as an answer starting "unavailable:"
+      // rather than throwing. It must reach the verdict engine as a failure:
+      // read as an answer, the error text was parsed for figures, and a
+      // "$0.01" price quoted in a payment error became "ETH at $0.01" and a
+      // passing VALUE check.
+      outcome = result.answer.startsWith('unavailable:')
+        ? { ok: false, reason: result.answer.slice('unavailable:'.length).trim(), transport: result.transport, latencyMs: result.latencyMs }
+        : { ok: true, result };
     } catch (err) {
       outcome = {
         ok: false,
@@ -511,7 +520,7 @@ export function buildShieldServer() {
     const q = (req.query ?? {}) as Record<string, unknown>;
     const chain = typeof q.chain === 'string' && q.chain.trim() !== '' ? q.chain.trim().toLowerCase() : 'base';
     const result = await ask('ONCHAIN_TX_LOOKUP', { chain, hash: txHash.toLowerCase() });
-    if (result.ok && result.result.transport === 'x402' && typeof result.result.costUsd === 'number') {
+    if (result.ok && isPaidTransport(result.result.transport) && typeof result.result.costUsd === 'number') {
       stats.paidUsd = Number((stats.paidUsd + result.result.costUsd).toFixed(6));
       limiter.recordSpend(result.result.costUsd);
     }

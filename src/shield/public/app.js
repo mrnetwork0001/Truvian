@@ -523,11 +523,14 @@
     if (latency) meta.appendChild(el('span', null, latency));
     if (check.transport) {
       var transport = String(check.transport);
-      var chip = el('span', 'transport-chip ' + (transport === 'x402' ? 'x402' : 'direct'),
-        transport === 'x402' ? 'x402 · paid' : 'direct · fallback');
+      var paid = transport === 'x402' || transport === 'apikey';
+      var chip = el('span', 'transport-chip ' + (paid ? 'x402' : 'direct'),
+        transport === 'x402' ? 'x402 · paid' : transport === 'apikey' ? 'api key · paid' : 'direct · fallback');
       chip.title = transport === 'x402'
-        ? 'Paid through the Telegraph engine via x402 (USDC on Base Sepolia)'
-        : 'Direct call to the live miner from the free Telegraph catalog - dev/fallback mode';
+        ? 'Routed by the Telegraph engine and paid via x402 (USDC on Base Sepolia)'
+        : transport === 'apikey'
+          ? 'Routed by the Telegraph engine through the Anjoman API and paid from escrow'
+          : 'Direct call to the live miner from the free Telegraph catalog - dev/fallback mode';
       meta.appendChild(chip);
     }
     if (check.signalHash) {
