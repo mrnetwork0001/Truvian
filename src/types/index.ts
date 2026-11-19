@@ -107,8 +107,11 @@ export interface TxLookupResult extends TxLookupBase {
   totalFeeWei: string;
   logCount: number;
   erc20Transfers: DecodedTransfer[];
-  /** Confirmations at response time - informational, NOT a scored field */
-  confirmations: string;
+  /**
+   * Confirmations at response time - informational, NOT a scored field.
+   * null when no endpoint could report the chain tip.
+   */
+  confirmations: string | null;
 }
 
 /** A transaction the node knows about that is not yet in a block. */

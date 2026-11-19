@@ -7,7 +7,6 @@ import { formatEther, getAddress, isHex } from 'viem';
 import {
   SUPPORTED_CHAINS,
   chainMeta,
-  getClient,
   getRpcClients,
   isSupportedChain,
   type RpcClient,
@@ -230,6 +229,22 @@ export async function searchRpcs<T>(
   return { found: null, provenAbsent: false, error };
 }
 
+/**
+ * The chain tip, from the first endpoint that answers; null when none does.
+ * It is only used for the informational `confirmations` count, so an
+ * unreadable tip is reported as an unknown count, not as a failed lookup.
+ */
+async function latestBlockNumber(endpoints: Pick<RpcClient, 'client'>[]): Promise<bigint | null> {
+  for (const { client } of endpoints) {
+    try {
+      return await client.getBlockNumber();
+    } catch {
+      // this endpoint could not answer; the next one is asked
+    }
+  }
+  return null;
+}
+
 function upstream(what: string, err?: any): IntentError {
   const detail = err?.shortMessage ?? err?.message;
   return new IntentError('UPSTREAM_RPC_ERROR', detail ? `${what}: ${detail}` : what);
@@ -244,7 +259,10 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
   const [txSearch, receiptSearch, latestBlock] = await Promise.all([
     searchRpcs(endpoints, (c) => c.getTransaction({ hash: txHash })),
     searchRpcs(endpoints, (c) => c.getTransactionReceipt({ hash: txHash })),
-    getClient(chain).getBlockNumber().catch((err) => { throw upstream(`${chain} latest block unavailable`, err); }),
+    // Through the same short-timeout endpoints as the searches. The shared
+    // fallback client used to be asked here, and one throttled endpoint
+    // behind it stalled whole lookups for up to a minute.
+    latestBlockNumber(endpoints),
   ]);
 
   if (!txSearch.found) {
@@ -379,6 +397,6 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
     totalFeeWei: totalFee.toString(),
     logCount: receipt.logs.length,
     erc20Transfers,
-    confirmations: (latestBlock - receipt.blockNumber + 1n).toString(),
+    confirmations: latestBlock === null ? null : (latestBlock - receipt.blockNumber + 1n).toString(),
   };
 }

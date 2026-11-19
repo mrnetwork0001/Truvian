@@ -224,6 +224,20 @@ async function main() {
     }
   }
 
+  // speed: a dead endpoint must not stall a lookup (validators score on a deadline)
+  const timed = async (input: Record<string, string>) => {
+    const started = Date.now();
+    const outcome = await handleTxLookup(validateTxLookupInput(input)).then(() => 'found', (e) => (e instanceof IntentError ? e.code : 'error'));
+    return { outcome, ms: Date.now() - started };
+  };
+  const knownHash = '0xa1c4b88b9ab5f6efc19a52f9d9d0c8ebd63023598f0bbbb7654bcdf44f7e2a36';
+  const foundNoChain = await timed({ hash: knownHash });
+  check('a known hash with no chain named is found across all chains within 5 s',
+    foundNoChain.outcome === 'found' && foundNoChain.ms < 5_000, `${foundNoChain.ms} ms`);
+  const unknownNoChain = await timed({ hash: `0x${'e1'.repeat(32)}` });
+  check('an unknown hash with no chain named is answered within 8 s',
+    unknownNoChain.outcome === 'TX_NOT_FOUND' && unknownNoChain.ms < 8_000, `${unknownNoChain.outcome} in ${unknownNoChain.ms} ms`);
+
   // error path: bad input
   const bad = (() => { try { validateTxLookupInput({ chain: 'base', txHash: '0x123' }); return null; } catch (e) { return e; } })();
   check('malformed hash rejected', bad instanceof IntentError && bad.code === 'INVALID_INPUT');
