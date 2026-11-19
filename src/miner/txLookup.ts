@@ -7,7 +7,6 @@ import { formatEther, getAddress, isHex } from 'viem';
 import {
   SUPPORTED_CHAINS,
   chainMeta,
-  getClient,
   getRpcClients,
   isSupportedChain,
   type RpcClient,
@@ -44,6 +43,11 @@ const CHAIN_ALIASES: Record<string, SupportedChain> = {
   '56': 'bsc', bnb: 'bsc', binance: 'bsc', 'bnb-chain': 'bsc', 'bnb-smart-chain': 'bsc',
   'binance-smart-chain': 'bsc', 'bsc-mainnet': 'bsc',
   '43114': 'avalanche', avax: 'avalanche', 'avalanche-c-chain': 'avalanche', 'avalanche-c': 'avalanche',
+  '534352': 'scroll', 'scroll-mainnet': 'scroll',
+  '59144': 'linea', 'linea-mainnet': 'linea',
+  '100': 'gnosis', xdai: 'gnosis', 'gnosis-chain': 'gnosis', 'gnosis-mainnet': 'gnosis',
+  '324': 'zksync', 'zksync-era': 'zksync', 'zksync-mainnet': 'zksync', 'zksync-era-mainnet': 'zksync', 'zk-sync': 'zksync',
+  era: 'zksync',
   '11155111': 'sepolia', 'ethereum-sepolia': 'sepolia', 'eth-sepolia': 'sepolia',
   '84532': 'base-sepolia', basesepolia: 'base-sepolia',
   '196': 'xlayer', 'x-layer': 'xlayer', okx: 'xlayer', 'xlayer-mainnet': 'xlayer',
@@ -64,7 +68,8 @@ export function normalizeChain(raw: unknown): string {
  * (Truvian's data focus), then Ethereum and the other mainnets, then testnets.
  */
 export const SEARCH_CHAINS: SupportedChain[] = [
-  'base', 'ethereum', 'arbitrum', 'optimism', 'polygon', 'bsc', 'avalanche', 'sepolia', 'base-sepolia', 'xlayer',
+  'base', 'ethereum', 'arbitrum', 'optimism', 'polygon', 'bsc', 'avalanche',
+  'scroll', 'linea', 'gnosis', 'zksync', 'sepolia', 'base-sepolia', 'xlayer',
 ];
 
 /** Detect a chain named in free text; null when nothing matches. */
@@ -79,6 +84,10 @@ export function chainFromText(text: string): SupportedChain | null {
   if (/\bpolygon\b|\bmatic\b/.test(q)) return 'polygon';
   if (/\bbnb\b|\bbsc\b|\bbinance\b/.test(q)) return 'bsc';
   if (/\bavalanche\b|\bavax\b/.test(q)) return 'avalanche';
+  if (/\bscroll\b/.test(q)) return 'scroll';
+  if (/\blinea\b/.test(q)) return 'linea';
+  if (/\bgnosis\b|\bxdai\b/.test(q)) return 'gnosis';
+  if (/\bzk[\s-]?sync\b/.test(q)) return 'zksync';
   if (/\bethereum\b|\bmainnet\b|\beth\b|\bl1\b/.test(q)) return 'ethereum';
   if (/\bbase\b/.test(q)) return 'base';
   return null;
@@ -178,34 +187,62 @@ export type RpcSearch<T> =
   | { found: T }
   /**
    * `provenAbsent`: a full-history endpoint answered that the record does not
-   * exist. False means no endpoint able to prove absence answered (they
-   * errored, or only pruned endpoints replied), and `error` is the last failure.
+   * exist and no endpoint contradicted it. False means no endpoint able to
+   * prove absence answered (they errored, or only pruned endpoints replied),
+   * and `error` is the last failure.
    */
   | { found: null; provenAbsent: boolean; error: unknown };
 
 /**
  * Ask each endpoint in turn for a record and return the first one found.
  *
- * "Not found" is only evidence of absence from an endpoint that keeps full
- * history: a pruned node answers the same way about a year-old transaction
- * as about one that never existed. So a not-found from a pruned endpoint
- * moves on to the next, a not-found from a full-history endpoint settles
- * it, and an error is remembered and moves on.
+ * "Not found" is weak evidence. A pruned node answers that way about a
+ * year-old transaction, and any node, full history or not, answers that way
+ * about a transaction newer than the block it has synced to. So:
+ * - a record found anywhere is found, whatever the others said
+ * - a not-found from a pruned endpoint alone proves nothing
+ * - a not-found from a full-history endpoint is confirmed by the next
+ *   endpoint that answers: when two endpoints agree and one keeps full
+ *   history, the record is absent
+ * - if no other endpoint answers, the single full-history answer stands,
+ *   so one failing endpoint does not turn every "not found" into an error
+ * - an error is remembered and moves on
  */
 export async function searchRpcs<T>(
   endpoints: Pick<RpcClient, 'fullHistory' | 'client'>[],
   read: (client: RpcClient['client']) => Promise<T>,
 ): Promise<RpcSearch<T>> {
   let error: unknown = null;
+  let notFoundAnswers = 0;
+  let fullHistorySaidAbsent = false;
   for (const { client, fullHistory } of endpoints) {
     try {
       return { found: await read(client) };
     } catch (err) {
-      if (!isNotFound(err)) error = err;
-      else if (fullHistory) return { found: null, provenAbsent: true, error: null };
+      if (!isNotFound(err)) { error = err; continue; }
+      notFoundAnswers++;
+      if (fullHistory) fullHistorySaidAbsent = true;
+      if (fullHistorySaidAbsent && notFoundAnswers >= 2) return { found: null, provenAbsent: true, error: null };
     }
   }
+  if (fullHistorySaidAbsent) return { found: null, provenAbsent: true, error: null };
   return { found: null, provenAbsent: false, error };
+}
+
+/**
+ * The chain tip, from the first endpoint that answers; null when none does.
+ * It is only used for the informational `confirmations` count, so an
+ * unreadable tip is reported as an unknown count, not as a failed lookup.
+ */
+async function latestBlockNumber(endpoints: Pick<RpcClient, 'client'>[]): Promise<bigint | null> {
+  for (const { client } of endpoints) {
+    try {
+      return await client.getBlockNumber();
+    } catch {
+      // this endpoint could not answer; the next one is asked
+    }
+  }
+  return null;
 }
 
 function upstream(what: string, err?: any): IntentError {
@@ -222,7 +259,10 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
   const [txSearch, receiptSearch, latestBlock] = await Promise.all([
     searchRpcs(endpoints, (c) => c.getTransaction({ hash: txHash })),
     searchRpcs(endpoints, (c) => c.getTransactionReceipt({ hash: txHash })),
-    getClient(chain).getBlockNumber().catch((err) => { throw upstream(`${chain} latest block unavailable`, err); }),
+    // Through the same short-timeout endpoints as the searches. The shared
+    // fallback client used to be asked here, and one throttled endpoint
+    // behind it stalled whole lookups for up to a minute.
+    latestBlockNumber(endpoints),
   ]);
 
   if (!txSearch.found) {
@@ -297,8 +337,12 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
     }
   }
 
-  // OP-stack receipts carry l1Fee (viem types don't surface it on generic clients)
-  const l1Fee = meta.isOpStack ? BigInt((receipt as any).l1Fee ?? 0) : 0n;
+  // Rollups that bill L1 data separately put it on the receipt as l1Fee: the
+  // OP-stack chains and Scroll do, the others here do not (checked against
+  // raw receipts 2026-11-19). Read it from the receipt rather than from a
+  // per-chain flag, so the total is right wherever the field appears. viem's
+  // types don't surface it on generic clients.
+  const l1Fee = BigInt((receipt as any).l1Fee ?? 0);
   const totalFee = receipt.gasUsed * receipt.effectiveGasPrice + l1Fee;
 
   const succeeded = receipt.status === 'success';
@@ -353,6 +397,6 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
     totalFeeWei: totalFee.toString(),
     logCount: receipt.logs.length,
     erc20Transfers,
-    confirmations: (latestBlock - receipt.blockNumber + 1n).toString(),
+    confirmations: latestBlock === null ? null : (latestBlock - receipt.blockNumber + 1n).toString(),
   };
 }

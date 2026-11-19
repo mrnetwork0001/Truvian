@@ -101,14 +101,17 @@ export interface TxLookupResult extends TxLookupBase {
   contractAddress: string | null;
   gasUsed: string;
   effectiveGasPrice: string;
-  /** OP-stack L1 data fee in wei; "0" on non-OP-stack chains */
+  /** L1 data fee the receipt reports, in wei (OP-stack chains and Scroll); "0" where it reports none */
   l1FeeWei: string;
   /** gasUsed * effectiveGasPrice + l1Fee - the true total cost */
   totalFeeWei: string;
   logCount: number;
   erc20Transfers: DecodedTransfer[];
-  /** Confirmations at response time - informational, NOT a scored field */
-  confirmations: string;
+  /**
+   * Confirmations at response time - informational, NOT a scored field.
+   * null when no endpoint could report the chain tip.
+   */
+  confirmations: string | null;
 }
 
 /** A transaction the node knows about that is not yet in a block. */

@@ -112,12 +112,14 @@ async function main() {
     ['Ethereum', 'ethereum'], ['1', 'ethereum'], ['eip155:8453', 'base'], ['Arbitrum One', 'arbitrum'],
     ['42161', 'arbitrum'], ['OP Mainnet', 'optimism'], ['matic', 'polygon'], ['BNB Smart Chain', 'bsc'],
     ['avalanche_c_chain', 'avalanche'], ['sepolia', 'sepolia'], ['Base Sepolia', 'base-sepolia'], ['X Layer', 'xlayer'],
+    ['scroll', 'scroll'], ['534352', 'scroll'], ['Linea', 'linea'], ['xdai', 'gnosis'], ['100', 'gnosis'],
+    ['zkSync Era', 'zksync'], ['eip155:324', 'zksync'],
   ];
   const aliasMisses = aliasCases.filter(([raw, want]) => normalizeChain(raw) !== want);
   check('chain aliases, ids and CAIP-2 resolve', aliasMisses.length === 0, aliasMisses.map(([r]) => r).join(', '));
   const textCases: Array<[string, string | null]> = [
     ['gas on base sepolia?', 'base-sepolia'], ['on sepolia testnet', 'sepolia'], ['the Arbitrum network', 'arbitrum'],
-    ['on Polygon', 'polygon'], ['BSC fees', 'bsc'], ['ethereum mainnet', 'ethereum'], ['on base', 'base'], ['no chain here', null],
+    ['on Polygon', 'polygon'], ['BSC fees', 'bsc'], ['gas on zkSync', 'zksync'], ['Gnosis chain fee', 'gnosis'], ['ethereum mainnet', 'ethereum'], ['on base', 'base'], ['no chain here', null],
   ];
   const textMisses = textCases.filter(([raw, want]) => chainFromText(raw) !== want);
   check('chain named in free text is detected', textMisses.length === 0, textMisses.map(([r]) => r).join(' | '));
@@ -142,6 +144,13 @@ async function main() {
           && got.answer.includes(` ${chainMeta(name).nativeSymbol} (`),
         `${got.status} block ${got.block_number}`,
       );
+      // the receipt's own l1Fee, where it has one, belongs in the total (OP-stack chains and Scroll)
+      const rawL1 = BigInt((raw as any).l1Fee ?? 0);
+      check(
+        `${name}: total fee = gasUsed * effectiveGasPrice + the receipt's L1 fee`,
+        got.status !== 'pending' && BigInt(got.totalFeeWei) === raw.gasUsed * raw.effectiveGasPrice + rawL1,
+        `l1Fee ${rawL1}`,
+      );
     } catch (e: any) {
       check(`${name}: lookup`, false, e?.message ?? String(e));
     }
@@ -156,8 +165,15 @@ async function main() {
   const ask = (c: any) => c.read() as Promise<string>;
   const prunedThenFull = await searchRpcs([ep(false, notFound), ep(true, async () => 'record')], ask);
   check('a pruned endpoint\'s "not found" falls through to the next endpoint', prunedThenFull.found === 'record');
-  const fullSaysNo = await searchRpcs([ep(true, notFound), ep(false, async () => 'never asked')], ask);
-  check('a full-history "not found" proves absence', fullSaysNo.found === null && fullSaysNo.provenAbsent);
+  const laggingFull = await searchRpcs([ep(true, notFound), ep(false, async () => 'record')], ask);
+  check('a record found by a later endpoint overrides a full-history "not found" (a lagging node)', laggingFull.found === 'record');
+  const twoAgree = await searchRpcs([ep(true, notFound), ep(false, notFound), ep(true, async () => 'never asked')], ask);
+  check('two "not found" answers, one from full history, prove absence', twoAgree.found === null && twoAgree.provenAbsent);
+  const prunedFirstThenFull = await searchRpcs([ep(false, notFound), ep(true, notFound)], ask);
+  check('the order of the two agreeing answers does not matter', prunedFirstThenFull.found === null && prunedFirstThenFull.provenAbsent);
+  const fullAloneOthersDown = await searchRpcs([ep(true, notFound), ep(true, broken)], ask);
+  check('a single full-history "not found" stands when no other endpoint answers',
+    fullAloneOthersDown.found === null && fullAloneOthersDown.provenAbsent);
   const onlyPrunedAnswered = await searchRpcs([ep(true, broken), ep(false, notFound)], ask);
   check(
     'absence is not claimed when only a pruned endpoint answered',
@@ -177,7 +193,7 @@ async function main() {
   // every chain answers for transactions 60 days and one year old (approximate block times, seconds)
   const blockSeconds: Record<SupportedChain, number> = {
     base: 2, ethereum: 12, arbitrum: 0.25, optimism: 2, polygon: 2, bsc: 0.75, avalanche: 1.5,
-    sepolia: 12, 'base-sepolia': 2, xlayer: 1,
+    scroll: 3, linea: 2, gnosis: 5, zksync: 1, sepolia: 12, 'base-sepolia': 2, xlayer: 1,
   };
   for (const name of SUPPORTED_CHAINS) {
     for (const [age, days] of [['60 days', 60], ['1 year', 365]] as const) {
@@ -207,6 +223,20 @@ async function main() {
       }
     }
   }
+
+  // speed: a dead endpoint must not stall a lookup (validators score on a deadline)
+  const timed = async (input: Record<string, string>) => {
+    const started = Date.now();
+    const outcome = await handleTxLookup(validateTxLookupInput(input)).then(() => 'found', (e) => (e instanceof IntentError ? e.code : 'error'));
+    return { outcome, ms: Date.now() - started };
+  };
+  const knownHash = '0xa1c4b88b9ab5f6efc19a52f9d9d0c8ebd63023598f0bbbb7654bcdf44f7e2a36';
+  const foundNoChain = await timed({ hash: knownHash });
+  check('a known hash with no chain named is found across all chains within 5 s',
+    foundNoChain.outcome === 'found' && foundNoChain.ms < 5_000, `${foundNoChain.ms} ms`);
+  const unknownNoChain = await timed({ hash: `0x${'e1'.repeat(32)}` });
+  check('an unknown hash with no chain named is answered within 8 s',
+    unknownNoChain.outcome === 'TX_NOT_FOUND' && unknownNoChain.ms < 8_000, `${unknownNoChain.outcome} in ${unknownNoChain.ms} ms`);
 
   // error path: bad input
   const bad = (() => { try { validateTxLookupInput({ chain: 'base', txHash: '0x123' }); return null; } catch (e) { return e; } })();
