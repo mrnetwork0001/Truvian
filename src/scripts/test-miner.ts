@@ -165,8 +165,15 @@ async function main() {
   const ask = (c: any) => c.read() as Promise<string>;
   const prunedThenFull = await searchRpcs([ep(false, notFound), ep(true, async () => 'record')], ask);
   check('a pruned endpoint\'s "not found" falls through to the next endpoint', prunedThenFull.found === 'record');
-  const fullSaysNo = await searchRpcs([ep(true, notFound), ep(false, async () => 'never asked')], ask);
-  check('a full-history "not found" proves absence', fullSaysNo.found === null && fullSaysNo.provenAbsent);
+  const laggingFull = await searchRpcs([ep(true, notFound), ep(false, async () => 'record')], ask);
+  check('a record found by a later endpoint overrides a full-history "not found" (a lagging node)', laggingFull.found === 'record');
+  const twoAgree = await searchRpcs([ep(true, notFound), ep(false, notFound), ep(true, async () => 'never asked')], ask);
+  check('two "not found" answers, one from full history, prove absence', twoAgree.found === null && twoAgree.provenAbsent);
+  const prunedFirstThenFull = await searchRpcs([ep(false, notFound), ep(true, notFound)], ask);
+  check('the order of the two agreeing answers does not matter', prunedFirstThenFull.found === null && prunedFirstThenFull.provenAbsent);
+  const fullAloneOthersDown = await searchRpcs([ep(true, notFound), ep(true, broken)], ask);
+  check('a single full-history "not found" stands when no other endpoint answers',
+    fullAloneOthersDown.found === null && fullAloneOthersDown.provenAbsent);
   const onlyPrunedAnswered = await searchRpcs([ep(true, broken), ep(false, notFound)], ask);
   check(
     'absence is not claimed when only a pruned endpoint answered',

@@ -188,33 +188,45 @@ export type RpcSearch<T> =
   | { found: T }
   /**
    * `provenAbsent`: a full-history endpoint answered that the record does not
-   * exist. False means no endpoint able to prove absence answered (they
-   * errored, or only pruned endpoints replied), and `error` is the last failure.
+   * exist and no endpoint contradicted it. False means no endpoint able to
+   * prove absence answered (they errored, or only pruned endpoints replied),
+   * and `error` is the last failure.
    */
   | { found: null; provenAbsent: boolean; error: unknown };
 
 /**
  * Ask each endpoint in turn for a record and return the first one found.
  *
- * "Not found" is only evidence of absence from an endpoint that keeps full
- * history: a pruned node answers the same way about a year-old transaction
- * as about one that never existed. So a not-found from a pruned endpoint
- * moves on to the next, a not-found from a full-history endpoint settles
- * it, and an error is remembered and moves on.
+ * "Not found" is weak evidence. A pruned node answers that way about a
+ * year-old transaction, and any node, full history or not, answers that way
+ * about a transaction newer than the block it has synced to. So:
+ * - a record found anywhere is found, whatever the others said
+ * - a not-found from a pruned endpoint alone proves nothing
+ * - a not-found from a full-history endpoint is confirmed by the next
+ *   endpoint that answers: when two endpoints agree and one keeps full
+ *   history, the record is absent
+ * - if no other endpoint answers, the single full-history answer stands,
+ *   so one failing endpoint does not turn every "not found" into an error
+ * - an error is remembered and moves on
  */
 export async function searchRpcs<T>(
   endpoints: Pick<RpcClient, 'fullHistory' | 'client'>[],
   read: (client: RpcClient['client']) => Promise<T>,
 ): Promise<RpcSearch<T>> {
   let error: unknown = null;
+  let notFoundAnswers = 0;
+  let fullHistorySaidAbsent = false;
   for (const { client, fullHistory } of endpoints) {
     try {
       return { found: await read(client) };
     } catch (err) {
-      if (!isNotFound(err)) error = err;
-      else if (fullHistory) return { found: null, provenAbsent: true, error: null };
+      if (!isNotFound(err)) { error = err; continue; }
+      notFoundAnswers++;
+      if (fullHistory) fullHistorySaidAbsent = true;
+      if (fullHistorySaidAbsent && notFoundAnswers >= 2) return { found: null, provenAbsent: true, error: null };
     }
   }
+  if (fullHistorySaidAbsent) return { found: null, provenAbsent: true, error: null };
   return { found: null, provenAbsent: false, error };
 }
 
