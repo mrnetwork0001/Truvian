@@ -1,24 +1,54 @@
 # Truvian - Telegraph Registration Runbook
 
 > **Season II (Telegraph V2) supersedes most of this file.** The section
-> below is current as of 2026-11-12. Everything under "Season I runbook" is
+> below is current as of 2026-11-19. Everything under "Season I runbook" is
 > kept for history and describes a deployment that no longer exists.
 
-## Season II runbook (verified live 2026-11-12)
+## Season II runbook (verified live 2026-11-19)
 
-**What moved.** Chain: Ethereum Sepolia (11155111), not Base Sepolia.
-Diamond: `0x3624EB012B5E998BB57B6bE6C9Cfc9c4bc5eb99b`. RPC:
-`https://ethereum-sepolia-rpc.publicnode.com`. Node is unchanged
-(`https://devnode.telegraphprotocol.com`). Docs, rules and the registration UI
-are on anjoman.ai (`/docs`, `/dashboard/hackathon/season-2/rules`,
-`/dashboard/earn`, `/dashboard/eval`).
+**The contract address changes without notice. Check it before every
+transaction.** Telegraph has moved its Diamond twice since Season I: to
+Ethereum Sepolia with V2 (our registration there dates from 24 October) and
+to a new address on 17 November. No node watches a retired Diamond, so a
+transaction sent to one succeeds on-chain and is never seen or scored. The
+current address is on
+<https://anjoman.ai/docs/protocol/addresses-and-params>; this file names it in
+one place only, the `DIAMOND=` line below.
+
+```bash
+DIAMOND=0x72a70e949362670Bf8bceAd24eFC5b8f950aa08b   # since 2026-11-17 (block 12151179)
+RPC=https://ethereum-sepolia-rpc.publicnode.com
+NODE=https://devnode.telegraphprotocol.com
+# Is this still the Diamond the node watches, and are we on it? Both must agree.
+curl -s $NODE/miner-dispatcher/miners/address/$MINER_ADDRESS/yamls | jq '.yamls[] | {registration_id, activation_status, registered_at}'
+cast call $DIAMOND "getMiner(uint256)" <registration_id> --rpc-url $RPC | grep -ic "${MINER_ADDRESS#0x}"   # 1 = our record is on this Diamond
+```
+
+Retired: `0x3624EB012B5E998BB57B6bE6C9Cfc9c4bc5eb99b` (24 Oct to 17 Nov) and
+the Base Sepolia Diamond from Season I.
+
+**What moved.** Chain: Ethereum Sepolia (11155111), not Base Sepolia. Node is
+unchanged. Docs, rules and the registration UI are on anjoman.ai (`/docs`,
+`/dashboard/hackathon/season-2/rules`, `/dashboard/earn`, `/dashboard/eval`).
+
+**The 17 November redeploy.** Existing miners were imported by the admin, so
+we did not have to re-register: registration **5252** was read back from the
+new Diamond on 2026-11-19 with our wallet and YAML URL in it, and the node
+lists it as active. What did change:
+- Epoch numbers restarted from 1 and every score was reset.
+- Bonds are paid in test USDC (`0xcc194e1a843B658526D0D5C431f670028582Ae17`,
+  anyone can `mint(address,uint256)`), not MACHINA. An `updateMiner` now
+  reverts with `ERC20: insufficient allowance` until the Diamond is approved
+  for the bond; our wallet held 0 test USDC on 2026-11-19.
+- Balances and escrow on the old Diamond did not carry over.
+- Evaluation-pool rows carried over: our two truth sources are still
+  `eligible`.
 
 **Our registration.** Wallet `0xcd0a2370f2dc12c1802707b7d9ab3fec891e3c02`,
-registration id **172** (carried over 2026-10-24), slug
-`truvian-onchain-truth`, intents `ONCHAIN_TX_LOOKUP_GENERAL` and
-`GAS_PRICE_GENERAL` (V2 lists intents, never family prefixes). List what the
-wallet holds:
-`curl -s $NODE/miner-dispatcher/miners/address/<wallet>/yamls`.
+registration id **5252** (created by our `updateMiner` on 2026-11-14,
+imported to the new Diamond on 2026-11-17), slug `truvian-onchain-truth`,
+intents `ONCHAIN_TX_LOOKUP_GENERAL` and `GAS_PRICE_GENERAL` (V2 lists
+intents, never family prefixes).
 
 **How answers are read now.** Each intent has a response format
 (`GET $NODE/engine/v1/intents/<FAMILY>` -> `response.fields`; one field is
@@ -27,41 +57,55 @@ path when the YAML declares an `intent_mapping`, otherwise with a parser model.
 Scored fields: `block_number` (ONCHAIN_TX_LOOKUP) and `gas_price_gwei`
 (GAS_PRICE). `telegraph/truvian-miner.yaml` is in the V2 format and maps both.
 
-**Updating the miner** (`updateMiner` ends registration 172 and creates a new
-id; a new registration spends its first 7 days in the grace period):
+**Updating the miner** (`updateMiner` ends the current registration and
+creates a new id; a new registration spends its first 7 days in the grace
+period):
 1. Deploy the miner code first - the YAML's `intent_mapping` reads fields
    (`tx_hash`, `block_number`, `gas_price_gwei`, ...) the old build does not emit.
    Check: `curl -s 'https://miner.truvian.xyz/gas?chain=ethereum' | jq .gas_price_gwei`.
 2. Host the YAML at an immutable URL (commit-pinned GitHub raw or IPFS) and
    take its SHA-256: `shasum -a 256 telegraph/truvian-miner.yaml`.
-3. Dry run (free), then send:
+3. Mint test USDC and approve the Diamond for the bond ($1 for the first
+   intent, $0.10 for each further one; read `minerBondParams()`), then dry
+   run (free) and send, with `DIAMOND` and `RPC` as set above:
 ```bash
-DIAMOND=0x3624EB012B5E998BB57B6bE6C9Cfc9c4bc5eb99b
-RPC=https://ethereum-sepolia-rpc.publicnode.com
-ARGS=(172 "$YAML_URL" "0x$YAML_SHA256" "$FEE_ADDRESS" 10000 '["ONCHAIN_TX_LOOKUP_GENERAL","GAS_PRICE_GENERAL"]')
+USDC=0xcc194e1a843B658526D0D5C431f670028582Ae17
+cast send $USDC "mint(address,uint256)" $MINER_ADDRESS 5000000 --rpc-url $RPC --private-key $MINER_PRIVATE_KEY
+cast send $USDC "approve(address,uint256)" $DIAMOND 5000000 --rpc-url $RPC --private-key $MINER_PRIVATE_KEY
+ARGS=(5252 "$YAML_URL" "0x$YAML_SHA256" "$FEE_ADDRESS" 10000 '["ONCHAIN_TX_LOOKUP_GENERAL","GAS_PRICE_GENERAL"]')
 cast call $DIAMOND "updateMiner(uint256,string,bytes32,address,uint256,string[])(uint256)" "${ARGS[@]}" --from $MINER_ADDRESS --rpc-url $RPC
 cast send $DIAMOND "updateMiner(uint256,string,bytes32,address,uint256,string[])" "${ARGS[@]}" --rpc-url $RPC --private-key $MINER_PRIVATE_KEY
 ```
-   The dry run from our wallet returned a new id on 2026-11-12 with 0 MACHINA
-   held and 0 allowance, so the update takes no further bond.
+   The mint and approve steps have not been run by us: on the previous
+   Diamond the update took no bond, and no update has been needed since.
 4. Activation follows in about 10 to 15 minutes. Read the verdict by the new
    id: `curl -s $NODE/api/miners/<newId> | jq '.miner | {activation_status, rejection_reason}'`.
-   If the update is refused, registration 172 keeps serving.
+   If the update is refused, the current registration keeps serving.
 
 **Reading our standing.** `GET $NODE/leaderboard/miners/epoch/<n>` has every
 intent ranked in that epoch. The `scores[]` in `/api/miners` only holds a
 miner's most recent epoch, so an intent ranked in an earlier epoch looks
 unscored there. Epochs are 1 hour on the testnet; not every intent is ranked
-every epoch. Epoch 2070: `ONCHAIN_TX_LOOKUP_GENERAL` rank 12 of 27 (0.282,
-leader 0.9415). Epoch 2072: `GAS_PRICE_GENERAL` rank 2 of 28 (0.9984).
+every epoch. Before the reset: epoch 2070 `ONCHAIN_TX_LOOKUP_GENERAL` rank
+12 of 27 (0.282), then rank 4 of 22 (0.9182) in epoch 2091 once the pruned-RPC
+fix was live; `GAS_PRICE_GENERAL` rank 2 of 28 (0.9989). Since the reset
+scores are low and unsteady for every miner: in epochs 1 to 16 the leader on
+transaction lookup ranged from 0.50 to 0.99 and on gas price from 0 to 0.53.
+Ours: transaction lookup 0.30 (rank 5 of 13), 0 (25 of 27), 0.30 (6 of 28),
+0.41 (11 of 28); gas price 0.33 or 0. The live miner answered every direct
+check correctly on 2026-11-19, so the cause is not established; the requests
+the node sends are in `pm2 logs truvian-miner` on the VPS.
 
 **Evaluators.** Season I `rank_answer` WASM modules are refused. V2 takes a
 comparator WASM (deterministic intents; exports `imw_score_deterministic`,
 `imw_alloc`, `imw_free`) or a safetensors LoRA adapter (judgment intents),
-registered on a family prefix with a $5 MACHINA bond and a runnable URL, plus
+registered on a family prefix with a $5 bond (test USDC since 17 November) and a runnable URL, plus
 evaluation material uploaded to `POST $NODE/api/evalpool/submissions` signed
-by the contributor wallet. Work is tracked per intent family as issues in
-`telegraphprotocol/bounties`.
+by the contributor wallet. Work was tracked per intent family as issues in
+`telegraphprotocol/bounties` until 15 November, when those were closed and
+replaced by 15 mission issues (#189 to #203); our evaluator claim continues
+on #190 (Stablecoin), linking the closed #179 and #87. See
+`evaluator/README.md` for our truth sources.
 
 ---
 
