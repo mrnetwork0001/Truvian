@@ -794,10 +794,14 @@ async function askRoutedApiKey(
 }
 
 /**
- * The API-key ask, retried once when the connection broke rather than the
- * question failing. Seen live on 2026-11-19: one of four parallel streams
- * ended with "terminated" (the server closed it) while the other three
- * answered. A miner that answered badly is not retried: that is a real answer.
+ * The API-key ask, retried once when the failure was in the plumbing rather
+ * than in the answer. Both seen live on 2026-11-19:
+ *  - one of four parallel streams ended with "terminated" (the server closed
+ *    it) while the other three answered
+ *  - two of four questions failed with "Payment was rejected by the
+ *    facilitator. Please try again." while the other two were paid and
+ *    answered in the same second
+ * A miner that answered badly is not retried: that is a real answer.
  */
 async function askApiKeyWithRetry(
   intent: ShieldIntent,
@@ -809,7 +813,8 @@ async function askApiKeyWithRetry(
     return await askRoutedApiKey(intent, sent, key, question);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const transient = /^(terminated|fetch failed)$|^http 5\d\d|api stream ended without a miner answer/.test(message);
+    const transient =
+      /^(terminated|fetch failed)$|^http 5\d\d|api stream ended without a miner answer|payment was rejected by the facilitator/i.test(message);
     if (!transient) throw err;
     return askRoutedApiKey(intent, sent, key, question);
   }
