@@ -15,6 +15,11 @@ import {
  * transaction when probed on 2026-11-14. Only a full-history endpoint can
  * prove a transaction absent; see searchRpcs in src/miner/txLookup.ts.
  *
+ * The flag is a snapshot, not a guarantee. Five days after the first probe
+ * two Sepolia endpoints marked full had stopped being so. `npm run
+ * test:miner` looks up year-old transactions on every chain and is the way
+ * to notice; re-run it before relying on this table.
+ *
  * Probe results worth remembering (2026-11-14):
  *  - publicnode.com prunes on every chain and is inconsistent between calls
  *    (it is load balanced): Ethereum returned no receipt at one year and,
@@ -144,9 +149,13 @@ const REGISTRY: Record<SupportedChain, ChainEntry> = {
     chain: sepolia,
     label: 'Ethereum Sepolia',
     rpcs: [
-      full('https://sepolia.gateway.tenderly.co'),
-      full('https://1rpc.io/sepolia'),
-      // serves transactions and current state but never returned a receipt
+      // Re-probed 2026-11-19: sepolia.gateway.tenderly.co had stopped
+      // answering and 1rpc.io/sepolia had begun pruning (no receipt at one
+      // year) and rate-limiting; both were listed as full history.
+      full('https://rpc.sepolia.ethpandaops.io'),
+      full('https://ethereum-sepolia.gateway.tatum.io'),
+      full('https://sepolia.rpc.thirdweb.com'),
+      // serves recent transactions and current state; no receipts past ~60 days
       recent('https://ethereum-sepolia-rpc.publicnode.com'),
     ],
     isOpStack: false,
