@@ -34,6 +34,9 @@ scorer/target/
 # Shield receipt feed (runtime data, never source)
 .shield-receipts.json
 
+# Shield signed decision memos (runtime data, never source)
+.shield-memos.json
+
 # Remotion video workspace
 video/node_modules/
 video/out/
