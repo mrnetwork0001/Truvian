@@ -6,6 +6,9 @@
  */
 import { SUPPORTED_CHAINS, chainMeta, getClient, getRpcClients, type SupportedChain } from '../config/chains.js';
 import { buildServer } from '../miner/server.js';
+import { handleBalance, handleSupply, validateBalanceInput, validateSupplyInput } from '../miner/holdings.js';
+import { KNOWN_TOKENS } from '../config/tokens.js';
+import { formatUnits, parseAbi } from 'viem';
 import { chainFromText, handleTxLookup, normalizeChain, searchRpcs, validateTxLookupInput } from '../miner/txLookup.js';
 import { handleGasPrice, validateGasPriceInput } from '../miner/gasPrice.js';
 import { IntentError } from '../types/index.js';
@@ -280,6 +283,61 @@ async function main() {
       check(`${name}: gas snapshot`, false, e?.message ?? String(e));
     }
   }
+
+  // --- WALLET_BALANCE_CHECK_GENERAL and TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL ---
+  console.log('');
+  const erc20 = parseAbi(['function balanceOf(address) view returns (uint256)', 'function totalSupply() view returns (uint256)', 'function symbol() view returns (string)', 'function decimals() view returns (uint8)']);
+  // the node's own question keys for both intents
+  const deposit = await handleBalance(validateBalanceInput({ address: '0x00000000219ab540356cBB839Cbe05303d7705Fa', chain: 'ethereum' }));
+  const eth = getClient('ethereum');
+  const depositRaw = await eth.getBalance({ address: '0x00000000219ab540356cBB839Cbe05303d7705Fa', blockNumber: BigInt(deposit.blockNumber) });
+  check('native balance equals eth_getBalance at the anchoring block, decimals applied',
+    deposit.balance_raw === depositRaw.toString() && deposit.balance_exact === formatUnits(depositRaw, 18) && deposit.token_symbol === 'ETH',
+    `${deposit.balance_exact} ETH at block ${deposit.blockNumber}`);
+  check('balance is a JSON number in whole units, as the intent types it', typeof deposit.balance === 'number' && Math.abs(deposit.balance - Number(formatUnits(depositRaw, 18))) < 1e-6);
+  const ens = await handleBalance(validateBalanceInput({ address: 'vitalik.eth', chain: 'ethereum' }));
+  const vitalik = await eth.getEnsAddress({ name: 'vitalik.eth' });
+  check('an ENS name resolves on Ethereum before the read', ens.address.toLowerCase() === vitalik?.toLowerCase(), ens.address);
+  const usdcBase = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: 'base', token: 'USDC' }));
+  const usdcRaw = await getClient('base').readContract({ address: KNOWN_TOKENS.base!.USDC!.address, abi: erc20, functionName: 'balanceOf', args: ['0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A'], blockNumber: BigInt(usdcBase.blockNumber) });
+  check('a token by symbol reads balanceOf on its contract, decimals applied', usdcBase.balance_raw === usdcRaw.toString()
+    && usdcBase.balance_exact === formatUnits(usdcRaw, 6) && usdcBase.token_symbol === 'USDC', `${usdcBase.balance_exact} USDC`);
+  const byAddr = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: '8453', token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }));
+  check('a token by contract address and chain id reads the same contract', byAddr.token_address === KNOWN_TOKENS.base!.USDC!.address && byAddr.token_symbol === 'USDC' && byAddr.chain === 'base', byAddr.token_symbol);
+  const unknownToken = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: 'ethereum', token: 'NOTATOKEN' })).then(() => null, (e) => e);
+  check('an unknown token symbol is refused, not guessed', unknownToken instanceof IntentError && unknownToken.code === 'INVALID_INPUT');
+
+  for (const [key, address] of [['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'],
+    ['WBTC (0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599) on Ethereum', '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599'],
+    ['DAI (0x6B175474E89094C44Da98b954EedeAC495271d0F) on Ethereum', '0x6B175474E89094C44Da98b954EedeAC495271d0F']] as const) {
+    const got = await handleSupply(validateSupplyInput({ token: key }));
+    const [raw, dec] = await Promise.all([
+      eth.readContract({ address, abi: erc20, functionName: 'totalSupply', blockNumber: BigInt(got.blockNumber) }),
+      eth.readContract({ address, abi: erc20, functionName: 'decimals', blockNumber: BigInt(got.blockNumber) }),
+    ]);
+    check(`total supply for the node's key "${key.split(' ')[0]}" equals totalSupply() at the block, decimals applied`,
+      got.total_supply_raw === raw.toString() && got.total_supply_exact === formatUnits(raw, dec) && typeof got.total_supply === 'number',
+      `${got.total_supply_exact} ${got.token}`);
+  }
+  const supplyBySymbol = await handleSupply(validateSupplyInput({ token: 'USDC on Arbitrum' }));
+  check('total supply by symbol and chain in words', supplyBySymbol.chain === 'arbitrum' && supplyBySymbol.token_address === KNOWN_TOKENS.arbitrum!.USDC!.address, `${supplyBySymbol.total_supply_exact} USDC on Arbitrum`);
+  const nativeSupply = await handleSupply(validateSupplyInput({ token: 'ETH on Ethereum' })).then(() => null, (e) => e);
+  check('a native coin is refused for total supply (no contract to read)', nativeSupply instanceof IntentError && nativeSupply.code === 'INVALID_INPUT');
+
+  // every known token address still answers with the symbol and decimals in the table
+  let tokenMismatches: string[] = [];
+  for (const [chain, tokens] of Object.entries(KNOWN_TOKENS)) {
+    for (const [sym, t] of Object.entries(tokens!)) {
+      const c = getClient(chain as SupportedChain);
+      const [onSym, onDec] = await Promise.all([
+        c.readContract({ address: t.address, abi: erc20, functionName: 'symbol' }),
+        c.readContract({ address: t.address, abi: erc20, functionName: 'decimals' }),
+      ]).catch(() => ['?', -1] as const);
+      const symOk = onSym === sym || (sym === 'USDT' && /^USD(₮|T)0$/.test(String(onSym)));
+      if (!symOk || Number(onDec) !== t.decimals) tokenMismatches.push(`${chain} ${sym}: ${onSym}/${onDec}`);
+    }
+  }
+  check('the known-token table matches every contract on-chain', tokenMismatches.length === 0, tokenMismatches.join(', '));
 
   // --- HTTP surface: the exact bodies the node reads through intent_mapping ---
   console.log('');

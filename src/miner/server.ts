@@ -9,6 +9,7 @@
 import Fastify from 'fastify';
 import { handleGasPrice, validateGasPriceInput } from './gasPrice.js';
 import { handleTxLookup, validateTxLookupInput } from './txLookup.js';
+import { handleBalance, handleSupply, validateBalanceInput, validateSupplyInput } from './holdings.js';
 import { IntentError } from '../types/index.js';
 
 const MINER_ID = process.env.TRUVIAN_MINER_ID ?? 'truvian-miner-01';
@@ -17,7 +18,7 @@ const MINER_ID = process.env.TRUVIAN_MINER_ID ?? 'truvian-miner-01';
 function isIntentRoute(url: string | undefined): boolean {
   if (!url) return false;
   const path = url.split('?')[0] ?? '';
-  return path === '/tx' || path === '/gas' || path.startsWith('/intents/');
+  return path === '/tx' || path === '/gas' || path === '/balance' || path === '/total-supply' || path.startsWith('/intents/');
 }
 
 export function buildServer() {
@@ -43,10 +44,12 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
 </style></head><body><main>
 <h1>🛡️ Truvian</h1>
 <div class="badge">Telegraph miner · truvian-onchain-truth</div>
-<p>Exact onchain answers read live from public JSON-RPC on Base, Ethereum, Arbitrum One, OP Mainnet, Polygon, BNB Smart Chain, Avalanche, Scroll, Linea, Gnosis, ZKsync Era, X Layer, Ethereum Sepolia and Base Sepolia. Serves the Telegraph intents <code>ONCHAIN_TX_LOOKUP_GENERAL</code> and <code>GAS_PRICE_GENERAL</code>.</p>
+<p>Exact onchain answers read live from public JSON-RPC on Base, Ethereum, Arbitrum One, OP Mainnet, Polygon, BNB Smart Chain, Avalanche, Scroll, Linea, Gnosis, ZKsync Era, X Layer, Ethereum Sepolia and Base Sepolia. Serves the Telegraph intents <code>ONCHAIN_TX_LOOKUP_GENERAL</code>, <code>GAS_PRICE_GENERAL</code>, <code>WALLET_BALANCE_CHECK_GENERAL</code> and <code>TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL</code>.</p>
 <ul>
 <li><code>GET /tx?tx_hash=0x…&amp;chain=base</code> - status, inclusion block, sender, recipient and value of a transaction, plus the exact total fee incl. the L1 data fee on rollups that bill it</li>
 <li><code>GET /gas?chain=base</code> - block-anchored gas price in gwei with EIP-1559 percentiles</li>
+<li><code>GET /balance?address=0x…&amp;chain=base&amp;token=USDC</code> - native or ERC-20 balance of an address or ENS name, decimals applied</li>
+<li><code>GET /total-supply?token=USDC%20on%20Ethereum</code> - an ERC-20's total supply, decimals applied</li>
 <li><code>GET /health</code> - liveness</li>
 </ul>
 <p><a href="https://github.com/mrnetwork0001/Truvian">source &amp; methodology</a> · <a href="https://explorer.telegraphprotocol.com/">telegraph explorer</a> · 3rd place, Miner track, Telegraph Season I</p>
@@ -58,6 +61,8 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
   // with a parser model; the intent's own fields follow for nodes that read by path.
   app.get('/tx', async (req) => handleTxLookup(validateTxLookupInput(req.query)));
   app.get('/gas', async (req) => handleGasPrice(validateGasPriceInput(req.query ?? {})));
+  app.get('/balance', async (req) => handleBalance(validateBalanceInput(req.query ?? {})));
+  app.get('/total-supply', async (req) => handleSupply(validateSupplyInput(req.query ?? {})));
 
   // POST equivalents for JSON-body callers
   app.post('/tx', async (req) => handleTxLookup(validateTxLookupInput(req.body)));
