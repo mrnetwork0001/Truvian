@@ -102,7 +102,7 @@ like the pre-sign check.
 | top 10 holders above 50%, with a pool under $1M | review (with a deeper pool this is disclosed as info) |
 | sanctions near match (score ≥ 0.85) or no clear result | review |
 | any check that did not answer, or escrow or budget too low to buy | review |
-| an answer that says it examined nothing ("no code was provided", "insufficient data"), whatever verdict or figure it carries | review: no evidence; it can never pass a check, though a blocking fact in it still blocks |
+| an answer that says it examined nothing ("no code was provided", "insufficient data"), whatever verdict or figure it carries | review: no evidence either way; it can neither clear nor reject a token |
 | upgradeable proxy, contract owner | info, disclosed |
 
 ## Measured on 2026-11-20
@@ -120,6 +120,7 @@ These runs are against the live network, using `npm run test:preflight` with
 | WETH again on truvian.xyz, 20:32 ([memo](https://truvian.xyz/preflight?m=63zSY25V)) | **HOLD** | $0.04 | 68 s | four paid answers, each with its signal hash |
 | vitalik.eth as a "token" | **REJECT** | **$0** (nothing bought) | 0.3 s | EIP-7702 delegation, not contract code |
 | listing with issuer "Garantex Europe OU" | **REJECT** | $0.04 | | OFAC SDN match, score 1; also a unit test on the recorded answer |
+| listing: UNI by "Uniswap Labs", governance timelock as treasury ([memo](https://truvian.xyz/preflight?m=Pi1JfTCY)) | **REVIEW** | $0.04 | 109 s | the security reviewer refused ("intellectual property policies"), the wash check said "Insufficient data", and the issuer scored 0.85 against OFAC SDN without matching: each goes to a person. The treasury balance (0.2377 ETH) agreed with the chain read |
 
 **Cost per decision:** $0.04 for a trade preflight and $0.04-0.06 for a
 listing review. A repeat within 10 minutes costs $0. Nothing is spent on
