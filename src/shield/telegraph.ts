@@ -717,8 +717,8 @@ async function cancelApiKeyJob(jobId: string, key: string): Promise<void> {
  * job is cancelled as soon as it arrives.
  */
 async function askRoutedApiKey(
-  intent: ShieldIntent,
-  sent: Record<string, string>,
+  v2Intent: string,
+  sent: Record<string, unknown>,
   key: string,
   question: string,
 ): Promise<{ body: unknown; headers: Headers; latencyMs: number }> {
@@ -734,7 +734,7 @@ async function askRoutedApiKey(
       res = await fetch(`${API_URL}/agent/chat`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: question, intent: V2_INTENT[intent], params: sent, maxSpendUsd: apiKeyMaxSpendUsd() }),
+        body: JSON.stringify({ message: question, intent: v2Intent, params: sent, maxSpendUsd: apiKeyMaxSpendUsd() }),
         signal: controller.signal,
       });
       // Another process (or a slot not yet freed by a cancel) may hold the account's jobs: wait and retry.
@@ -804,19 +804,23 @@ async function askRoutedApiKey(
  * A miner that answered badly is not retried: that is a real answer.
  */
 async function askApiKeyWithRetry(
-  intent: ShieldIntent,
-  sent: Record<string, string>,
+  v2Intent: string,
+  sent: Record<string, unknown>,
   key: string,
   question: string,
 ): Promise<{ body: unknown; headers: Headers; latencyMs: number }> {
-  try {
-    return await askRoutedApiKey(intent, sent, key, question);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const transient =
-      /^(terminated|fetch failed)$|^http 5\d\d|api stream ended without a miner answer|payment was rejected by the facilitator/i.test(message);
-    if (!transient) throw err;
-    return askRoutedApiKey(intent, sent, key, question);
+  const transient = (message: string) =>
+    /^(terminated|fetch failed)$|^http 5\d\d|api stream ended without a miner answer|payment was rejected by the facilitator/i.test(message);
+  // Two retries with a short backoff: on 2026-11-20 one liquidity ask was
+  // refused by the facilitator twice in a row, a second apart.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await askRoutedApiKey(v2Intent, sent, key, question);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (attempt >= 2 || !transient(message)) throw err;
+      await new Promise((r) => setTimeout(r, 1_000 * (attempt + 1)));
+    }
   }
 }
 
@@ -1079,7 +1083,7 @@ export async function askIntent(intent: ShieldIntent, params: Record<string, str
           const done: { body: unknown; headers: Headers; paidAtomic?: bigint; settlement?: unknown; latencyMs: number } =
             route === 'x402'
               ? await askRoutedX402(intent, sent, account!)
-              : await askApiKeyWithRetry(intent, sent, key!, questionFor(intent, params));
+              : await askApiKeyWithRetry(V2_INTENT[intent], sent, key!, questionFor(intent, params));
           const parsed = parseAnswerBody(done.body, done.headers, { intent, sent });
           let raw: unknown = done.body;
           if (done.settlement !== undefined) {
@@ -1139,5 +1143,72 @@ export async function askIntent(intent: ShieldIntent, params: Record<string, str
     return unavailable(transport, `all ${failures.length} miner attempt(s) failed - ${summary}`, startedAt, { failures });
   } catch (err) {
     return unavailable(transport, err instanceof Error ? err.message : String(err), startedAt, null);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// askTypedIntent - any V2 intent, for the preflight and listing desks
+// ---------------------------------------------------------------------------
+
+/** One answer to a V2 intent, as the node returned it. */
+export interface TypedAnswer {
+  /** The V2 intent name asked, e.g. SECURITY_REVIEW_GENERAL */
+  intent: string;
+  /** The params sent, exactly */
+  params: Record<string, unknown>;
+  /** True when the node returned the intent's response fields */
+  ok: boolean;
+  /** The intent's response fields (`result` with result_shape "intent"), null when there are none */
+  fields: Record<string, unknown> | null;
+  /** The node's state for each field: ok, missing, rejected, ... */
+  fieldStatus: Record<string, string>;
+  minerId?: string;
+  minerName?: string;
+  /** What the answer was billed, in USD */
+  costUsd?: number;
+  /** Telegraph signal hash, resolvable at GET /engine/v1/signal/{hash} */
+  signalHash?: string;
+  latencyMs: number;
+  /** Why there is no answer, when ok is false */
+  error?: string;
+}
+
+/**
+ * Ask any V2 intent by name with its typed params (GET /engine/v1/intents/<name>
+ * -> request.params). The node routes the ask to its ranked miner once: one
+ * paid call per question, not the same fact bought from several miners.
+ *
+ * Paid from the API key's escrow. The x402 route is not used here because its
+ * settlement has failed since 17 November (bounties#214). Never throws.
+ */
+export async function askTypedIntent(intent: string, params: Record<string, unknown>, question: string): Promise<TypedAnswer> {
+  const startedAt = Date.now();
+  const key = apiKey();
+  if (!key) {
+    return { intent, params, ok: false, fields: null, fieldStatus: {}, latencyMs: 0, error: 'TELEGRAPH_API_KEY is not set, so no paid Telegraph request can be made' };
+  }
+  try {
+    const done = await askApiKeyWithRetry(intent, params, key, question);
+    const record = asRecord(done.body) ?? {};
+    const fields = record.result_shape === 'intent' ? asRecord(record.result) : null;
+    const status = asRecord(record.field_status) ?? {};
+    const fieldStatus: Record<string, string> = {};
+    for (const [name, state] of Object.entries(status)) fieldStatus[name] = String(state);
+    const out: TypedAnswer = { intent, params, ok: fields !== null, fields, fieldStatus, latencyMs: done.latencyMs };
+    const minerId = record.miner_id ?? record.minerId;
+    if (typeof minerId === 'string' || typeof minerId === 'number') out.minerId = String(minerId);
+    const minerName = firstString(record, ['miner_name', 'minerName']);
+    if (minerName) out.minerName = minerName;
+    const cost = record.cost_usd ?? record.costUsd;
+    if (typeof cost === 'number' && Number.isFinite(cost)) out.costUsd = cost;
+    const signalHash = firstString(record, ['signal_hash', 'signalHash']);
+    if (signalHash) out.signalHash = signalHash;
+    if (!out.ok) out.error = `the node returned no ${intent} response fields`;
+    return out;
+  } catch (err) {
+    return {
+      intent, params, ok: false, fields: null, fieldStatus: {}, latencyMs: Date.now() - startedAt,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
