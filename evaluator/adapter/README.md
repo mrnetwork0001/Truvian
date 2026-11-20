@@ -52,14 +52,17 @@ python3 generate_pairs.py --out pairs.jsonl --n 2400 --seed 7
 The kit is `telegraphprotocol/telegraph-wasm-baseline` (commit 1ed063e). Two
 workarounds were needed on 2026-11-20:
 
-- Hugging Face's current `answerdotai/ModernBERT-base` tokenizer.json no
-  longer has the hash the node pins (`67bc76f8…`), so an adapter trained the
-  default way is refused at export. Train against a local copy of the base
-  model with Telegraph's released `tokenizer.json` in place (the kit's 88
-  tokenizer vectors pass), copy that file into `<run>/adapter/`, and export
-  with `--adapter <run>/adapter`.
+- Hugging Face's `answerdotai/ModernBERT-base` tokenizer.json (revision
+  `8949b909…`, unchanged since January 2025) is not byte-identical to the one
+  the node pins (`67bc76f8…`), so an adapter trained the default way is
+  refused at export. The two give identical token ids on all 88 of the kit's
+  vectors; only the bytes differ. Train against a local copy of the base model
+  with Telegraph's released `tokenizer.json` in place, copy that file into
+  `<run>/adapter/`, and export with `--adapter <run>/adapter`. Reported as
+  telegraphprotocol/bounties#223.
 - `train_adapter` exits 1 with `NameError: name 'pkg' is not defined` while
-  printing its next steps, after the run is saved. It is harmless.
+  printing its next steps, after the run is saved. It is harmless (also in
+  bounties#223).
 
 ```bash
 python -m float_runtime.train_adapter --intent SMART_CONTRACT_AUDIT --data pairs.jsonl \
