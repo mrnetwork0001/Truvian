@@ -13,6 +13,7 @@ wrong, so each one here is checked against the chain before it is uploaded.
 |---|---|---|---|
 | `truth-sources/onchain-metric-routescan.yaml` | `ONCHAIN_METRIC_VERIFY_GENERAL` | Routescan `balancehistory` | Native balance of an address at a block, Ethereum |
 | `truth-sources/gas-price-metamask.yaml` | `GAS_PRICE_GENERAL` | MetaMask gas API | Estimated base fee, Ethereum, Arbitrum One, Avalanche C-Chain |
+| `truth-sources/onchain-metric-truvian.yaml` | `ONCHAIN_METRIC_VERIFY_GENERAL` | Truvian truth API (ours, `src/truth`) | Native balance of an address at a block, Ethereum, Polygon PoS, Arbitrum One |
 
 Bounties: `telegraphprotocol/bounties` #87 and #179.
 
@@ -32,12 +33,34 @@ archive RPC reads.
   between 0.00% and 4.97% off: the API estimates the next block's base fee,
   which can move up to 12.5% from the current one.
 
+## Why one source is our own
+
+`ONCHAIN_METRIC_VERIFY_GENERAL` also asks about Polygon and Arbitrum, and no
+free keyless API was found that returns a decimal balance at a block there:
+Routescan does not index them, their Blockscout explorers sit behind a
+browser challenge an automated caller cannot pass, Etherscan-family APIs need
+a key, and JSON-RPC returns hex, which the mapping cannot convert.
+
+So the third source is an API we run at `https://truth.truvian.xyz`
+(`src/truth`), disclosed as ours in its own description. It does not answer
+from one node: it reads the balance and nonce from two archive endpoints run
+by different providers and returns a value only when they agree exactly.
+Disagreement (502), fewer than two answers (503) or a block beyond the tip
+(422) are HTTP errors, which the node treats as "no value" and leaves out of
+the median. Truvian does not mine `ONCHAIN_METRIC_VERIFY`.
+
+`npm run test:truth` checks those rules with stand-in endpoints and, live,
+that the answer for an address at blocks 2 days, 60 days and a year old on
+each chain equals every archive endpoint's own read.
+
 ## Known limits
 
-- The balance source covers Ethereum only. The intent also allows Polygon
-  and Arbitrum; no keyless API returning a decimal balance at a block was
-  found for them (Routescan does not index them, and their Blockscout
-  instances sit behind a browser challenge).
+- The Routescan source covers Ethereum only; Polygon and Arbitrum are
+  covered by our own API (above), which is one contributor's source, not an
+  independent third party.
+- The Arbitrum archive endpoints are a short list: a balance more than about
+  a year old needs both arb-pokt.nodies.app and the Blast API endpoint, and
+  Blast has announced its shutdown on other chains.
 - Routescan answers a block number beyond the chain tip with the latest
   balance. A question about a block that does not exist has no right answer
   either way.

@@ -1,0 +1,82 @@
+version: '1'
+kind: miner
+id: 8453089
+slug: truth-truvian-balance-at-block
+protocol: generic
+name: Truvian truth API, native balance at a block (Ethereum, Polygon, Arbitrum)
+description: >-
+  Free, public, no-key API run by Truvian (source:
+  github.com/mrnetwork0001/Truvian/tree/main/src/truth). Returns the native-coin
+  balance of an address at a given block on Ethereum, Polygon PoS or Arbitrum
+  One, in wei as an exact decimal string, read from two independent archive
+  endpoints that must agree exactly. When they disagree, when fewer than two
+  answer, or when the block is beyond the chain tip, it answers an HTTP error
+  instead of a value.
+base_url: https://truth.truvian.xyz
+auth:
+  type: none
+rate_limit_per_sec: 2
+cache_ttl_sec: 0
+errors:
+  message_path: error.message
+  code_path: error.code
+endpoints:
+- path: /balance
+  external_path: /balance
+  method: GET
+  description: >-
+    Native-coin balance, in wei, and nonce of one address at one block height
+    on ethereum, polygon or arbitrum. USE THIS for a balance at a stated block.
+  intents:
+  - ONCHAIN_METRIC_VERIFY_GENERAL
+  params:
+    query:
+      required:
+      - name: chain
+        type: string
+        intents: ['*']
+        description: 'Chain to read: ethereum, polygon or arbitrum (the intent''s own chain names).'
+      - name: address
+        type: string
+        intents: ['*']
+        description: The wallet address, 0x followed by 40 hexadecimal characters.
+      - name: block
+        type: integer
+        intents: ['*']
+        description: Block number to read the balance at, as a decimal integer.
+# The node checks a built request against this schema before sending it.
+input_schema:
+  type: object
+  required: [chain, address, block]
+  properties:
+    chain:
+      type: string
+      enum: [ethereum, polygon, arbitrum]
+    address:
+      type: string
+      pattern: '^0x[0-9a-fA-F]{40}$'
+    block:
+      type: integer
+      minimum: 0
+intent_mapping:
+  ONCHAIN_METRIC_VERIFY_GENERAL:
+    endpoint: /balance
+    input:
+      chain:
+        from: chain
+        how: Copy the chain name as given (ethereum, polygon or arbitrum). When no chain is given use ethereum.
+      address:
+        from: address
+        how: Copy the complete 0x-prefixed address exactly.
+      block:
+        from: block
+        how: The block number as a decimal integer.
+    output:
+      balance_gwei:
+        path: balance_wei
+        unit: wei
+      tx_count:
+        path: tx_count
+semantics:
+  supported_intents:
+  - ONCHAIN_METRIC_VERIFY_GENERAL
