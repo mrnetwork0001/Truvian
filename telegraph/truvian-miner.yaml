@@ -15,8 +15,11 @@ description: >
   decoded ERC-20 transfers. A transaction with no receipt is reported pending
   and an unknown hash is reported not_found, never guessed. Gas price returns
   eth_gasPrice anchored to an explicit block, with base fee, priority-fee
-  percentiles and the L1 base fee on OP-stack chains. Every response carries
-  the intent's fields by name and a plain-language statement of the same facts.
+  percentiles and the L1 base fee on OP-stack chains. Wallet balance returns
+  the native-coin or ERC-20 balance of an address or ENS name, and total
+  supply returns an ERC-20's supply, both with decimals applied and anchored
+  to one block. Every response carries the intent's fields by name and a
+  plain-language statement of the same facts.
 
 docs:
   repository: https://github.com/mrnetwork0001/Truvian
@@ -74,6 +77,58 @@ endpoints:
               bsc (56), avalanche (43114), xlayer (196), sepolia (11155111),
               base-sepolia (84532).
 
+  - path: /balance
+    external_path: /balance
+    method: GET
+    description: >
+      Current balance of one address or ENS name on an EVM chain, in whole
+      units of the native coin or of an ERC-20 token, with decimals applied.
+    intents: [WALLET_BALANCE_CHECK_GENERAL]
+    params:
+      query:
+        required:
+          - name: address
+            type: string
+            intents: ["*"]
+            description: "The wallet: a 0x address (40 hexadecimal characters) or an ENS name ending in .eth."
+          - name: chain
+            type: string
+            intents: ["*"]
+            description: >-
+              Chain to read, as a name or EIP-155 chain id: ethereum (1), base
+              (8453), arbitrum (42161), optimism (10), polygon (137), bsc (56),
+              avalanche (43114), scroll, linea, gnosis, zksync, xlayer, sepolia,
+              base-sepolia.
+        optional:
+          - name: token
+            type: string
+            intents: ["*"]
+            description: >-
+              ERC-20 contract address, or a symbol (USDC, USDT, DAI, WETH, WBTC);
+              empty or the native symbol (ETH, POL, BNB, AVAX) for the chain's
+              native coin.
+  - path: /total-supply
+    external_path: /total-supply
+    method: GET
+    description: >
+      Current total supply of one ERC-20 token, in whole tokens with decimals
+      applied, read from totalSupply() on its contract.
+    intents: [TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL]
+    params:
+      query:
+        required:
+          - name: token
+            type: string
+            intents: ["*"]
+            description: >-
+              The token and its chain as given, for example "USDC
+              (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum"; a
+              contract address is used when present, otherwise a symbol.
+        optional:
+          - name: chain
+            type: string
+            intents: ["*"]
+            description: Chain name or EIP-155 chain id, when not named in token. Defaults to ethereum.
 input_schema:
   type: object
   properties:
@@ -170,6 +225,32 @@ intent_mapping:
       gas_price_gwei: { path: gas_price_gwei, unit: gwei }
       as_of: { path: as_of }
 
+  WALLET_BALANCE_CHECK_GENERAL:
+    endpoint: /balance
+    input:
+      address:
+        from: address
+        how: "Copy the 0x address or ENS name exactly."
+      chain:
+        from: chain
+        how: "Lower-case chain name such as ethereum, base, arbitrum, optimism, polygon, or the EIP-155 chain id."
+      token:
+        from: token
+        how: "The token's contract address if given, otherwise its symbol; leave empty for the native coin."
+    output:
+      address: { path: address }
+      chain: { path: chain }
+      balance: { path: balance, unit: "whole token units" }
+      token_symbol: { path: token_symbol }
+      as_of: { path: as_of }
+  TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL:
+    endpoint: /total-supply
+    input:
+      token:
+        from: token
+        how: "Copy the token reference as given, including any contract address and chain."
+    output:
+      total_supply: { path: total_supply, unit: "whole tokens" }
 semantics:
   signal_mapping:
     confidence_field: confidence
@@ -178,3 +259,5 @@ semantics:
   supported_intents:
     - ONCHAIN_TX_LOOKUP_GENERAL
     - GAS_PRICE_GENERAL
+    - WALLET_BALANCE_CHECK_GENERAL
+    - TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL
