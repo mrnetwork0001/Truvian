@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
 import { formatUnits } from 'viem';
 import { getClient, getRpcClients, type SupportedChain } from '../config/chains.js';
+import { TRUTH_CHAINS, stateArchives } from '../truth/balance.js';
 
 let failures = 0;
 function check(name: string, cond: boolean, detail = '') {
@@ -184,8 +185,48 @@ async function verifyGasSource() {
   }
 }
 
+/**
+ * Our own truth API (onchain-metric-truvian.yaml). Its values come from the
+ * same archive endpoints it reads, so the check that matters is the path the
+ * node takes: the request built from the descriptor reaches the live API over
+ * HTTPS and the mapped field, unit-converted, equals the chain's balance.
+ */
+async function verifyTruvianBalanceSource() {
+  const intent = 'ONCHAIN_METRIC_VERIFY_GENERAL';
+  const src = load('onchain-metric-truvian.yaml');
+  checkDescriptor(src, intent);
+  const seconds: Record<string, number> = { ethereum: 12, polygon: 2, arbitrum: 0.25 };
+  for (const chain of TRUTH_CHAINS) {
+    const archives = stateArchives(chain);
+    const tip = await archives[0]!.client.getBlockNumber();
+    for (const [age, days] of [['2 days', 2], ['1 year', 365]] as const) {
+      const blockNumber = tip - BigInt(Math.round((days * 86_400) / seconds[chain]!));
+      let block;
+      for (const { client } of archives) {
+        block = await client.getBlock({ blockNumber, includeTransactions: true }).catch(() => null);
+        if (block) break;
+      }
+      const tx = block?.transactions[block.transactions.length - 1];
+      if (!block || !tx || typeof tx === 'string') { check(`truvian ${chain}: found a ${age} old block`, false); continue; }
+      let truth: bigint | null = null;
+      for (const { client } of archives) {
+        truth = await client.getBalance({ address: tx.from, blockNumber }).catch(() => null);
+        if (truth !== null) break;
+      }
+      const got = await ask(src, intent, { chain, address: tx.from, block: Number(blockNumber) });
+      check(`truvian ${chain}: ${age} old balance through the live API equals eth_getBalance`,
+        truth !== null && got.value !== null && got.value === formatUnits(truth, 9),
+        got.value !== null ? `${got.value} gwei` : got.why);
+    }
+  }
+  const outside = await ask(src, intent, { chain: 'base', address: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', block: 1 });
+  check('truvian: a chain the intent does not allow gives no value', outside.value === null, outside.value === null ? outside.why : outside.value);
+}
+
 async function main() {
   await verifyBalanceSource();
+  console.log('');
+  await verifyTruvianBalanceSource();
   console.log('');
   await verifyGasSource();
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
