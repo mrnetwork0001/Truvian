@@ -205,7 +205,14 @@ const usdcAll = [securityUsdc, supplyUsdc, washUsdc, liquidityUsdc];
   const fixedSupply = evaluate(squidTrade, squidFacts, [secureUnseen, { ...supplySquidOff, fields: { total_supply: 800000000 } }, washUnseen, liquiditySquid], null);
   check('even with supply agreeing, answers that examined nothing cannot clear SQUID', fixedSupply.decision === 'REVIEW', fixedSupply.findings.filter((f) => f.severity === 'review').map((f) => f.rule).join(','));
   const honeypotUnseen = evaluate(squidTrade, squidFacts, [{ ...secureUnseen, fields: { ...secureUnseen.fields!, summary: 'No code was provided. honeypot: yes' } }, supplyUsdc, washUsdc, liquiditySquid], null);
-  check('a blocking fact still blocks when the reviewer also says it saw no code', honeypotUnseen.decision === 'REJECT');
+  check('an answer that saw no code can neither clear nor reject: REVIEW', honeypotUnseen.decision === 'REVIEW');
+  // live, memo WOYbyG3x (20:43 UTC): 86% "likely wash trading" on USDC after "Insufficient data", against a $6.12M pool
+  const wash86 = bought('wash', 'WASH_TRADING_DETECTION_GENERAL', {
+    subject: 'USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', verdict: 'likely_wash_trading', wash_volume_pct: 86,
+    summary: 'Insufficient data. No trade data or trade records were provided.',
+  }, { subject: 'ok', verdict: 'ok', wash_volume_pct: 'ok', signals: 'ok', summary: 'ok' });
+  const usdcListing = evaluate({ mode: 'listing', chain: 'ethereum', token: USDC, issuer: 'Circle Internet Financial' }, usdcFacts, [securityUsdc, supplyUsdc, wash86, sanctionsClear], null);
+  check('86% wash from an answer that saw no trades does not reject USDC: REVIEW', usdcListing.decision === 'REVIEW' && usdcListing.findings.some((f) => f.rule === 'wash.not_examined'));
   check('real scan text is not mistaken for "examined nothing"', notExamined(securityUsdc.fields!.summary, securitySquid.fields!.summary, washUsdc.fields!.summary) === null);
 }
 

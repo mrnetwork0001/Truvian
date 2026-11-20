@@ -232,9 +232,10 @@ export function summaryFacts(summary: string | null): { honeypot: 'yes' | 'no' |
  * An answer that says the provider examined nothing. Seen live on 2026-11-20
  * from a ranked miner: verdict "Secure" with "No code, configuration, or
  * system description was provided to evaluate", and a wash-trading answer of
- * 0% "organic" whose summary began "Insufficient data". Such an answer is no
- * evidence either way: it can never pass a check, though a blocking figure in
- * it still blocks.
+ * 0% "organic" whose summary began "Insufficient data". Minutes later the
+ * same miner put 86% "likely wash trading" on USDC, again after "Insufficient
+ * data", measured against a $6M pool. Such an answer is no evidence either
+ * way: it can neither clear nor reject a token, only send it to a person.
  */
 const NOT_EXAMINED = /\bno (?:code|contract|configuration|system description|data|trade records|transaction data|information)\b[^.]{0,80}?\b(?:was|were|is|are)?\s*(?:provided|given|available|supplied)\b|\binsufficient (?:data|information)\b|\bwithout (?:actual|any) (?:transaction|trade|code|data|information)\b|\b(?:cannot|can ?not|could not|unable to) (?:evaluate|assess|analy[sz]e|perform)\b|\bnot enough (?:data|information)\b|\bno assessment\b[^.]{0,40}\bcan be made\b/i;
 
@@ -251,16 +252,11 @@ function securityFindings(p: Purchase | undefined): Finding[] {
   if (!p || !p.ok || !p.fields) return [unavailable(p, 'security', 'Security review')];
   const examined = notExamined(p.fields.summary, p.fields.issues);
   if (examined) {
-    // Keep what blocks; drop anything that would count as clearing.
-    const blocking = securityFindingsFrom(p, p.fields).filter((x) => x.severity === 'block');
-    return [
-      ...blocking,
-      {
-        rule: 'security.not_examined', severity: 'review', title: 'Security review did not examine the contract',
-        detail: `The answer says "${examined}"${str(p.fields.verdict) ? ` yet gives the verdict "${str(p.fields.verdict)}"` : ''}, so it is no evidence about this contract either way.`,
-        source: 'telegraph', evidence: ['security'],
-      },
-    ];
+    return [{
+      rule: 'security.not_examined', severity: 'review', title: 'Security review did not examine the contract',
+      detail: `The answer says "${examined}"${str(p.fields.verdict) ? ` yet gives the verdict "${str(p.fields.verdict)}"` : ''}, so it is no evidence about this contract either way.`,
+      source: 'telegraph', evidence: ['security'],
+    }];
   }
   return securityFindingsFrom(p, p.fields);
 }
@@ -339,10 +335,10 @@ function washFindings(p: Purchase | undefined): Finding[] {
   const verdict = str(p.fields.verdict);
   const context = [verdict ? `verdict "${verdict}"` : null, str(p.fields.summary)].filter(Boolean).join('; ');
   if (share === null) return [{ rule: 'wash.missing', severity: 'review', title: 'Wash trading: no figure', detail: `The answer carried no wash_volume_pct (field status ${JSON.stringify(p.fieldStatus)}).`, source: 'telegraph', evidence: ['wash'] }];
+  const examined = notExamined(p.fields.summary);
+  if (examined) return [{ rule: 'wash.not_examined', severity: 'review', title: 'Wash-trading check did not examine the trades', detail: `The answer reports ${pct(share)}${verdict ? ` ("${verdict}")` : ''} but says "${examined}", so the figure is no evidence either way.`, source: 'telegraph', evidence: ['wash'] }];
   if (share >= POLICY.washBlockPct) return [{ rule: 'wash.block', severity: 'block', title: `${pct(share)} of volume is wash trading`, detail: context, source: 'telegraph', evidence: ['wash'] }];
   if (share >= POLICY.washReviewPct) return [{ rule: 'wash.review', severity: 'review', title: `${pct(share)} of volume is wash trading`, detail: context, source: 'telegraph', evidence: ['wash'] }];
-  const examined = notExamined(p.fields.summary);
-  if (examined) return [{ rule: 'wash.not_examined', severity: 'review', title: 'Wash-trading check did not examine the trades', detail: `The answer reports ${pct(share)}${verdict ? ` ("${verdict}")` : ''} but says "${examined}", so the figure is no evidence.`, source: 'telegraph', evidence: ['wash'] }];
   return [{ rule: 'wash.ok', severity: 'pass', title: `Wash trading ${pct(share)} of volume`, detail: context, source: 'telegraph', evidence: ['wash'] }];
 }
 
