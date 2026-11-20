@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Truvian Shield · Token preflight and listing review</title>
+<meta name="description" content="Decide about a token before acting on it: security, supply, wash-trading, liquidity and sanctions intelligence bought through Telegraph, checked against the chain, in a signed memo with its cost.">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:title" content="Truvian Shield · Token preflight and listing review">
+<meta property="og:description" content="Telegraph intelligence, checked against the chain, in a signed HOLD / REVIEW / REJECT memo with its cost.">
+<meta property="og:image" content="https://truvian.xyz/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="./style.css">
+<style>
+  .tabs { display: flex; gap: .5rem; margin: 1rem 0 1.25rem; flex-wrap: wrap; }
+  .tab { background: var(--panel); border: 1px solid var(--edge); color: var(--muted); font: inherit; font-size: .85rem; padding: .55rem .9rem; border-radius: 6px; cursor: pointer; }
+  .tab[aria-selected="true"] { color: var(--text); border-color: var(--gold); }
+  .tab small { display: block; color: var(--faint); font-size: .7rem; margin-top: .15rem; }
+  .decision { border-left: 4px solid var(--edge); padding: 1rem 1.1rem; border-radius: 6px; background: var(--panel); }
+  .decision .word { font-size: 1.6rem; font-weight: 700; letter-spacing: .04em; }
+  .decision .rule { color: var(--muted); font-size: .82rem; margin-top: .3rem; }
+  .decision .action { color: var(--faint); font-size: .78rem; margin-top: .3rem; }
+  .decision.HOLD, .decision.LIST { border-left-color: var(--safe); background: rgba(83,192,127,.07); }
+  .decision.HOLD .word, .decision.LIST .word { color: var(--safe); }
+  .decision.REVIEW { border-left-color: var(--warn); background: rgba(224,168,75,.07); }
+  .decision.REVIEW .word { color: var(--warn); }
+  .decision.REJECT { border-left-color: var(--block); background: rgba(224,92,92,.07); }
+  .decision.REJECT .word { color: var(--block); }
+  .costline { display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; margin: .9rem 0 0; font-size: .8rem; color: var(--muted); }
+  .costline b { color: var(--text); font-weight: 600; }
+  table.grid { width: 100%; border-collapse: collapse; font-size: .8rem; margin-top: .6rem; }
+  table.grid th, table.grid td { text-align: left; padding: .5rem .55rem; border-bottom: 1px solid var(--edge-soft); vertical-align: top; }
+  table.grid th { color: var(--faint); font-weight: 500; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
+  .sev { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; padding: .12rem .4rem; border-radius: 4px; border: 1px solid currentColor; white-space: nowrap; }
+  .sev.block { color: var(--block); } .sev.review { color: var(--warn); } .sev.pass { color: var(--safe); } .sev.info { color: var(--neutral-chip); }
+  .detail { color: var(--muted); }
+  .mono { font-family: var(--mono); word-break: break-all; }
+  .pending { color: var(--faint); }
+  .ok { color: var(--safe); } .err { color: var(--block); }
+  .fields { color: var(--muted); font-size: .74rem; margin-top: .25rem; }
+  .sigbox { margin-top: 1rem; padding: .8rem 1rem; border: 1px solid var(--edge); border-radius: 6px; background: var(--panel); font-size: .78rem; }
+  .sigbox .row { display: flex; gap: .6rem; margin: .25rem 0; flex-wrap: wrap; }
+  .sigbox .k { color: var(--faint); min-width: 7rem; }
+  .actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .7rem; }
+  .actions button, .actions a.btnlike { background: var(--panel-2); border: 1px solid var(--edge); color: var(--text); font: inherit; font-size: .78rem; padding: .4rem .7rem; border-radius: 5px; cursor: pointer; text-decoration: none; }
+  .note-testnet { font-size: .74rem; color: var(--faint); margin-top: .6rem; }
+  .recent li { font-size: .78rem; margin: .3rem 0; color: var(--muted); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="site-header">
+    <div class="header-left">
+      <h1 class="brand"><a href="/"><img class="brand-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a></h1>
+      <p class="tagline">decide about a token before acting on it: Telegraph intelligence, checked against the chain, in a signed memo with its cost</p>
+    </div>
+    <div class="header-right">
+      <div class="badge-row">
+        <span class="badge">Telegraph Season II · Apps &amp; Agents</span>
+        <a href="/app">pre-sign check</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a href="https://github.com/mrnetwork0001/Truvian/blob/main/telegraph/PREFLIGHT.md" target="_blank" rel="noopener">how it works</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="check-section" aria-labelledby="pf-heading">
+      <h2 id="pf-heading" class="section-label">Choose a desk</h2>
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab" role="tab" id="tab-trade" aria-selected="true" data-mode="trade">Token preflight<small>trading agent · HOLD / REVIEW / REJECT · Mission 14</small></button>
+        <button type="button" class="tab" role="tab" id="tab-listing" aria-selected="false" data-mode="listing">Listing review<small>exchange listings desk · LIST / REVIEW / REJECT · Mission 01</small></button>
+      </div>
+      <p class="section-note" id="desk-note"></p>
+
+      <div class="presets" aria-label="Fixtures">
+        <span class="presets-label">Try one:</span>
+        <span id="fixtures"></span>
+      </div>
+
+      <form id="pf-form" novalidate>
+        <div class="field">
+          <label for="chain">chain</label>
+          <select id="chain" name="chain">
+            <option value="ethereum" selected>ethereum</option>
+            <option value="base">base</option>
+            <option value="arbitrum">arbitrum</option>
+            <option value="optimism">optimism</option>
+            <option value="polygon">polygon</option>
+            <option value="bsc">bsc</option>
+            <option value="avalanche">avalanche</option>
+          </select>
+        </div>
+        <div class="field wide">
+          <label for="token">token contract</label>
+          <input id="token" name="token" type="text" placeholder="0x… (40 hex chars)" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field wide">
+          <label for="pool">DEX pool <span class="label-hint" id="pool-hint">- the pool the trade goes through</span></label>
+          <input id="pool" name="pool" type="text" placeholder="0x…" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field mode-trade">
+          <label for="tradeUsd">trade size (USD, simulated)</label>
+          <input id="tradeUsd" name="tradeUsd" type="text" inputmode="decimal" value="1000" autocomplete="off">
+        </div>
+        <div class="field wide mode-listing hidden">
+          <label for="issuer">issuer legal name <span class="label-hint">- screened against sanctions lists</span></label>
+          <input id="issuer" name="issuer" type="text" placeholder="Uniswap Labs" autocomplete="off">
+        </div>
+        <div class="field wide mode-listing hidden">
+          <label for="treasury">treasury wallet <span class="label-hint">(optional) - balance checked against the chain</span></label>
+          <input id="treasury" name="treasury" type="text" placeholder="0x…" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field submit-field">
+          <button id="submit-btn" type="submit">Run preflight</button>
+        </div>
+        <p id="form-error" class="form-error wide" role="alert" hidden></p>
+      </form>
+      <p class="note-testnet">Telegraph Season II settles on testnet: answers are paid in test USDC from Shield's Anjoman escrow on Ethereum Sepolia. The facts checked are about the mainnet chain you pick. Trades are simulated, never sent.</p>
+    </section>
+
+    <section id="out" class="report hidden" aria-live="polite">
+      <h2 class="section-label">Decision</h2>
+      <div id="decision" class="decision"><div class="word pending">working…</div></div>
+      <div id="costline" class="costline"></div>
+
+      <h3 class="section-label" style="margin-top:1.6rem">Findings</h3>
+      <table class="grid"><thead><tr><th>severity</th><th>finding</th><th>source</th></tr></thead><tbody id="findings"><tr><td colspan="3" class="pending">waiting for the evidence…</td></tr></tbody></table>
+
+      <h3 class="section-label" style="margin-top:1.6rem">Telegraph requests</h3>
+      <table class="grid"><thead><tr><th>intent</th><th>answer</th><th>miner · cost · latency</th><th>signal</th></tr></thead><tbody id="purchases"></tbody></table>
+
+      <h3 class="section-label" style="margin-top:1.6rem">Chain read <span class="label-hint">(Truvian's own JSON-RPC reads, not Telegraph)</span></h3>
+      <div id="chainread" class="detail" style="font-size:.8rem"></div>
+
+      <div id="sig" class="sigbox hidden"></div>
+    </section>
+
+    <section class="how-section">
+      <h2 class="section-label">Recent decisions</h2>
+      <ul id="recent" class="recent"><li class="pending">loading…</li></ul>
+      <p class="how-footnote">For agents: <span class="mono">POST /api/preflight</span> with <span class="mono">{"mode":"trade","chain":"ethereum","token":"0x…","pool":"0x…","tradeUsd":1000}</span> or <span class="mono">{"mode":"listing","chain":"ethereum","token":"0x…","issuer":"…","treasury":"0x…"}</span>; add <span class="mono">?stream=1</span> for NDJSON progress. Verify any memo with <span class="mono">POST /api/memo/verify {"memo","signature"}</span> or any EIP-191 library.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="foot-grid">
+      <div class="foot-brand-col">
+        <a class="foot-brand" href="/"><img class="foot-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
+        <p class="foot-desc">Built for the Telegraph Protocol Season II hackathon. Every answer above was bought through Telegraph and can be resolved on the node by its signal hash.</p>
+      </div>
+      <nav class="foot-col"><h4>Shield</h4><ul>
+        <li><a href="/preflight">Token preflight</a></li>
+        <li><a href="/app">Pre-sign check</a></li>
+        <li><a href="/api/memos">Memo feed (JSON)</a></li>
+      </ul></nav>
+      <nav class="foot-col"><h4>Telegraph</h4><ul>
+        <li><a href="https://anjoman.ai" target="_blank" rel="noopener">anjoman.ai</a></li>
+        <li><a href="https://github.com/telegraphprotocol/bounties/issues/202" target="_blank" rel="noopener">Mission 14 · Web3 &amp; DeFi</a></li>
+        <li><a href="https://github.com/telegraphprotocol/bounties/issues/189" target="_blank" rel="noopener">Mission 01 · Exchange</a></li>
+      </ul></nav>
+      <nav class="foot-col"><h4>Source</h4><ul>
+        <li><a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="https://github.com/mrnetwork0001/Truvian/blob/main/src/shield/preflight.ts" target="_blank" rel="noopener">The rules</a></li>
+      </ul></nav>
+    </div>
+  </footer>
+</div>
+<script src="./preflight.js"></script>
+</body>
+</html>

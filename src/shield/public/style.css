@@ -228,7 +228,8 @@ select:focus-visible {
 
 /* ---- form ---- */
 
-#check-form {
+#check-form,
+#pf-form {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem 1.25rem;
@@ -587,7 +588,7 @@ select:focus-visible {
   .brand-logo { height: 42px; }
   .header-right { align-items: flex-start; text-align: left; }
   .badge-row, .wallet-bar { justify-content: flex-start; }
-  #check-form { grid-template-columns: 1fr; }
+  #check-form, #pf-form { grid-template-columns: 1fr; }
   .how-grid { grid-template-columns: 1fr; }
   .status-chip { margin-left: 0; }
 }
