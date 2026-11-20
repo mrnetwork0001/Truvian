@@ -12,6 +12,7 @@
     "shield": "tsx src/shield/server.ts",
     "test:miner": "tsx src/scripts/test-miner.ts",
     "test:shield": "tsx src/scripts/test-shield.ts",
+    "test:preflight": "tsx src/scripts/test-preflight.ts",
     "test:truth": "tsx src/scripts/test-truth.ts",
     "truth": "tsx src/truth/server.ts",
     "typecheck": "tsc --noEmit",
