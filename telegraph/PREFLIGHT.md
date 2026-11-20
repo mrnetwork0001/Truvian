@@ -102,6 +102,7 @@ like the pre-sign check.
 | top 10 holders above 50%, with a pool under $1M | review (with a deeper pool this is disclosed as info) |
 | sanctions near match (score ≥ 0.85) or no clear result | review |
 | any check that did not answer, or escrow or budget too low to buy | review |
+| an answer that says it examined nothing ("no code was provided", "insufficient data"), whatever verdict or figure it carries | review: no evidence; it can never pass a check, though a blocking fact in it still blocks |
 | upgradeable proxy, contract owner | info, disclosed |
 
 ## Measured on 2026-11-20
@@ -114,7 +115,9 @@ These runs are against the live network, using `npm run test:preflight` with
 | WETH, $1,000 through the USDC/WETH pool | **HOLD** | $0.04 (4 answers) | 66 s | scan clean, supply within 50 bps of the chain, 0% wash volume, $66.5M pool; 58.2% top-10 concentration disclosed as info because the pool is deep |
 | the same request again | **HOLD** | **$0** (4 reused) | under 1 s | fresh answers reused instead of bought again |
 | USDC, same pool | **REVIEW** | $0.04 | 108 s | the ranked security review (TxLens) said "Needs changes": one admin key can freeze, upgrade and mint |
-| SQUID (the 2021 rug pull) on BSC | **REVIEW** | (rules on the live answers) | | honeypot status not determined, 59.1% held by ten holders, $167k pool |
+| SQUID (the 2021 rug pull) on BSC, 19:20 answers | **REVIEW** | (rules on the live answers) | | honeypot status not determined, 59.1% held by ten holders, $167k pool |
+| SQUID again on truvian.xyz, 20:33 ([memo](https://truvian.xyz/preflight?m=FKLfi2qT)) | **REVIEW** | $0.04 | 39 s | a different reviewer said "Secure" about code it never saw, and the wash check said "Insufficient data" next to 0%; the supply cross-check caught the ranked answer 514 bps under the contract's 800M. Both "examined nothing" answers now count as no evidence, so SQUID stays in REVIEW even without the supply gap |
+| WETH again on truvian.xyz, 20:32 ([memo](https://truvian.xyz/preflight?m=63zSY25V)) | **HOLD** | $0.04 | 68 s | four paid answers, each with its signal hash |
 | vitalik.eth as a "token" | **REJECT** | **$0** (nothing bought) | 0.3 s | EIP-7702 delegation, not contract code |
 | listing with issuer "Garantex Europe OU" | **REJECT** | $0.04 | | OFAC SDN match, score 1; also a unit test on the recorded answer |
 
@@ -133,6 +136,7 @@ decision is REVIEW.
 | Case | How | Result |
 |---|---|---|
 | not a token | token = any wallet, e.g. `0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045` | REJECT, $0, "EIP-7702 delegation to …" |
+| a provider that examined nothing | SQUID on BSC (memo `FKLfi2qT`); unit test on the exact answers | REVIEW: "Security review did not examine the contract" |
 | a check does not answer | seen live on 2026-11-20: the facilitator refused one liquidity payment twice in a row ("Payment was rejected by the facilitator"); Shield now retries twice with a backoff | REVIEW: "Pool liquidity: no answer"; the failure is not cached |
 | conflicting sources | a supply answer more than 50 bps from the chain read (unit test with a 12.7% gap) | REVIEW: "Total supply conflicts with the chain" |
 | sanctioned or uncertain screening | issuer `Garantex Europe OU`; a screening with no `matched` value | REJECT; REVIEW, never cleared |
@@ -153,6 +157,14 @@ decision is REVIEW.
   `missing`. In that case Shield clears a token only if the provider's scan
   facts (honeypot, buy and sell tax, holder concentration) are all present
   and clean, and it says so in the memo.
+- **A ranked provider can say "Secure" about code it never saw.** At 20:33 UTC
+  the ranked `SECURITY_REVIEW_GENERAL` answer for SQUID was verdict `Secure`,
+  `vulnerability_count` 0: "No code, configuration, or system description was
+  provided to evaluate". The same miner's wash-trading answer was 0% `organic`
+  with a summary beginning "Insufficient data". The scored fields alone would
+  have cleared a rug-pull token. Shield treats an answer that says it examined
+  nothing as no evidence, and the cross-check against the chain caught a wrong
+  total supply in the same run.
 - **Ranking changes between asks.** The same USDC question went to two
   different miners an hour apart, and one answered "Needs changes" while the
   other left the verdict empty. A memo records which miner answered and its
