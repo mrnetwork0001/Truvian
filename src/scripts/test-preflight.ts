@@ -18,6 +18,7 @@ import {
   normalizePreflightRequest,
   PreflightInputError,
   runPreflight,
+  notExamined,
   summaryFacts,
   type Purchase,
   type PreflightRequest,
@@ -177,6 +178,35 @@ const usdcAll = [securityUsdc, supplyUsdc, washUsdc, liquidityUsdc];
   check('concentration with a deep pool ($66M) is disclosed, not held against the token', deep.decision === 'HOLD' && deep.findings.some((f) => f.rule === 'security.holder_concentration' && f.severity === 'info'));
   const thin = evaluate(tradeUsdc, usdcFacts, [wethScan, supplyUsdc, washUsdc, { ...liquidityUsdc, fields: { liquidity_usd: 400_000 } }], null);
   check('the same concentration with a thin pool ($400k) needs review', thin.decision === 'REVIEW' && thin.findings.some((f) => f.rule === 'security.holder_concentration' && f.severity === 'review'));
+}
+
+{
+  // live, memo FKLfi2qT (2026-11-20 20:33 UTC): the ranked reviewer said "Secure" about a contract it never saw,
+  // signal 0x693f64e553c9eb36e02e44697b6ba277194240b22b0e28b79dc9cfb0685a76a5 (miner 9002)
+  const secureUnseen = bought('security', 'SECURITY_REVIEW_GENERAL', {
+    verdict: 'Secure', vulnerability_count: 0, issues: null,
+    summary: 'Secure. No code, configuration, or system description was provided to evaluate, so there are no observable security weaknesses to address.',
+  }, { verdict: 'ok', vulnerability_count: 'ok', issues: 'missing', summary: 'ok' });
+  // signal 0x3f66aa458a06b995e423d4d0a70aad7e25035b4b2617dfbf49102c8d5aab72a2 (miner 9002)
+  const washUnseen = bought('wash', 'WASH_TRADING_DETECTION_GENERAL', {
+    subject: 'SQUID pool 0x683c425D917E8fEf34c8bbbeab57246Dd2a8B718 on BNB Smart Chain', verdict: 'organic', wash_volume_pct: 0,
+    signals: ['24h volume $2,344 is 0.0x the pool\'s $321,772 liquidity', '38 buys and 12 sells in 24h'],
+    summary: 'Insufficient data. The request only contains a query string without any trade records, timestamps, addresses, or volume information to evaluate for wash trading patterns. Without actual transaction data, repeated address activity, round‑trip trades, or price impact analysis cannot be performed. Consequently, no assessment of wash trading can be made.',
+  }, { subject: 'ok', verdict: 'ok', wash_volume_pct: 'ok', signals: 'ok', summary: 'ok' });
+  // signal 0x77847c7096258b1574d44654fc069dd98f1a51176e48083618458dc729243cc8 (miner 20260828): 5.1% under the contract's 800M
+  const supplySquidOff = bought('supply', 'TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL', { total_supply: 758870612.0653371 }, { total_supply: 'ok' });
+  const liquiditySquid = bought('liquidity', 'LIQUIDITY_DEPTH_VERIFY_GENERAL', { liquidity_usd: 321771.53 }, { liquidity_usd: 'ok' });
+  const squidTrade: PreflightRequest = { mode: 'trade', chain: 'bsc', token: SQUID, pool: '0x683c425D917E8fEf34c8bbbeab57246Dd2a8B718', tradeUsd: 1000 };
+
+  const r = evaluate(squidTrade, squidFacts, [secureUnseen, supplySquidOff, washUnseen, liquiditySquid], null);
+  check('a "Secure" verdict about a contract the reviewer never saw does not pass', r.findings.some((f) => f.rule === 'security.not_examined') && !r.findings.some((f) => f.rule === 'security.secure'));
+  check('0% wash volume with "Insufficient data" is no evidence', r.findings.some((f) => f.rule === 'wash.not_examined') && !r.findings.some((f) => f.rule === 'wash.ok'));
+  check('SQUID with the live 20:33 answers: REVIEW, and supply conflict caught', r.decision === 'REVIEW' && r.findings.some((f) => f.rule === 'supply.conflict'));
+  const fixedSupply = evaluate(squidTrade, squidFacts, [secureUnseen, { ...supplySquidOff, fields: { total_supply: 800000000 } }, washUnseen, liquiditySquid], null);
+  check('even with supply agreeing, answers that examined nothing cannot clear SQUID', fixedSupply.decision === 'REVIEW', fixedSupply.findings.filter((f) => f.severity === 'review').map((f) => f.rule).join(','));
+  const honeypotUnseen = evaluate(squidTrade, squidFacts, [{ ...secureUnseen, fields: { ...secureUnseen.fields!, summary: 'No code was provided. honeypot: yes' } }, supplyUsdc, washUsdc, liquiditySquid], null);
+  check('a blocking fact still blocks when the reviewer also says it saw no code', honeypotUnseen.decision === 'REJECT');
+  check('real scan text is not mistaken for "examined nothing"', notExamined(securityUsdc.fields!.summary, securitySquid.fields!.summary, washUsdc.fields!.summary) === null);
 }
 
 {
