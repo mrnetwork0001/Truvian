@@ -17,6 +17,7 @@ Truvian answers onchain questions **exactly**, **judges** other miners' answers 
 | **Miner** - Track 1 · [`truvian-onchain-truth`](https://miner.truvian.xyz/health) · reg #172 | 🏆 **3rd place, Season I - $600** · 🟢 Active - rank 2 in `ONCHAIN_TX_LOOKUP` (0.910) and `GAS_PRICE` on its debut epoch |
 | **WASM scoring module** - Track 2 · reg #544, then #617 | 🏆 **Held champion twice** for `ONCHAIN_TX_LOOKUP` - the module validators run to score every miner in the intent - before being dethroned in an open arms race |
 | **Truvian Shield** - Track 3 · [truvian.xyz](https://truvian.xyz) | 🟢 **Live** - execution-safety checkpoint that pays live Telegraph miners per check |
+| **Shield preflight** - Season II Apps & Agents · [truvian.xyz/preflight](https://truvian.xyz/preflight) | 🟢 **New** - token preflight for trading agents (Mission 14) and listing review for exchanges (Mission 01): Telegraph intelligence checked against the chain, in a signed HOLD / LIST / REVIEW / REJECT memo with its cost. [How it works](telegraph/PREFLIGHT.md) |
 
 ## Try it in 30 seconds
 
