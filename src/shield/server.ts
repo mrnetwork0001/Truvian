@@ -7,6 +7,10 @@
  *
  * Routes:
  *   POST /api/check            {chain?, to?, valueEth?, txHash?, protocol?} -> CheckReport
+ *   POST /api/preflight        {mode: trade|listing, chain, token, pool?, tradeUsd?, issuer?, treasury?}
+ *                              -> signed HOLD/LIST/REVIEW/REJECT memo (preflight.ts, memo.ts)
+ *   GET  /api/memo/:id         a stored memo with its sha256 and signature
+ *   POST /api/memo/verify      {memo, signature} -> digest and recovered signer
  *   GET  /api/verify/:txHash   single ONCHAIN_TX_LOOKUP-based verification report
  *   GET  /healthz              {ok:true}
  *   GET  /api/stats            {checksRun, telegraphRequests, byIntent}
@@ -30,6 +34,9 @@ import {
 } from './verdict.js';
 import { createLimiter, type Limiter, type LimiterState } from './limits.js';
 import { createReceiptStore } from './receipts.js';
+import { normalizePreflightRequest, PreflightInputError, runPreflight, type PreflightRequest } from './preflight.js';
+import { createMemoStore, memoSigner, signMemo, verifyMemo } from './memo.js';
+import { TokenFactsError } from './tokenFacts.js';
 import { payerAddress, payerUsdcBalance } from './payer.js';
 import {
   buildRequirements,
@@ -50,6 +57,7 @@ import { isPaidTransport } from './types.js';
 const PUBLIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'public');
 const STATS_FILE = process.env.SHIELD_STATS_FILE ?? resolve(process.cwd(), '.shield-stats.json');
 const RECEIPTS_FILE = process.env.SHIELD_RECEIPTS_FILE ?? resolve(process.cwd(), '.shield-receipts.json');
+const MEMOS_FILE = process.env.SHIELD_MEMOS_FILE ?? resolve(process.cwd(), '.shield-memos.json');
 
 /** Mirror of telegraph.ts transport selection, used only to label errored checks. */
 function defaultTransport(): ShieldTransport {
@@ -74,6 +82,7 @@ function emptyStats(): ShieldStats {
     paidUsd: 0,
     earnedUsd: 0,
     paidChecks: 0,
+    preflightsRun: 0,
   };
 }
 
@@ -86,6 +95,7 @@ function loadStats(): { stats: ShieldStats; limits?: LimiterState } {
     stats.paidUsd = Number(parsed.paidUsd) || 0;
     stats.earnedUsd = Number(parsed.earnedUsd) || 0;
     stats.paidChecks = Number(parsed.paidChecks) || 0;
+    stats.preflightsRun = Number(parsed.preflightsRun) || 0;
     const by = parsed.byIntent;
     if (typeof by === 'object' && by !== null) {
       for (const key of Object.keys(stats.byIntent) as ShieldIntent[]) {
@@ -184,6 +194,7 @@ export function buildShieldServer() {
   const limiter: Limiter = createLimiter();
   limiter.hydrate(loaded.limits);
   const receipts = createReceiptStore(RECEIPTS_FILE);
+  const memos = createMemoStore(MEMOS_FILE);
 
   const save = (): void => persistStats(stats, limiter.serialize());
 
@@ -509,6 +520,104 @@ export function buildShieldServer() {
     }
   });
 
+  /**
+   * Token preflight (trade) and listing review (listing): direct chain reads,
+   * one routed Telegraph request per fact, fixed rules, and a signed memo.
+   * Draws on the same free allowance (or x402 payment) as a check.
+   */
+  app.post('/api/preflight', async (req, reply) => {
+    let parsed: PreflightRequest;
+    try {
+      parsed = normalizePreflightRequest(req.body ?? {});
+    } catch (err) {
+      if (err instanceof PreflightInputError) return reply.status(400).send({ error: 'INVALID_INPUT', message: err.message });
+      throw err;
+    }
+    const admission = await admit(req, reply);
+    if (!admission.admitted) return reply;
+
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    const streaming = q.stream === '1' || String(req.headers.accept ?? '').includes('application/x-ndjson');
+    let emit: (event: Record<string, unknown>) => void = () => {};
+    if (streaming) {
+      reply.raw.setHeader('content-type', 'application/x-ndjson; charset=utf-8');
+      reply.raw.setHeader('cache-control', 'no-store');
+      reply.raw.setHeader('x-accel-buffering', 'no');
+      reply.raw.flushHeaders();
+      emit = (event) => {
+        try {
+          reply.raw.write(`${JSON.stringify(event)}\n`);
+        } catch {
+          // client hung up; the work still finishes and the memo is stored
+        }
+      };
+    }
+    emit({ type: 'start', input: parsed, startedAt: new Date().toISOString() });
+
+    let result: Record<string, unknown>;
+    let status = 200;
+    try {
+      const memo = await runPreflight(parsed, {
+        onChainRead: (facts) => emit({ type: 'chain', facts }),
+        onPlan: (plan, escrowUsd) => emit({ type: 'plan', plan, escrowUsd }),
+        onPurchase: (purchase) => emit({ type: 'purchase', purchase }),
+      });
+      stats.preflightsRun++;
+      stats.telegraphRequests += memo.cost.paidRequests + memo.cost.failedRequests;
+      stats.paidUsd = Number((stats.paidUsd + memo.cost.telegraphUsd).toFixed(6));
+      limiter.recordSpend(memo.cost.telegraphUsd);
+      const stored = memos.add(await signMemo(memo));
+      result = { type: 'memo', ...stored, url: `/preflight?m=${stored.id}` };
+    } catch (err) {
+      // The chain did not answer: no decision is possible and nothing was bought.
+      if (!(err instanceof TokenFactsError)) throw err;
+      status = 503;
+      result = { type: 'error', error: err.code, message: `${err.message}. Nothing was bought and no decision was made.` };
+    }
+
+    if (streaming) {
+      emit(result);
+      if (admission.paid && status === 200) {
+        const settlement = await settlePayment(admission.paid.payment, admission.paid.requirements);
+        if (settlement.success) {
+          stats.earnedUsd = Number((stats.earnedUsd + Number(admission.paid.requirements.maxAmountRequired) / 1_000_000).toFixed(6));
+          stats.paidChecks += 1;
+        }
+        emit({ type: 'payment', success: settlement.success, transaction: settlement.transaction ?? null, reason: settlement.reason });
+      }
+      emit({ type: 'done', checksLeftToday: limiter.peek(req.ip).remainingForIp });
+      save();
+      reply.raw.end();
+      return reply;
+    }
+    if (status === 200) await collect(admission, reply);
+    save();
+    reply.header('X-Shield-Checks-Left', String(limiter.peek(req.ip).remainingForIp));
+    return reply.status(status).send(result);
+  });
+
+  app.get('/api/memo/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const entry = /^[A-Za-z0-9_-]{8}$/.test(id) ? memos.get(id) : undefined;
+    if (!entry) return reply.status(404).send({ error: 'NOT_FOUND', message: 'no stored memo with that id' });
+    return entry;
+  });
+
+  app.get('/api/memos', async (req) => {
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    const limit = Number(q.limit);
+    return { memos: memos.recent(Number.isFinite(limit) && limit > 0 ? Math.min(50, Math.floor(limit)) : 12), signer: memoSigner() };
+  });
+
+  /** Recompute a memo's digest and recover who signed it. Free, no Telegraph request. */
+  app.post('/api/memo/verify', async (req, reply) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    if (typeof body.memo !== 'object' || body.memo === null) {
+      return reply.status(400).send({ error: 'INVALID_INPUT', message: 'body must be {memo, signature}' });
+    }
+    return verifyMemo(body.memo, body.signature);
+  });
+
   app.get('/api/verify/:txHash', async (req, reply) => {
     const { txHash } = req.params as { txHash: string };
     if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
@@ -563,6 +672,12 @@ export function buildShieldServer() {
   // The landing page's "Launch App" target: the check tool itself.
   app.get('/app', async (_req, reply) => {
     if (await sendPublicFile(reply, 'app.html')) return reply;
+    return reply.type('text/html; charset=utf-8').send(FALLBACK_HTML);
+  });
+
+  // Token preflight and listing review desks.
+  app.get('/preflight', async (_req, reply) => {
+    if (await sendPublicFile(reply, 'preflight.html')) return reply;
     return reply.type('text/html; charset=utf-8').send(FALLBACK_HTML);
   });
 

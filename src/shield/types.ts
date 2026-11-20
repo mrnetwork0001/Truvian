@@ -99,4 +99,6 @@ export interface ShieldStats {
   earnedUsd: number;
   /** Checks that were paid for (as opposed to run on the free allowance). */
   paidChecks: number;
+  /** Token preflights and listing reviews run (POST /api/preflight). */
+  preflightsRun: number;
 }
