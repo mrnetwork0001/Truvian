@@ -45,10 +45,14 @@ lists it as active. What did change:
   `eligible`.
 
 **Our registration.** Wallet `0xcd0a2370f2dc12c1802707b7d9ab3fec891e3c02`,
-registration id **5252** (created by our `updateMiner` on 2026-11-14,
-imported to the new Diamond on 2026-11-17), slug `truvian-onchain-truth`,
-intents `ONCHAIN_TX_LOOKUP_GENERAL` and `GAS_PRICE_GENERAL` (V2 lists
-intents, never family prefixes).
+registration id **6146**, created by `updateMiner` on 2026-11-20
+(tx `0xfb4c59910686f76d80708cc4830a2b54cbc4ae722c8898306494b9cee0568382`,
+bond 1.30 test USDC) from 5252, which had been imported to the new Diamond on
+2026-11-17. Slug `truvian-onchain-truth`, YAML pinned at commit `e9eb002`
+(sha256 `096de4cd…7a83`), intents `ONCHAIN_TX_LOOKUP_GENERAL`,
+`GAS_PRICE_GENERAL`, `WALLET_BALANCE_CHECK_GENERAL` and
+`TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL` (V2 lists intents, never family
+prefixes). The node listed it active with all four about 15 minutes later.
 
 **How answers are read now.** Each intent has a response format
 (`GET $NODE/engine/v1/intents/<FAMILY>` -> `response.fields`; one field is
@@ -72,12 +76,13 @@ period):
 USDC=0xcc194e1a843B658526D0D5C431f670028582Ae17
 cast send $USDC "mint(address,uint256)" $MINER_ADDRESS 5000000 --rpc-url $RPC --private-key $MINER_PRIVATE_KEY
 cast send $USDC "approve(address,uint256)" $DIAMOND 5000000 --rpc-url $RPC --private-key $MINER_PRIVATE_KEY
-ARGS=(5252 "$YAML_URL" "0x$YAML_SHA256" "$FEE_ADDRESS" 10000 '["ONCHAIN_TX_LOOKUP_GENERAL","GAS_PRICE_GENERAL"]')
+ARGS=(6146 "$YAML_URL" "0x$YAML_SHA256" "$FEE_ADDRESS" 10000 '["ONCHAIN_TX_LOOKUP_GENERAL","GAS_PRICE_GENERAL","WALLET_BALANCE_CHECK_GENERAL","TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL"]')
 cast call $DIAMOND "updateMiner(uint256,string,bytes32,address,uint256,string[])(uint256)" "${ARGS[@]}" --from $MINER_ADDRESS --rpc-url $RPC
 cast send $DIAMOND "updateMiner(uint256,string,bytes32,address,uint256,string[])" "${ARGS[@]}" --rpc-url $RPC --private-key $MINER_PRIVATE_KEY
 ```
-   The mint and approve steps have not been run by us: on the previous
-   Diamond the update took no bond, and no update has been needed since.
+   Run on 2026-11-20 for 6146: the bond was 1.30 USDC for four intents, as
+   `minerBondParams()` says, although the addresses page on anjoman.ai said
+   no bond was set. Trust the contract read.
 4. Activation follows in about 10 to 15 minutes. Read the verdict by the new
    id: `curl -s $NODE/api/miners/<newId> | jq '.miner | {activation_status, rejection_reason}'`.
    If the update is refused, the current registration keeps serving.
