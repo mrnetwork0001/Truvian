@@ -25,6 +25,7 @@ import {
   runPreflight,
   mentionsToken,
   notExamined,
+  notMeasured,
   Spend,
   summaryFacts,
   withSecondOpinion,
@@ -368,6 +369,44 @@ const liquidityWeth = bought('liquidity', 'LIQUIDITY_DEPTH_VERIFY_GENERAL', { li
   check('the same "Secure" naming USDC passes, and USDC clears: HOLD', named.decision === 'HOLD' && named.findings.some((f) => f.rule === 'security.secure'), named.findings.filter((f) => f.severity === 'review').map((f) => f.rule).join(','));
   const nvd = evaluate(tradeWeth, wethFacts, [securityWethNvd, supplyWeth, washWethTxLens, liquidityWeth], null);
   check('the NVD review of WETH still passes the token rule', !nvd.findings.some((f) => f.rule === 'security.not_about_token'));
+}
+
+// ---------- fixtures and unit: the live run of 2026-11-21 09:34 UTC (PREFLIGHT_LIVE=1) ----------
+
+// signal 0x14d56f1036036120fb3ebf2ae0c09524fda726b6f3d2ac249683da7b6d8e68e5 (miner 9002 TxLens, served rank 2). TxLens's own
+// answer was the verdict and the summary; the count and the three issues were added by the node's shaping.
+const securityWethTxLensLive = bought('security', 'SECURITY_REVIEW_GENERAL', {
+  ...securityWethNvd.fields!, vulnerability_count: 3,
+  summary: 'Secure. The provided text is a standard Ethereum address for the Wrapped Ether (WETH) token contract, which is a widely recognized and audited smart contract. No executable code, configuration files, or system descriptions were supplied for review. Therefore, no vulnerabilities such as injection flaws, insecure direct object references, or cryptographic failures can be identified. The input is purely informational data.',
+}, { verdict: 'ok', vulnerability_count: 'ok', issues: 'ok', summary: 'ok' }, {
+  minerId: '9002', minerName: 'TxLens', servedRank: 2, signalHash: '0x14d56f1036036120fb3ebf2ae0c09524fda726b6f3d2ac249683da7b6d8e68e5',
+  receipt: receiptOf('0xecdd4d25a8639ed6792541fc2efa0eff63a2c8c1de318663e2a476a2a221baa1', '6121'),
+});
+// signal 0xecc4810da56e82252094d56353db17241d275e2e4f6390f5eb34afaf2064d8f9 (miner 7378 VerifyWire, served rank 4). The miner
+// answered wash_volume_pct null, wash_volume_status "not_measured"; the node's shaping returned 0 with status ok.
+const washWethVerifyWireLive = bought('wash', 'WASH_TRADING_DETECTION_GENERAL', {
+  subject: 'WETH pool 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640 on Ethereum', verdict: 'inconclusive', wash_volume_pct: 0,
+  signals: ['caller/recipient concentration and bidirectional swaps do not establish common beneficial ownership or artificial volume'],
+  summary: '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640 on Ethereum: 104 observed Swap events across 1 ABI-compatible pools in inclusive blocks 26462504-26462623. Wash trading is inconclusive: caller/recipient concentration and bidirectional swaps do not establish common beneficial ownership or artificial volume; wash volume is not measured.',
+}, { subject: 'ok', verdict: 'ok', wash_volume_pct: 'ok', signals: 'ok', summary: 'ok' }, {
+  minerId: '7378', minerName: 'VerifyWire Wash Trading Detection', servedRank: 4, signalHash: '0xecc4810da56e82252094d56353db17241d275e2e4f6390f5eb34afaf2064d8f9',
+  receipt: receiptOf('0xcabc2419059a6945feda98c1c32a989d7c7211e75f3494604d27f92c994ae50b', '4438'),
+});
+
+{
+  check('live 09:34: "No executable code, configuration files, or system descriptions were supplied for review" is examined nothing', notExamined(securityWethTxLensLive.fields!.summary) !== null, String(notExamined(securityWethTxLensLive.fields!.summary)));
+  check('live 09:34: "The input is purely informational data" is examined nothing on its own', notExamined('The input is purely informational data.') !== null);
+  const r = evaluate(tradeWeth, wethFacts, [securityWethTxLensLive, supplyWeth, washWethVerifyWireLive, liquidityWeth], null);
+  check('live 09:34: TxLens\'s "Secure" about WETH is not a pass (it named WETH, but examined nothing)', r.findings.some((f) => f.rule === 'security.not_examined') && !r.findings.some((f) => f.rule === 'security.secure'));
+  check('live 09:34: a 0% the provider says it did not measure is no evidence, not "0% of volume"', r.findings.some((f) => f.rule === 'wash.not_measured') && !r.findings.some((f) => f.rule === 'wash.ok'), r.findings.filter((f) => f.evidence.includes('wash')).map((f) => f.rule).join(','));
+  check('live 09:34: WETH with those answers is REVIEW', r.decision === 'REVIEW');
+  check('live 09:34: an unmeasured figure is a reason for a second opinion', noEvidence(washWethVerifyWireLive, { req: tradeWeth, facts: wethFacts, treasuryRead: null })?.rule === 'wash.not_measured');
+  check('a measured 0% stays a measurement (GoPlus-style turnover, USDC/WETH pool)', notMeasured(washUsdc.fields!.summary) === null && evaluate(tradeUsdc, usdcFacts, usdcAll, null).findings.some((f) => f.rule === 'wash.ok'));
+  for (const [name, text] of [
+    ['"the request is only processed if"', 'The request is only processed if the caller holds the minter role.'],
+    ['"the input is simply passed to an external call"', 'The input is simply passed to an external call, which allows reentrancy.'],
+    ['"only used as calldata"', 'The input is only used as calldata for the router.'],
+  ] as const) check(`real wording is not "examined nothing": ${name}`, notExamined(text) === null, String(notExamined(text)));
 }
 
 {

@@ -293,16 +293,17 @@ export function summaryFacts(summary: string | null): { honeypot: 'yes' | 'no' |
  */
 const REQUEST = String.raw`\b(?:input|request|query|prompt|target|submission|message)\b[^.]{0,80}?`;
 const NOT_EXAMINED = new RegExp([
-  // "No code, configuration, or system description was provided"
-  String.raw`\bno (?:code|contract|configuration|system description|data|trade records|transaction data|information)\b[^.]{0,80}?\b(?:was|were|is|are)?\s*(?:provided|given|available|supplied)\b`,
+  // "No code, configuration, or system description was provided";
+  // "No executable code, configuration files, or system descriptions were supplied for review" (TxLens, 2026-11-21 09:35)
+  String.raw`\bno (?:(?:executable|source|smart contract|contract|actual|transaction|trade) )?(?:code|contract|configuration|system description|data|trade records|transaction data|information|details|files)\b[^.]{0,80}?\b(?:was|were|is|are|has been|have been)?\s*(?:provided|given|available|supplied|submitted|included)\b`,
   String.raw`\binsufficient (?:data|information)\b`,
   String.raw`\bwithout (?:actual|any) (?:transaction|trade|code|data|information)\b`,
   String.raw`\b(?:cannot|can ?not|could not|unable to) (?:evaluate|assess|analy[sz]e|perform)\b`,
   String.raw`\b(?:cannot|can ?not|could not) be (?:evaluated|assessed|analy[sz]ed|reviewed|audited)\b`,
   String.raw`\bnot enough (?:data|information)\b`,
   String.raw`\bno assessment\b[^.]{0,40}\bcan be made\b`,
-  // "The input is merely a token contract address query"
-  String.raw`${REQUEST}\b(?:is|was)\s+(?:merely|just|simply|only)\s+an?\b[^.]{0,60}?\b(?:query|question|lookup|prompt|request|string)\b`,
+  // "The input is merely a token contract address query"; "The input is purely informational data"
+  String.raw`${REQUEST}\b(?:is|was)\s+(?:merely|just|simply|only|purely)\s+(?:an?\b)?[^.]{0,60}?\b(?:query|question|lookup|prompt|request|string|data|text)\b`,
   // "The request only contains a query string", "the input only contains a contract address"
   String.raw`${REQUEST}\b(?:merely|just|simply|only)\s+(?:contains?|includes?|consists? of|provides?|gives?|has|holds)\s+an?\b[^.]{0,60}?\b(?:query|question|string|address|prompt|identifier)\b`,
   // "with no executable code, configuration, or data handling to assess"
@@ -312,12 +313,30 @@ const NOT_EXAMINED = new RegExp([
 ].join('|'), 'i');
 
 export function notExamined(...texts: unknown[]): string | null {
+  return firstMatch(NOT_EXAMINED, texts);
+}
+
+function firstMatch(re: RegExp, texts: unknown[]): string | null {
   for (const t of texts) {
     const s = typeof t === 'string' ? t : Array.isArray(t) ? t.map(String).join(' ') : '';
-    const m = s.match(NOT_EXAMINED);
+    const m = s.match(re);
     if (m) return m[0];
   }
   return null;
+}
+
+/**
+ * A figure the answer itself says it did not measure. Seen live on
+ * 2026-11-21 (signal 0xecc4810d…): VerifyWire read 104 swaps in the pool and
+ * answered wash_volume_pct null, wash_volume_status "not_measured", "wash
+ * volume is not measured". The node's shaping still returned
+ * wash_volume_pct 0 with field status ok, which the rules would have passed
+ * as "Wash trading 0% of volume".
+ */
+const NOT_MEASURED = /\b(?:is|was|were|are) not (?:measured|quantified)\b/i;
+
+export function notMeasured(...texts: unknown[]): string | null {
+  return firstMatch(NOT_MEASURED, texts);
 }
 
 /**
@@ -460,6 +479,8 @@ function washFindings(p: Purchase | undefined): Finding[] {
   if (share === null) return [{ rule: 'wash.missing', severity: 'review', title: 'Wash trading: no figure', detail: `The answer carried no wash_volume_pct (field status ${JSON.stringify(p.fieldStatus)}).`, source: 'telegraph', evidence: ['wash'] }];
   const examined = notExamined(p.fields.summary);
   if (examined) return [{ rule: 'wash.not_examined', severity: 'review', title: 'Wash-trading check did not examine the trades', detail: `The answer reports ${pct(share)}${verdict ? ` ("${verdict}")` : ''} but says "${examined}", so the figure is no evidence either way.`, source: 'telegraph', evidence: ['wash'] }];
+  const unmeasured = notMeasured(p.fields.summary);
+  if (unmeasured) return [{ rule: 'wash.not_measured', severity: 'review', title: 'Wash-trading figure was not measured', detail: `The answer reports ${pct(share)}${verdict ? ` ("${verdict}")` : ''} but says "${unmeasured}", so the figure is not the provider's measurement and is no evidence either way.`, source: 'telegraph', evidence: ['wash'] }];
   if (share >= POLICY.washBlockPct) return [{ rule: 'wash.block', severity: 'block', title: `${pct(share)} of volume is wash trading`, detail: context, source: 'telegraph', evidence: ['wash'] }];
   if (share >= POLICY.washReviewPct) return [{ rule: 'wash.review', severity: 'review', title: `${pct(share)} of volume is wash trading`, detail: context, source: 'telegraph', evidence: ['wash'] }];
   return [{ rule: 'wash.ok', severity: 'pass', title: `Wash trading ${pct(share)} of volume`, detail: context, source: 'telegraph', evidence: ['wash'] }];
@@ -537,7 +558,7 @@ function factFindings(p: Purchase, ctx: FactContext): Finding[] {
 const NO_EVIDENCE: ReadonlySet<string> = new Set([
   'security.unavailable', 'security.not_examined', 'security.not_about_token', 'security.no_verdict',
   'supply.unavailable', 'supply.missing',
-  'wash.unavailable', 'wash.missing', 'wash.not_examined',
+  'wash.unavailable', 'wash.missing', 'wash.not_examined', 'wash.not_measured',
   'liquidity.unavailable', 'liquidity.missing',
   'sanctions.unavailable', 'sanctions.uncertain',
   'treasury.unavailable', 'treasury.missing',
