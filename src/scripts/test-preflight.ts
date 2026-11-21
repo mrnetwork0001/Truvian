@@ -228,7 +228,7 @@ const usdcAll = [securityUsdc, supplyUsdc, washUsdc, liquidityUsdc];
   const fixedSupply = evaluate(squidTrade, squidFacts, [secureUnseen, { ...supplySquidOff, fields: { total_supply: 800000000 } }, washUnseen, liquiditySquid], null);
   check('even with supply agreeing, answers that examined nothing cannot clear SQUID', fixedSupply.decision === 'REVIEW', fixedSupply.findings.filter((f) => f.severity === 'review').map((f) => f.rule).join(','));
   const honeypotUnseen = evaluate(squidTrade, squidFacts, [{ ...secureUnseen, fields: { ...secureUnseen.fields!, summary: 'No code was provided. honeypot: yes' } }, supplyUsdc, washUsdc, liquiditySquid], null);
-  check('an answer that saw no code can neither clear nor reject: REVIEW', honeypotUnseen.decision === 'REVIEW');
+  check('a honeypot stated beside "no code was provided" still blocks: REJECT', honeypotUnseen.decision === 'REJECT');
   // live, memo WOYbyG3x (20:43 UTC): 86% "likely wash trading" on USDC after "Insufficient data", against a $6.12M pool
   const wash86 = bought('wash', 'WASH_TRADING_DETECTION_GENERAL', {
     subject: 'USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', verdict: 'likely_wash_trading', wash_volume_pct: 86,
@@ -534,13 +534,13 @@ const wethGoPlusScan = bought('security', 'SECURITY_REVIEW_GENERAL', {
   check('second opinion: "Insufficient data" asks once more, pinned to the next-best miner (80002, rank 1 in epoch 29)', calls.pinned.join(',') === '80002' && so?.miner?.id === '80002' && so.miner.rank === 1 && so.miner.epoch === 29, calls.pinned.join(','));
   check('second opinion: the miner that answered (9002) is never the one asked', !calls.pinned.includes('9002'));
   check('second opinion: why it was asked is recorded (the first answer\'s finding)', so?.reasonRule === 'wash.not_examined' && /Insufficient data/.test(so.reason));
-  check('second opinion: an answer that examined the trades is used', so?.used === true && used.minerId === '80002' && used.fields?.wash_volume_pct === 2 && /^used/.test(so.outcome), so?.outcome);
+  check('second opinion: a clean pinned answer never clears a token whose ranked answer examined nothing', so?.used === false && used.minerId !== '80002' && /never clear/.test(so?.outcome ?? ''), so?.outcome);
   check('second opinion: both answers keep their signal hashes and receipts', so !== undefined && so.first.signalHash === washWethTxLens.signalHash && so.first.receipt?.hash === washWethTxLens.receipt?.hash && so.second?.signalHash === washExaminedStub.signalHash && so.second?.receipt?.hash === washExaminedStub.receipt?.hash);
   check('second opinion: its cost is counted ($0.01 + $0.01) and the time of both asks', used.costUsd === 0.02 && used.latencyMs === washWethTxLens.latencyMs + 4_000 && Math.abs(ctx.spend.committedUsd - 0.05) < 1e-9, `${used.costUsd} ${used.latencyMs} ${ctx.spend.committedUsd}`);
-  check('second opinion: the pinned answer has no served rank (nothing was routed)', used.servedRank === undefined);
+  check('second opinion: the routed answer is kept', used.fields?.summary === washWethTxLens.fields?.summary);
   const p: Purchase = { ...used, reused: false, boughtAt: '2026-11-21T09:20:00.000Z' };
   const r = evaluate(tradeWeth, wethFacts, [wethGoPlusScan, supplyWeth, p, liquidityWeth], null);
-  check('second opinion used: WETH can clear on the pinned answer: HOLD', r.decision === 'HOLD' && r.findings.some((f) => f.rule === 'wash.ok'), r.findings.filter((f) => f.severity === 'review').map((f) => f.rule).join(','));
+  check('second opinion not used: WETH stays REVIEW on the routed answer', r.decision === 'REVIEW' && r.findings.some((f) => f.rule === 'wash.not_examined'), r.findings.filter((f) => f.severity === 'review').map((f) => f.rule).join(','));
   const info = r.findings.find((f) => f.rule === 'wash.second_opinion');
   check('second opinion used: an info finding names both miners and both signal hashes', info?.severity === 'info' && info.detail.includes('9002') && info.detail.includes('80002') && info.detail.includes(washWethTxLens.signalHash!) && info.detail.includes(washExaminedStub.signalHash!), info?.detail);
   const cost = memoCost([wethGoPlusScan, supplyWeth, p, liquidityWeth]);
@@ -634,7 +634,7 @@ const wethGoPlusScan = bought('security', 'SECURITY_REVIEW_GENERAL', {
   const { deps, calls } = stubDeps(securityRanking, named);
   const r = await withSecondOpinion({ key: 'security', intent: 'SECURITY_REVIEW_GENERAL', params: {} }, typed(secureQueryOnly, {}), usdcCtx, deps);
   check('security: a "Secure" that examined nothing gets a second opinion from the top other reviewer (302)', calls.pinned.join(',') === '302' && r.secondOpinion?.reasonRule === 'security.not_examined');
-  check('security: the pinned review names USDC, so it is used', r.secondOpinion?.used === true && r.fields?.summary === named.fields!.summary);
+  check('security: even a pinned review that names USDC cannot clear it', r.secondOpinion?.used === false && r.fields?.summary !== named.fields!.summary);
   const generic = stubDeps(securityRanking, { ...named, fields: { ...named.fields!, summary: 'Secure. There are no injection vectors, authentication, or exposure concerns present. No further issues identified.' } });
   const g = await withSecondOpinion({ key: 'security', intent: 'SECURITY_REVIEW_GENERAL', params: {} }, typed(secureQueryOnly, {}), usdcCtx, generic.deps);
   check('security: a pinned "Secure" that names no token is not used either', g.secondOpinion?.used === false && /does not mention this token/.test(g.secondOpinion?.outcome ?? ''), g.secondOpinion?.outcome);
