@@ -14,15 +14,19 @@
  *  1. Free direct chain reads at one block (tokenFacts.ts). An address with no
  *     contract code is rejected here and nothing is bought.
  *  2. One routed Telegraph request per fact, answered by the node's ranked
- *     miner and paid from escrow. A fact bought in the last few minutes is
- *     reused instead of bought again.
+ *     miner and paid from escrow. When that answer is no evidence (it did
+ *     not answer, carried no figure, examined nothing, or is not about this
+ *     token), one more ask goes to the next-best miner on the node's
+ *     leaderboard, pinned by id, and its answer is used only if it is
+ *     evidence: at most one extra answer per fact, within the budget. A fact
+ *     bought in the last few minutes is reused instead of bought again.
  *  3. Fixed rules over the scored fields (`evaluate`, a pure function). Any
  *     blocking finding rejects; any finding that needs a person makes it
  *     REVIEW; only a clean run clears. A check that did not answer can never
  *     clear a token: it is a REVIEW finding, not a pass.
  */
 import type { SupportedChain } from '../config/chains.js';
-import { apiKeyBalanceUsd, askTypedIntent, type PaymentReceipt, type TypedAnswer } from './telegraph.js';
+import { apiKeyBalanceUsd, askPinnedIntent, askTypedIntent, intentRanking, type IntentRanking, type PaymentReceipt, type RankedMiner, type TypedAnswer } from './telegraph.js';
 import { parseAddress, parseChain, readBalanceGwei, readTokenFacts, TokenFactsError, type TokenFacts } from './tokenFacts.js';
 
 export type PreflightMode = 'trade' | 'listing';
@@ -44,7 +48,11 @@ export interface PreflightRequest {
   treasury?: `0x${string}`;
 }
 
-/** One Telegraph request and its answer, kept as evidence. */
+/**
+ * One fact asked of Telegraph and the answer the decision rests on, kept as
+ * evidence. When a second opinion was taken, the answer fields here are the
+ * one used, and `secondOpinion` keeps both answers.
+ */
 export interface Purchase {
   key: PurchaseKey;
   intent: string;
@@ -54,19 +62,47 @@ export interface Purchase {
   fieldStatus: Record<string, string>;
   minerId?: string;
   minerName?: string;
-  /** Billed for this memo: 0 when the answer was reused */
+  /** Billed for this fact in this memo, a second opinion included: 0 when the answer was reused */
   costUsd: number;
   signalHash?: string;
   /** The escrow payment for this answer (engine route); on a reused answer, the original payment */
   receipt?: PaymentReceipt;
-  /** Ranked position of the miner that answered, when the node reports it */
+  /** Ranked position of the miner that answered, when the node reports it (a routed answer only) */
   servedRank?: number;
+  /** Time spent on this fact, a second opinion included */
   latencyMs: number;
   error?: string;
+  /** Set when the first answer was no evidence and one more answer was asked for */
+  secondOpinion?: SecondOpinion;
   /** True when a fresh earlier answer to the same request was reused instead of bought again */
   reused: boolean;
   /** When the reused answer was bought */
   boughtAt: string;
+}
+
+/** One ask's answer, as it was returned and billed. */
+export type Answer = Pick<Purchase, 'ok' | 'fields' | 'fieldStatus' | 'minerId' | 'minerName' | 'costUsd' | 'signalHash' | 'receipt' | 'servedRank' | 'latencyMs' | 'error'>;
+
+/**
+ * The record of a second opinion: why the routed answer was no evidence, the
+ * next-best ranked miner the one extra ask was pinned to, and both answers
+ * with their signal hashes and receipts.
+ */
+export interface SecondOpinion {
+  /** Why the first answer was no evidence: the finding it gives */
+  reason: string;
+  /** That finding's rule, e.g. wash.not_examined */
+  reasonRule: string;
+  /** The miner asked, and where it stands on the node's leaderboard; null when none could be asked */
+  miner: { id: string; slug: string; name: string; rank: number; score: number; epoch: number; priceUsd: number } | null;
+  /** True when the decision rests on the second answer */
+  used: boolean;
+  /** What happened, in words */
+  outcome: string;
+  /** The routed answer */
+  first: Answer;
+  /** The pinned answer; null when it was not asked */
+  second: Answer | null;
 }
 
 export interface Finding {
@@ -138,9 +174,14 @@ export interface PreflightMemo {
   action: { simulated: true; description: string; executed: boolean } | null;
   cost: {
     telegraphUsd: number;
+    /** Asks answered with response fields, second opinions included */
     paidRequests: number;
+    /** Facts whose earlier answer was reused at $0 */
     reusedRequests: number;
+    /** Asks that returned no response fields (a raw answer may still have been billed: see telegraphUsd) */
     failedRequests: number;
+    /** Second opinions asked: one extra pinned ask each, at most one per fact */
+    secondOpinions: number;
     budgetUsd: number;
     escrowBeforeUsd: number | null;
   };
@@ -240,19 +281,101 @@ export function summaryFacts(summary: string | null): { honeypot: 'yes' | 'no' |
  * same miner put 86% "likely wash trading" on USDC, again after "Insufficient
  * data", measured against a $6M pool. Such an answer is no evidence either
  * way: it can neither clear nor reject a token, only send it to a person.
+ *
+ * The same reviewer worded it differently for USDC (memo WOYbyG3x): "Secure.
+ * The input is merely a token contract address query with no executable code,
+ * configuration, or data handling to assess". The phrasings that say the
+ * request itself is only a query or an address are anchored to the request
+ * ("the input", "the request", ...), because real scan text says "only" and
+ * "address" about the contract all the time ("only the owner address can
+ * pause"). The tests hold the live GoPlus and NVD answers against every
+ * alternative.
  */
-const NOT_EXAMINED = /\bno (?:code|contract|configuration|system description|data|trade records|transaction data|information)\b[^.]{0,80}?\b(?:was|were|is|are)?\s*(?:provided|given|available|supplied)\b|\binsufficient (?:data|information)\b|\bwithout (?:actual|any) (?:transaction|trade|code|data|information)\b|\b(?:cannot|can ?not|could not|unable to) (?:evaluate|assess|analy[sz]e|perform)\b|\bnot enough (?:data|information)\b|\bno assessment\b[^.]{0,40}\bcan be made\b/i;
+const REQUEST = String.raw`\b(?:input|request|query|prompt|target|submission|message)\b[^.]{0,80}?`;
+const NOT_EXAMINED = new RegExp([
+  // "No code, configuration, or system description was provided";
+  // "No executable code, configuration files, or system descriptions were supplied for review" (TxLens, 2026-11-21 09:35)
+  String.raw`\bno (?:(?:executable|source|smart contract|contract|actual|transaction|trade) )?(?:code|contract|configuration|system description|data|trade records|transaction data|information|details|files)\b[^.]{0,80}?\b(?:was|were|is|are|has been|have been)?\s*(?:provided|given|available|supplied|submitted|included)\b`,
+  String.raw`\binsufficient (?:data|information)\b`,
+  String.raw`\bwithout (?:actual|any) (?:transaction|trade|code|data|information)\b`,
+  String.raw`\b(?:cannot|can ?not|could not|unable to) (?:evaluate|assess|analy[sz]e|perform)\b`,
+  String.raw`\b(?:cannot|can ?not|could not) be (?:evaluated|assessed|analy[sz]ed|reviewed|audited)\b`,
+  String.raw`\bnot enough (?:data|information)\b`,
+  String.raw`\bno assessment\b[^.]{0,40}\bcan be made\b`,
+  // "The input is merely a token contract address query"; "The input is purely informational data"
+  String.raw`${REQUEST}\b(?:is|was)\s+(?:merely|just|simply|only|purely)\s+(?:an?\b)?[^.]{0,60}?\b(?:query|question|lookup|prompt|request|string|data|text)\b`,
+  // "The request only contains a query string", "the input only contains a contract address"
+  String.raw`${REQUEST}\b(?:merely|just|simply|only)\s+(?:contains?|includes?|consists? of|provides?|gives?|has|holds)\s+an?\b[^.]{0,60}?\b(?:query|question|string|address|prompt|identifier)\b`,
+  // "with no executable code, configuration, or data handling to assess"
+  String.raw`\bno (?:executable |source |smart contract |contract )?(?:code|configuration|data|information|details|logic|implementation)\b[^.;]{0,80}?\bto (?:assess|evaluate|review|analy[sz]e|audit|examine|inspect)\b`,
+  // "there is nothing to assess"
+  String.raw`\bnothing (?:to|that can be|could be) (?:assess|evaluat|review|analy[sz]|audit|examin|inspect)\w*`,
+].join('|'), 'i');
 
 export function notExamined(...texts: unknown[]): string | null {
+  return firstMatch(NOT_EXAMINED, texts);
+}
+
+function firstMatch(re: RegExp, texts: unknown[]): string | null {
   for (const t of texts) {
     const s = typeof t === 'string' ? t : Array.isArray(t) ? t.map(String).join(' ') : '';
-    const m = s.match(NOT_EXAMINED);
+    const m = s.match(re);
     if (m) return m[0];
   }
   return null;
 }
 
-function securityFindings(p: Purchase | undefined): Finding[] {
+/**
+ * A figure the answer itself says it did not measure. Seen live on
+ * 2026-11-21 (signal 0xecc4810d…): VerifyWire read 104 swaps in the pool and
+ * answered wash_volume_pct null, wash_volume_status "not_measured", "wash
+ * volume is not measured". The node's shaping still returned
+ * wash_volume_pct 0 with field status ok, which the rules would have passed
+ * as "Wash trading 0% of volume".
+ */
+const NOT_MEASURED = /\b(?:is|was|were|are) not (?:measured|quantified)\b/i;
+
+export function notMeasured(...texts: unknown[]): string | null {
+  return firstMatch(NOT_MEASURED, texts);
+}
+
+/**
+ * Words any review uses whatever it is about. A token's deployer picks its
+ * symbol and name, so a token called "Secure" or "Token" is not mentioned by
+ * a generic answer that begins "Secure." or talks about "the token contract".
+ */
+const REVIEW_WORDS = new Set(['secure', 'insecure', 'needs changes', 'token', 'contract', 'coin', 'address', 'input', 'query', 'request', 'the', 'no', 'none']);
+
+/**
+ * How a security answer shows it is about this token: it names the token's
+ * address, or its symbol or name as a whole word, spelled as the contract
+ * reports it, or it reports scan facts (honeypot, taxes, holders), which come
+ * only from scanning a deployed contract. Returns what it found, or null.
+ *
+ * Seen live (memo WOYbyG3x): "Secure. ... there are no injection vectors,
+ * authentication, or exposure concerns present. No further issues
+ * identified." That answer names no token at all. A generic answer like it
+ * could pass for any token, so a "Secure" verdict or a clean scan clears a
+ * token only when the answer refers to that token.
+ */
+export function mentionsToken(texts: unknown[], token: Pick<TokenFacts, 'address' | 'symbol' | 'name'>): string | null {
+  const parts = texts.flatMap((t) => (typeof t === 'string' ? [t] : Array.isArray(t) ? t.map(String) : []));
+  const all = parts.join('\n');
+  if (all.toLowerCase().includes(token.address.toLowerCase())) return `its address ${token.address}`;
+  for (const [what, word] of [['symbol', token.symbol], ['name', token.name]] as const) {
+    const w = word?.trim();
+    if (!w || w.length < 2 || REVIEW_WORDS.has(w.toLowerCase())) continue;
+    const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'u').test(all)) return `its ${what} "${w}"`;
+  }
+  for (const part of parts) {
+    const f = summaryFacts(part);
+    if (f.honeypot !== null || f.buyTax !== null || f.sellTax !== null || f.top10 !== null) return 'scan facts (honeypot, taxes, holders)';
+  }
+  return null;
+}
+
+function securityFindings(p: Purchase | undefined, token: TokenFacts): Finding[] {
   if (!p || !p.ok || !p.fields) return [unavailable(p, 'security', 'Security review')];
   const examined = notExamined(p.fields.summary, p.fields.issues);
   if (examined) {
@@ -262,16 +385,26 @@ function securityFindings(p: Purchase | undefined): Finding[] {
       source: 'telegraph', evidence: ['security'],
     }];
   }
-  return securityFindingsFrom(p, p.fields);
+  return securityFindingsFrom(p, p.fields, token);
 }
 
-function securityFindingsFrom(p: Purchase, f: Record<string, unknown>): Finding[] {
+function securityFindingsFrom(p: Purchase, f: Record<string, unknown>, token: TokenFacts): Finding[] {
   const out: Finding[] = [];
   const verdict = str(f.verdict);
   const count = num(f.vulnerability_count);
   const summary = str(f.summary);
   const facts = summaryFacts(summary);
   const ev: PurchaseKey[] = ['security'];
+  const about = mentionsToken([summary, f.issues], token);
+  const notAbout = (claim: string): Finding => {
+    const names = [token.symbol, token.name ? `"${token.name}"` : null, `the address ${token.address}`].filter((x): x is string => Boolean(x));
+    const named = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : names[0];
+    return {
+      rule: 'security.not_about_token', severity: 'review', title: 'The security review does not mention this token',
+      detail: `The answer ${claim} but does not name ${named}, and reports no scan facts (honeypot, taxes, holders). An answer that could be about any contract is no evidence that this one is safe.`,
+      source: 'telegraph', evidence: ev,
+    };
+  };
 
   if (verdict === 'Insecure') out.push({ rule: 'security.insecure', severity: 'block', title: 'Security review: insecure', detail: summary ?? 'The security review judged the contract insecure.', source: 'telegraph', evidence: ev });
   else if (verdict === 'Needs changes') out.push({ rule: 'security.needs_changes', severity: 'review', title: 'Security review: needs changes', detail: summary ?? 'The security review asked for changes.', source: 'telegraph', evidence: ev });
@@ -296,9 +429,12 @@ function securityFindingsFrom(p: Purchase, f: Record<string, unknown>): Finding[
     out.push({ rule: 'security.issue', severity: /honeypot|blacklist|cannot sell|rug/i.test(issue) ? 'block' : 'review', title: 'Security review issue', detail: issue, source: 'telegraph', evidence: ev });
   }
 
-  // Clearing needs a positive basis: a Secure verdict, or no verdict but every scan fact present and clean.
+  // Clearing needs a positive basis about this token: a Secure verdict, or no
+  // verdict but every scan fact present and clean, in an answer that refers to it.
   if (verdict === 'Secure') {
-    out.push({ rule: 'security.secure', severity: 'pass', title: 'Security review: secure', detail: summary ?? 'The security review judged the contract secure.', source: 'telegraph', evidence: ev });
+    out.push(about
+      ? { rule: 'security.secure', severity: 'pass', title: 'Security review: secure', detail: summary ?? 'The security review judged the contract secure.', source: 'telegraph', evidence: ev }
+      : notAbout('gives the verdict "Secure"'));
   } else if (verdict === null) {
     const complete = facts.honeypot !== null && facts.buyTax !== null && facts.sellTax !== null && facts.top10 !== null;
     if (!complete) {
@@ -308,11 +444,13 @@ function securityFindingsFrom(p: Purchase, f: Record<string, unknown>): Finding[
         source: 'telegraph', evidence: ev,
       });
     } else if (!out.some((x) => (x.severity === 'block' || x.severity === 'review') && x.rule !== 'security.holder_concentration')) {
-      out.push({
-        rule: 'security.scan_clean', severity: 'pass', title: 'Contract scan clean',
-        detail: `No verdict field (status ${JSON.stringify(p.fieldStatus)}), so the decision rests on the scan facts reported: honeypot ${facts.honeypot}, buy tax ${pct(facts.buyTax!)}, sell tax ${pct(facts.sellTax!)}, top 10 holders ${pct(facts.top10!)}.`,
-        source: 'telegraph', evidence: ev,
-      });
+      out.push(about
+        ? {
+          rule: 'security.scan_clean', severity: 'pass', title: 'Contract scan clean',
+          detail: `No verdict field (status ${JSON.stringify(p.fieldStatus)}), so the decision rests on the scan facts reported: honeypot ${facts.honeypot}, buy tax ${pct(facts.buyTax!)}, sell tax ${pct(facts.sellTax!)}, top 10 holders ${pct(facts.top10!)}.`,
+          source: 'telegraph', evidence: ev,
+        }
+        : notAbout('reports a clean scan'));
     }
   }
   return out;
@@ -341,6 +479,8 @@ function washFindings(p: Purchase | undefined): Finding[] {
   if (share === null) return [{ rule: 'wash.missing', severity: 'review', title: 'Wash trading: no figure', detail: `The answer carried no wash_volume_pct (field status ${JSON.stringify(p.fieldStatus)}).`, source: 'telegraph', evidence: ['wash'] }];
   const examined = notExamined(p.fields.summary);
   if (examined) return [{ rule: 'wash.not_examined', severity: 'review', title: 'Wash-trading check did not examine the trades', detail: `The answer reports ${pct(share)}${verdict ? ` ("${verdict}")` : ''} but says "${examined}", so the figure is no evidence either way.`, source: 'telegraph', evidence: ['wash'] }];
+  const unmeasured = notMeasured(p.fields.summary);
+  if (unmeasured) return [{ rule: 'wash.not_measured', severity: 'review', title: 'Wash-trading figure was not measured', detail: `The answer reports ${pct(share)}${verdict ? ` ("${verdict}")` : ''} but says "${unmeasured}", so the figure is not the provider's measurement and is no evidence either way.`, source: 'telegraph', evidence: ['wash'] }];
   if (share >= POLICY.washBlockPct) return [{ rule: 'wash.block', severity: 'block', title: `${pct(share)} of volume is wash trading`, detail: context, source: 'telegraph', evidence: ['wash'] }];
   if (share >= POLICY.washReviewPct) return [{ rule: 'wash.review', severity: 'review', title: `${pct(share)} of volume is wash trading`, detail: context, source: 'telegraph', evidence: ['wash'] }];
   return [{ rule: 'wash.ok', severity: 'pass', title: `Wash trading ${pct(share)} of volume`, detail: context, source: 'telegraph', evidence: ['wash'] }];
@@ -395,6 +535,64 @@ function chainFindings(facts: TokenFacts): Finding[] {
   return out;
 }
 
+/** What the findings for one fact need besides its answer. */
+export interface FactContext {
+  req: PreflightRequest;
+  facts: TokenFacts;
+  treasuryRead: PreflightMemo['treasuryRead'];
+}
+
+/** The findings one answer gives for its own fact. */
+function factFindings(p: Purchase, ctx: FactContext): Finding[] {
+  switch (p.key) {
+    case 'security': return securityFindings(p, ctx.facts);
+    case 'supply': return supplyFindings(p, ctx.facts);
+    case 'wash': return washFindings(p);
+    case 'liquidity': return liquidityFindings(p, ctx.req);
+    case 'sanctions': return sanctionsFindings(p, ctx.req.issuer ?? '');
+    case 'treasury': return treasuryFindings(p, ctx.treasuryRead, ctx.req.treasury !== undefined);
+  }
+}
+
+/** Findings that say an answer is no evidence about its fact: not answered, no figure, nothing examined, not about this token. */
+const NO_EVIDENCE: ReadonlySet<string> = new Set([
+  'security.unavailable', 'security.not_examined', 'security.not_about_token', 'security.no_verdict',
+  'supply.unavailable', 'supply.missing',
+  'wash.unavailable', 'wash.missing', 'wash.not_examined', 'wash.not_measured',
+  'liquidity.unavailable', 'liquidity.missing',
+  'sanctions.unavailable', 'sanctions.uncertain',
+  'treasury.unavailable', 'treasury.missing',
+]);
+
+/**
+ * The finding that makes an answer no evidence about its fact, or null when
+ * it is evidence. An answer is no evidence only when all it gives is of that
+ * kind. One that also holds the token back in its own right (a honeypot, a
+ * blocking issue, a tax) is evidence, so it is never set aside for another.
+ */
+export function noEvidence(p: Purchase, ctx: FactContext): Finding | null {
+  const own = factFindings(p, ctx);
+  if (own.some((f) => f.severity !== 'info' && !NO_EVIDENCE.has(f.rule))) return null;
+  return own.find((f) => NO_EVIDENCE.has(f.rule)) ?? null;
+}
+
+/** An info finding per second opinion: from whom, why, and what came of it. Never changes the decision. */
+function secondOpinionFindings(p: Purchase | undefined): Finding[] {
+  const so = p?.secondOpinion;
+  if (!p || !so) return [];
+  const first = so.first.minerId ? `miner ${so.first.minerId}${so.first.minerName ? ` (${so.first.minerName})` : ''}` : 'the routed ask';
+  const pinned = so.miner ? ` from the next-best ranked miner, ${so.miner.id} (${so.miner.name}), ranked ${so.miner.rank} with score ${so.miner.score} in epoch ${so.miner.epoch}` : '';
+  const hashes = [so.first.signalHash ? `first ${so.first.signalHash}` : null, so.second?.signalHash ? `second ${so.second.signalHash}` : null].filter(Boolean).join(', ');
+  return [{
+    rule: `${p.key}.second_opinion`,
+    severity: 'info',
+    title: so.used ? `Second opinion used: ${so.miner?.name ?? '-'}` : so.second ? `Second opinion not used: ${so.miner?.name ?? '-'}` : 'No second opinion could be asked',
+    detail: `The first answer, from ${first}, was no evidence. ${so.reason} Second opinion${pinned}: ${so.outcome}.${hashes ? ` Signals: ${hashes}.` : ''}`,
+    source: 'telegraph',
+    evidence: [p.key],
+  }];
+}
+
 /**
  * The decision from the evidence. Pure: the same facts and answers always
  * give the same findings and decision, so a memo can be re-derived.
@@ -413,7 +611,7 @@ export function evaluate(
       decisionRule: 'any blocking finding rejects',
     };
   }
-  const security = securityFindings(by('security'));
+  const security = securityFindings(by('security'), facts);
   const depth = by('liquidity')?.ok ? num(by('liquidity')!.fields?.liquidity_usd) : null;
   for (const f of security) {
     if (f.rule === 'security.holder_concentration' && depth !== null && depth >= POLICY.concentrationDeepLiquidityUsd) {
@@ -430,6 +628,7 @@ export function evaluate(
     ...liquidityFindings(by('liquidity'), req),
     ...(req.mode === 'listing' ? sanctionsFindings(by('sanctions'), req.issuer ?? '') : []),
     ...(req.mode === 'listing' ? treasuryFindings(by('treasury'), treasuryRead, req.treasury !== undefined) : []),
+    ...purchases.flatMap((p) => secondOpinionFindings(p)),
   ];
   if (findings.some((f) => f.severity === 'block')) return { findings, decision: 'REJECT', decisionRule: 'any blocking finding rejects' };
   if (findings.some((f) => f.severity === 'review')) return { findings, decision: 'REVIEW', decisionRule: 'no blocking finding, but at least one finding needs a person' };
@@ -437,11 +636,14 @@ export function evaluate(
 }
 
 // ---------------------------------------------------------------------------
-// Purchases: one routed request per fact, reused while fresh
+// Purchases: one routed request per fact, a second opinion when it is no
+// evidence, reused while fresh
 // ---------------------------------------------------------------------------
 
 /** Escrow the node holds per routed ask while it runs (it bills about $0.01 of it). */
 const HOLD_PER_ASK_USD = 0.26;
+/** What a routed ask is billed: the one miner call it routes (engine route, 2026-11-21) */
+const ROUTED_ASK_USD = 0.01;
 const REUSE_TTL_MS = Number(process.env.SHIELD_REUSE_TTL_MS) > 0 ? Number(process.env.SHIELD_REUSE_TTL_MS) : 10 * 60_000;
 
 function budgetUsd(): number {
@@ -449,39 +651,180 @@ function budgetUsd(): number {
   return Number.isFinite(n) && n > 0 ? n : 0.1;
 }
 
-const fresh = new Map<string, { at: number; answer: Promise<TypedAnswer> }>();
+/** The decision's budget: what is committed so far, and room for a second opinion. */
+export class Spend {
+  constructor(readonly budgetUsd: number, public committedUsd = 0) {}
+  /** Commit `usd` if it fits in the budget. */
+  take(usd: number): boolean {
+    if (this.committedUsd + usd > this.budgetUsd + 1e-9) return false;
+    this.committedUsd += usd;
+    return true;
+  }
+  /** Correct an estimate by what was really billed. */
+  adjust(deltaUsd: number): void {
+    this.committedUsd += deltaUsd;
+  }
+  /**
+   * Settle an ask committed at `estimateUsd`. A reply says what was billed (its
+   * receipt, or the envelope's cost). An ask that ended without one, at Shield's
+   * timeout or a gateway 504, keeps its estimate: the node can still answer and
+   * bill it (2026-11-21: $0.26 left the escrow while the receipts showed $0.09).
+   * A refused request was never charged.
+   */
+  settle(estimateUsd: number, a: Pick<TypedAnswer, 'ok' | 'costUsd' | 'receipt' | 'refused'>): void {
+    if (a.receipt || a.ok || a.costUsd !== undefined) this.adjust((a.costUsd ?? 0) - estimateUsd);
+    else if (a.refused) this.adjust(-estimateUsd);
+  }
+}
+
+/** What a second opinion is asked through: the live node, or stubs in tests. */
+export interface OpinionDeps {
+  ranking(intent: string): Promise<IntentRanking>;
+  askPinned(minerId: string, intent: string, params: Record<string, unknown>): Promise<TypedAnswer>;
+}
+
+const LIVE_OPINION: OpinionDeps = { ranking: intentRanking, askPinned: askPinnedIntent };
+
+const roundUsd = (n: number): number => Number(n.toFixed(6));
+
+export function answerOf(a: TypedAnswer): Answer {
+  const out: Answer = { ok: a.ok, fields: a.fields, fieldStatus: a.fieldStatus, costUsd: a.costUsd ?? 0, latencyMs: a.latencyMs };
+  if (a.minerId) out.minerId = a.minerId;
+  if (a.minerName) out.minerName = a.minerName;
+  if (a.signalHash) out.signalHash = a.signalHash;
+  if (a.receipt) out.receipt = a.receipt;
+  if (a.servedRank !== undefined) out.servedRank = a.servedRank;
+  if (a.error) out.error = a.error;
+  return out;
+}
+
+/**
+ * The next-best miner for a second opinion: the best-ranked one, other than
+ * the miner that gave the first answer, whose answers scored above 0 in the
+ * epoch. A score of 0 means the node's evaluation found nothing right in its
+ * answers that epoch, which is no better opinion.
+ */
+export function nextBestMiner(ranking: IntentRanking, answeredBy: string | undefined): { miner: RankedMiner } | { miner: null; why: string } {
+  if (ranking.epoch === null) return { miner: null, why: ranking.error ?? `the node ranks no miner for ${ranking.intent}` };
+  const other = ranking.miners.filter((m) => m.minerId !== answeredBy && m.slug !== answeredBy);
+  const best = other.find((m) => m.score > 0);
+  if (!best) return { miner: null, why: `no other active miner scored above 0 for ${ranking.intent} in epoch ${ranking.epoch}` };
+  return { miner: best };
+}
+
+type Planned = { key: PurchaseKey; intent: string; params: Record<string, unknown>; question: string };
+/** A fact as bought, before it is marked reused or not. */
+type Resolved = Omit<Purchase, 'reused' | 'boughtAt'>;
+
+/**
+ * The first answer to a fact, or a second opinion in its place. When the
+ * routed answer is no evidence (it did not answer, carried no figure,
+ * examined nothing, or is not about this token), one more ask goes to the
+ * next-best miner on the node's leaderboard for the intent, pinned so the
+ * node cannot route it back to the same miner. Its answer is used only if it
+ * is evidence. Never more than one extra answer per fact, only within the
+ * decision's budget, and never when the request itself was refused.
+ */
+export async function withSecondOpinion(plan: Omit<Planned, 'question'>, firstAsk: TypedAnswer, ctx: FactContext & { spend: Spend }, deps: OpinionDeps = LIVE_OPINION): Promise<Resolved> {
+  const { key, intent, params } = plan;
+  const first = answerOf(firstAsk);
+  const resolved = (a: Answer, extra?: Pick<Resolved, 'secondOpinion' | 'costUsd' | 'latencyMs'>): Resolved => ({ key, intent, params, ...a, ...extra });
+  const lacking = firstAsk.refused ? null : noEvidence({ ...resolved(first), reused: false, boughtAt: '' }, ctx);
+  if (!lacking) return resolved(first);
+
+  const so: SecondOpinion = { reason: lacking.detail, reasonRule: lacking.rule, miner: null, used: false, outcome: '', first, second: null };
+  const done = (): Resolved => {
+    const second = so.second;
+    const used = so.used && second ? second : first;
+    return resolved(used, { secondOpinion: so, costUsd: roundUsd(first.costUsd + (second?.costUsd ?? 0)), latencyMs: first.latencyMs + (second?.latencyMs ?? 0) });
+  };
+
+  let ranking: IntentRanking;
+  try {
+    ranking = await deps.ranking(intent);
+  } catch (err) {
+    ranking = { intent, epoch: null, miners: [], error: `could not read the ranking: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  const pick = nextBestMiner(ranking, first.minerId);
+  if (!pick.miner) {
+    so.outcome = `not asked: ${pick.why}`;
+    return done();
+  }
+  const m = pick.miner;
+  so.miner = { id: m.minerId, slug: m.slug, name: m.name, rank: m.rank, score: m.score, epoch: ranking.epoch!, priceUsd: m.priceUsd };
+  if (!ctx.spend.take(m.priceUsd)) {
+    so.outcome = `not asked: its price, $${m.priceUsd}, does not fit in what is left of the $${ctx.spend.budgetUsd.toFixed(2)} budget per decision`;
+    return done();
+  }
+  let pinned: TypedAnswer;
+  try {
+    pinned = await deps.askPinned(m.minerId, intent, params);
+  } catch (err) {
+    pinned = { intent, params, ok: false, fields: null, fieldStatus: {}, latencyMs: 0, error: err instanceof Error ? err.message : String(err) };
+  }
+  const second = answerOf(pinned);
+  ctx.spend.settle(m.priceUsd, pinned);
+  so.second = second;
+  const secondLacking = noEvidence({ ...resolved(second), reused: false, boughtAt: '' }, ctx);
+  so.used = secondLacking === null;
+  if (so.used) {
+    const gives = factFindings({ ...resolved(second), reused: false, boughtAt: '' }, ctx).filter((f) => f.severity !== 'info').map((f) => f.title);
+    so.outcome = `used: it is evidence (${gives.join('; ')})`;
+  } else {
+    so.outcome = `not used: it is no evidence either (${secondLacking!.title}${second.error ? `; ${second.error}` : ''})`;
+  }
+  return done();
+}
+
+const fresh = new Map<string, { at: number; fact: Promise<Resolved> }>();
 
 function cacheKey(intent: string, params: Record<string, unknown>): string {
   return `${intent} ${JSON.stringify(Object.keys(params).sort().map((k) => [k, params[k]]))}`;
 }
 
-/** Ask once; a request already answered (or in flight) in the last REUSE_TTL_MS is reused. */
-async function buy(key: PurchaseKey, intent: string, params: Record<string, unknown>, question: string): Promise<Purchase> {
-  const ck = cacheKey(intent, params);
+/**
+ * Ask once, with a second opinion when the answer is no evidence. A fact
+ * already bought (or in flight) in the last REUSE_TTL_MS is reused whole,
+ * second opinion and all, so a repeat never pays for either again.
+ */
+async function buy(plan: Planned, ctx: FactContext & { spend: Spend }): Promise<Purchase> {
+  const ck = cacheKey(plan.intent, plan.params);
   const now = Date.now();
   const hit = fresh.get(ck);
   const reused = hit !== undefined && now - hit.at < REUSE_TTL_MS;
   let entry = hit;
-  if (!reused) {
-    entry = { at: now, answer: askTypedIntent(intent, params, question) };
+  if (reused) {
+    ctx.spend.adjust(-ROUTED_ASK_USD); // nothing is bought for this fact in this decision
+  } else {
+    entry = {
+      at: now,
+      fact: (async () => {
+        const first = await askTypedIntent(plan.intent, plan.params, plan.question);
+        ctx.spend.settle(ROUTED_ASK_USD, first);
+        return withSecondOpinion(plan, first, ctx);
+      })(),
+    };
     fresh.set(ck, entry);
   }
-  const answer = await entry!.answer;
-  if (!answer.ok && fresh.get(ck) === entry) fresh.delete(ck); // never reuse a failure
-  const out: Purchase = {
-    key, intent, params, ok: answer.ok, fields: answer.fields, fieldStatus: answer.fieldStatus,
-    costUsd: reused ? 0 : answer.costUsd ?? 0,
-    latencyMs: reused ? 0 : answer.latencyMs,
-    reused,
-    boughtAt: new Date(entry!.at).toISOString(),
+  const fact = await entry!.fact;
+  if (!fact.ok && fresh.get(ck) === entry) fresh.delete(ck); // never reuse a failure
+  return { ...fact, costUsd: reused ? 0 : fact.costUsd, latencyMs: reused ? 0 : fact.latencyMs, reused, boughtAt: new Date(entry!.at).toISOString() };
+}
+
+/**
+ * What a decision cost and how many asks it made. A fact with a second
+ * opinion counts both asks; a reused fact counts none.
+ */
+export function memoCost(purchases: Purchase[]): Pick<PreflightMemo['cost'], 'telegraphUsd' | 'paidRequests' | 'reusedRequests' | 'failedRequests' | 'secondOpinions'> {
+  const bought = purchases.filter((p) => !p.reused);
+  const asks: Answer[] = bought.flatMap((p) => (p.secondOpinion ? [p.secondOpinion.first, ...(p.secondOpinion.second ? [p.secondOpinion.second] : [])] : [p]));
+  return {
+    telegraphUsd: roundUsd(purchases.reduce((s, p) => s + p.costUsd, 0)),
+    paidRequests: asks.filter((a) => a.ok).length,
+    reusedRequests: purchases.length - bought.length,
+    failedRequests: asks.filter((a) => !a.ok).length,
+    secondOpinions: bought.filter((p) => p.secondOpinion?.second).length,
   };
-  if (answer.minerId) out.minerId = answer.minerId;
-  if (answer.minerName) out.minerName = answer.minerName;
-  if (answer.signalHash) out.signalHash = answer.signalHash;
-  if (answer.receipt) out.receipt = answer.receipt;
-  if (answer.servedRank !== undefined) out.servedRank = answer.servedRank;
-  if (answer.error) out.error = answer.error;
-  return out;
 }
 
 /** Run tasks with at most `limit` in flight. */
@@ -516,7 +859,6 @@ export async function runPreflight(req: PreflightRequest, events: PreflightEvent
 
   const label = facts.chainLabel;
   const name = facts.symbol ?? 'token';
-  type Planned = { key: PurchaseKey; intent: string; params: Record<string, unknown>; question: string };
   const plan: Planned[] = [];
   let treasuryRead: PreflightMemo['treasuryRead'] = null;
   if (facts.isContract) {
@@ -544,14 +886,16 @@ export async function runPreflight(req: PreflightRequest, events: PreflightEvent
   events.onPlan?.(plan.map(({ key, intent }) => ({ key, intent })), escrow);
   let purchases: Purchase[] = [];
   const policyFindings: Finding[] = [];
-  const expected = plan.length * 0.01;
+  const expected = plan.length * ROUTED_ASK_USD;
   if (plan.length > 0 && expected > budget) {
     policyFindings.push({ rule: 'budget.over', severity: 'review', title: 'Over budget', detail: `This review would cost about $${expected.toFixed(2)}, above the $${budget.toFixed(2)} budget per decision. Nothing was bought.`, source: 'policy', evidence: [] });
   } else if (plan.length > 0 && escrow !== null && escrow < HOLD_PER_ASK_USD) {
     policyFindings.push({ rule: 'budget.escrow_low', severity: 'review', title: 'Escrow too low to buy', detail: `The escrow holds $${escrow.toFixed(2)}, below the $${HOLD_PER_ASK_USD} Telegraph holds for each ask while it runs. Nothing was bought.`, source: 'policy', evidence: [] });
   } else if (plan.length > 0) {
     const parallel = escrow === null ? 1 : Math.max(1, Math.min(3, Math.floor(escrow / HOLD_PER_ASK_USD)));
-    purchases = await pooled(plan.map((p) => () => buy(p.key, p.intent, p.params, p.question)), parallel, (p) => events.onPurchase?.(p));
+    // The routed asks are committed up front; second opinions take what is left of the budget.
+    const ctx = { req, facts, treasuryRead, spend: new Spend(budget, expected) };
+    purchases = await pooled(plan.map((p) => () => buy(p, ctx)), parallel, (p) => events.onPurchase?.(p));
   }
 
   const judged = evaluate(req, facts, purchases, treasuryRead);
@@ -563,7 +907,6 @@ export async function runPreflight(req: PreflightRequest, events: PreflightEvent
     decisionRule = 'the checks could not be bought, so nothing can clear the token';
   }
 
-  const telegraphUsd = Number(purchases.reduce((s, p) => s + p.costUsd, 0).toFixed(6));
   return {
     version: 'truvian-shield-memo/1',
     kind: req.mode === 'trade' ? 'token-preflight' : 'listing-review',
@@ -574,7 +917,7 @@ export async function runPreflight(req: PreflightRequest, events: PreflightEvent
     },
     network: {
       telegraphNode: process.env.TELEGRAPH_NODE_URL ?? 'https://devnode.telegraphprotocol.com',
-      routing: 'one routed ask per fact (POST /engine/ask with intent and params, paid from escrow); the node picks its ranked miner and returns a payment receipt',
+      routing: 'one routed ask per fact (POST /engine/ask with intent and params, paid from escrow); the node picks its ranked miner and returns a payment receipt. When that answer is no evidence, at most one more ask per fact, pinned to the next-best miner on the node leaderboard (POST /engine/ask/{minerId}), within the budget',
       settlement: 'Anjoman escrow, test USDC on Ethereum Sepolia (testnet)',
       note: 'Telegraph Season II runs on testnet settlement; the facts checked are about the mainnet chain named in input.chain.',
     },
@@ -594,10 +937,7 @@ export async function runPreflight(req: PreflightRequest, events: PreflightEvent
       }
       : null,
     cost: {
-      telegraphUsd,
-      paidRequests: purchases.filter((p) => !p.reused && p.ok).length,
-      reusedRequests: purchases.filter((p) => p.reused).length,
-      failedRequests: purchases.filter((p) => !p.ok).length,
+      ...memoCost(purchases),
       budgetUsd: budget,
       escrowBeforeUsd: escrow,
     },

@@ -742,10 +742,7 @@ async function askRoutedApiKey(
       await res.body?.cancel();
       await new Promise((r) => setTimeout(r, 1_500));
     }
-    if (!res.ok || !res.body) {
-      const body = await readBody(res);
-      throw new Error(`http ${res.status}: ${(typeof body === 'string' ? body : JSON.stringify(body)).slice(0, 200)}`);
-    }
+    if (!res.ok || !res.body) throw new Error(`http ${res.status}: ${errorBodyText(await readBody(res))}`);
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -821,26 +818,27 @@ class EngineRouteError extends Error {
  * amount and settlement epoch. The agent route took 10-50 s per answer, and
  * its agent went on making billed calls to other miners after Shield already
  * had its answer, so a decision cost about twice what the answers did.
+ *
+ * With `minerId` this is the pinned miner call, POST /engine/ask/{minerId}
+ * (see askPinnedIntent), which answers in the same shape.
  */
 async function askEngineApiKey(
   v2Intent: string,
   sent: Record<string, unknown>,
   key: string,
+  minerId?: string,
 ): Promise<{ body: unknown; headers: Headers; latencyMs: number; receipt?: Record<string, unknown> }> {
   const startedAt = Date.now();
   const release = await apiKeySlot();
   try {
-    const res = await fetch(`${API_URL}/engine/ask`, {
+    const res = await fetch(`${API_URL}/engine/ask${minerId === undefined ? '' : `/${encodeURIComponent(minerId)}`}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ intent: v2Intent, params: sent }),
       signal: AbortSignal.timeout(API_KEY_TIMEOUT_MS),
     });
     const body = await readBody(res);
-    if (!res.ok) {
-      const text = typeof body === 'string' ? body : JSON.stringify(body);
-      throw new EngineRouteError(res.status, `http ${res.status}: ${text.slice(0, 200)}`);
-    }
+    if (!res.ok) throw new EngineRouteError(res.status, `http ${res.status}: ${errorBodyText(body)}`);
     const record = asRecord(body) ?? {};
     const envelope = asRecord(record.result);
     if (!envelope) throw new Error(`engine ask returned no result: ${JSON.stringify(record).slice(0, 200)}`);
@@ -960,6 +958,18 @@ function parseAnswerBody(body: unknown, headers: Headers, v2?: { intent: ShieldI
     undefined;
   if (signalHash) out.signalHash = signalHash;
   return out;
+}
+
+/**
+ * An error reply as short text for a memo. A gateway in front of the API
+ * answers 502/504 with an HTML page (seen on 2026-11-21: a 504 whose body began
+ * "<!DOCTYPE html> <!--[if lt IE 7]>"); it is named by its title, not quoted.
+ */
+export function errorBodyText(body: unknown): string {
+  const text = typeof body === 'string' ? body : JSON.stringify(body);
+  if (!/^\s*</.test(text)) return text.slice(0, 200);
+  const title = text.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.replace(/\s+/g, ' ').trim();
+  return title ? `an HTML error page, "${title.slice(0, 120)}"` : 'an HTML error page';
 }
 
 async function readBody(res: Response): Promise<unknown> {
@@ -1234,6 +1244,12 @@ export interface TypedAnswer {
   latencyMs: number;
   /** Why there is no answer, when ok is false */
   error?: string;
+  /**
+   * True when the request itself was refused (no API key, or Telegraph answered
+   * 4xx: bad params, empty balance, rate limit), so asking another miner the
+   * same thing from the same account would be refused the same way.
+   */
+  refused?: true;
 }
 
 /** One escrow payment for one answer, as the node reported it. */
@@ -1276,36 +1292,251 @@ function toReceipt(raw: Record<string, unknown> | undefined): PaymentReceipt | u
 export async function askTypedIntent(intent: string, params: Record<string, unknown>, question: string): Promise<TypedAnswer> {
   const startedAt = Date.now();
   const key = apiKey();
-  if (!key) {
-    return { intent, params, ok: false, fields: null, fieldStatus: {}, latencyMs: 0, error: 'TELEGRAPH_API_KEY is not set, so no paid Telegraph request can be made' };
-  }
+  if (!key) return noKeyAnswer(intent, params);
   try {
-    const done = await askApiKeyWithRetry(intent, params, key, question);
-    const record = asRecord(done.body) ?? {};
-    const fields = record.result_shape === 'intent' ? asRecord(record.result) : null;
-    const status = asRecord(record.field_status) ?? {};
-    const fieldStatus: Record<string, string> = {};
-    for (const [name, state] of Object.entries(status)) fieldStatus[name] = String(state);
-    const out: TypedAnswer = { intent, params, ok: fields !== null, fields, fieldStatus, latencyMs: done.latencyMs };
-    const minerId = record.miner_id ?? record.minerId;
-    if (typeof minerId === 'string' || typeof minerId === 'number') out.minerId = String(minerId);
-    const minerName = firstString(record, ['miner_name', 'minerName']);
-    if (minerName) out.minerName = minerName;
-    // What was billed: the receipt when there is one, else the envelope's total (all payments), else its cost.
-    const receipt = toReceipt(done.receipt);
-    if (receipt) out.receipt = receipt;
-    const cost = receipt?.amountUsd ?? record.cost_usd_total ?? record.cost_usd ?? record.costUsd;
-    if (typeof cost === 'number' && Number.isFinite(cost)) out.costUsd = cost;
-    const rank = Number(record.served_rank);
-    if (Number.isFinite(rank) && rank > 0) out.servedRank = rank;
-    const signalHash = firstString(record, ['signal_hash', 'signalHash']);
-    if (signalHash) out.signalHash = signalHash;
-    if (!out.ok) out.error = `the node returned no ${intent} response fields`;
-    return out;
+    return typedAnswerFrom(intent, params, await askApiKeyWithRetry(intent, params, key, question));
   } catch (err) {
-    return {
-      intent, params, ok: false, fields: null, fieldStatus: {}, latencyMs: Date.now() - startedAt,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    return failedAnswer(intent, params, startedAt, err);
+  }
+}
+
+function noKeyAnswer(intent: string, params: Record<string, unknown>): TypedAnswer {
+  return { intent, params, ok: false, fields: null, fieldStatus: {}, latencyMs: 0, error: 'TELEGRAPH_API_KEY is not set, so no paid Telegraph request can be made', refused: true };
+}
+
+function failedAnswer(intent: string, params: Record<string, unknown>, startedAt: number, err: unknown): TypedAnswer {
+  const out: TypedAnswer = {
+    intent, params, ok: false, fields: null, fieldStatus: {}, latencyMs: Date.now() - startedAt,
+    error: err instanceof Error ? err.message : String(err),
+  };
+  if (err instanceof EngineRouteError && err.status >= 400 && err.status < 500) out.refused = true;
+  return out;
+}
+
+/**
+ * A TypedAnswer from the engine route's reply ({result, receipt}): `body` is
+ * the node envelope in `result`, `receipt` the payment. Routed and pinned asks
+ * reply alike.
+ */
+export function typedAnswerFrom(intent: string, params: Record<string, unknown>, done: { body: unknown; latencyMs: number; receipt?: Record<string, unknown> }): TypedAnswer {
+  const record = asRecord(done.body) ?? {};
+  const fields = record.result_shape === 'intent' ? asRecord(record.result) : null;
+  const status = asRecord(record.field_status) ?? {};
+  const fieldStatus: Record<string, string> = {};
+  for (const [name, state] of Object.entries(status)) fieldStatus[name] = String(state);
+  const out: TypedAnswer = { intent, params, ok: fields !== null, fields, fieldStatus, latencyMs: done.latencyMs };
+  const minerId = record.miner_id ?? record.minerId;
+  if (typeof minerId === 'string' || typeof minerId === 'number') out.minerId = String(minerId);
+  const minerName = firstString(record, ['miner_name', 'minerName']);
+  if (minerName) out.minerName = minerName;
+  // What was billed: the receipt when there is one, else the envelope's total (all payments), else its cost.
+  const receipt = toReceipt(done.receipt);
+  if (receipt) out.receipt = receipt;
+  const cost = receipt?.amountUsd ?? record.cost_usd_total ?? record.cost_usd ?? record.costUsd;
+  if (typeof cost === 'number' && Number.isFinite(cost)) out.costUsd = cost;
+  const rank = Number(record.served_rank);
+  if (Number.isFinite(rank) && rank > 0) out.servedRank = rank;
+  const signalHash = firstString(record, ['signal_hash', 'signalHash']);
+  if (signalHash) out.signalHash = signalHash;
+  if (!out.ok) {
+    // A raw answer is billed all the same: the node could not read it into the intent's fields.
+    out.error = record.result_shape === 'raw'
+      ? `the node could not read the answer into ${intent}'s response fields (result_shape raw${typeof record.shape_error === 'string' ? `, shape_error ${record.shape_error}` : ''})`
+      : `the node returned no ${intent} response fields`;
+  }
+  return out;
+}
+
+/**
+ * Ask one miner by name: POST /engine/ask/{minerId} with the intent and its
+ * typed params, paid from the API key's escrow. "No routing and no fallback,
+ * at that miner's price. No budget is sent." (anjoman.ai/docs/using/api-keys)
+ *
+ * Verified with one paid call on 2026-11-21 (WASH_TRADING_DETECTION_GENERAL,
+ * miner 80002, 4.9 s, $0.01 off the escrow balance):
+ *  - {minerId} is the catalog id, the `id` in GET /api/miners. The node took
+ *    80002 as the miner "wash-dex-search given by the caller" (signal
+ *    0xd10e5d14…). The receipt's `miner` is that miner's registration (4279),
+ *    a different number that is not a catalog id: never pin by it.
+ *  - The reply is the routed ask's shape: `result` is the node envelope
+ *    (miner_id, result, result_shape, field_status, signal_hash, cost_usd),
+ *    `receipt` the payment. There is no served_rank: nothing was routed.
+ *  - An answer the node cannot read into the intent's fields comes back as
+ *    result_shape "raw" (that one: shape_error "answer_unreadable") and is
+ *    billed anyway.
+ *
+ * One call: no retry and no other miner, so a second opinion stays one extra
+ * answer. Never throws.
+ */
+export async function askPinnedIntent(minerId: string, intent: string, params: Record<string, unknown>): Promise<TypedAnswer> {
+  const startedAt = Date.now();
+  const key = apiKey();
+  if (!key) return noKeyAnswer(intent, params);
+  try {
+    return typedAnswerFrom(intent, params, await askEngineApiKey(intent, params, key, minerId));
+  } catch (err) {
+    return failedAnswer(intent, params, startedAt, err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The node's ranking of miners per intent (for a pinned second opinion)
+// ---------------------------------------------------------------------------
+
+/**
+ * One row of GET /leaderboard/miners (the latest epoch) or
+ * GET /leaderboard/miners/epoch/<n>: {epoch, intents: {<INTENT>: rows}}, read
+ * 2026-11-21. Rows name the miner by slug, not by id. An epoch can lack an
+ * intent (epoch 30 had no WASH_TRADING_DETECTION_GENERAL rows while 29 had
+ * 16), and an epoch with no scoring data at all answers 404.
+ */
+export interface LeaderboardRow {
+  miner_slug: string;
+  score: number;
+  rank: number;
+  activation_status?: string;
+}
+
+/** The catalog fields a pinned ask needs (GET /api/miners?intent=<INTENT>). */
+export interface CatalogMinerEntry {
+  id?: unknown;
+  slug?: unknown;
+  name?: unknown;
+  activation_status?: unknown;
+  supported_intents?: unknown;
+  /** Price per call in micro-USDC (10000 = $0.01) */
+  min_price_usdc?: unknown;
+}
+
+/** A miner the node ranks for an intent, with what a pinned ask to it needs. */
+export interface RankedMiner {
+  /** Catalog id: what POST /engine/ask/{minerId} takes */
+  minerId: string;
+  slug: string;
+  name: string;
+  rank: number;
+  score: number;
+  /** The miner's own price per call, which a pinned ask is billed */
+  priceUsd: number;
+}
+
+export interface IntentRanking {
+  intent: string;
+  /** The latest epoch whose leaderboard ranks the intent; null when none does */
+  epoch: number | null;
+  /** Active catalog miners serving the intent, best rank first */
+  miners: RankedMiner[];
+  /** Why there is no ranking */
+  error?: string;
+}
+
+/**
+ * Join leaderboard rows to the catalog: best rank first, keeping only miners
+ * the catalog lists as active for the intent with a known price.
+ */
+export function rankMiners(intent: string, rows: LeaderboardRow[], catalog: CatalogMinerEntry[]): RankedMiner[] {
+  const bySlug = new Map<string, CatalogMinerEntry>();
+  for (const m of catalog) if (typeof m.slug === 'string' && typeof m.id === 'string') bySlug.set(m.slug, m);
+  const out: RankedMiner[] = [];
+  const valid = rows.filter((r) => typeof r?.miner_slug === 'string' && Number.isFinite(r.rank) && Number.isFinite(r.score));
+  for (const row of valid.sort((a, b) => a.rank - b.rank)) {
+    if ((row.activation_status ?? 'active') !== 'active') continue;
+    const m = bySlug.get(row.miner_slug);
+    if (!m || (m.activation_status ?? 'active') !== 'active') continue;
+    if (!Array.isArray(m.supported_intents) || !m.supported_intents.includes(intent)) continue;
+    const micro = typeof m.min_price_usdc === 'number' ? m.min_price_usdc : Number.NaN;
+    if (!Number.isFinite(micro) || micro < 0) continue; // a pinned ask at an unknown price could not be bounded
+    out.push({
+      minerId: m.id as string, slug: row.miner_slug, name: typeof m.name === 'string' ? m.name : row.miner_slug,
+      rank: row.rank, score: row.score, priceUsd: micro / USDC_ATOMIC_PER_USD,
+    });
+  }
+  return out;
+}
+
+/** A leaderboard: its epoch and rows per intent; null when the node has no such epoch (404). */
+export type Leaderboard = { epoch: number; intents: Record<string, LeaderboardRow[]> };
+
+/**
+ * The latest epoch with rows for the intent: the current leaderboard first,
+ * then one epoch back at a time, at most `maxBack` epochs, stopping at an
+ * epoch the node does not have.
+ */
+export async function latestRanked(
+  intent: string,
+  board: (epoch: number | null) => Promise<Leaderboard | null>,
+  maxBack: number,
+): Promise<{ epoch: number | null; rows: LeaderboardRow[]; searched: number[] }> {
+  const searched: number[] = [];
+  let current = await board(null);
+  if (!current) throw new Error('the node returned no current leaderboard');
+  for (let back = 0; ; back++) {
+    searched.push(current.epoch);
+    const rows = current.intents[intent];
+    if (Array.isArray(rows) && rows.length > 0) return { epoch: current.epoch, rows, searched };
+    if (back >= maxBack || current.epoch <= 1) break;
+    const earlier = await board(current.epoch - 1);
+    if (!earlier) break;
+    current = earlier;
+  }
+  return { epoch: null, rows: [], searched };
+}
+
+/** The current epoch's rows change while it is scored; earlier epochs are settled. */
+const LEADERBOARD_TTL_MS = 5 * 60_000;
+const SETTLED_EPOCH_TTL_MS = 60 * 60_000;
+const LEADERBOARD_EPOCHS_BACK = 5;
+const boards = new Map<string, { at: number; ttl: number; board: Promise<Leaderboard | null> }>();
+const intentCatalogs = new Map<string, { at: number; miners: Promise<CatalogMinerEntry[]> }>();
+
+function cachedBoard(epoch: number | null): Promise<Leaderboard | null> {
+  const key = epoch === null ? 'current' : String(epoch);
+  const hit = boards.get(key);
+  if (hit && Date.now() - hit.at < hit.ttl) return hit.board;
+  const board = (async (): Promise<Leaderboard | null> => {
+    const url = epoch === null ? `${NODE_URL}/leaderboard/miners` : `${NODE_URL}/leaderboard/miners/epoch/${epoch}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    if (res.status === 404 && epoch !== null) return null;
+    if (!res.ok) throw new Error(`http ${res.status} from ${url}`);
+    const body = asRecord(await res.json());
+    const n = Number(body?.epoch);
+    const intents = asRecord(body?.intents);
+    if (!Number.isInteger(n) || n < 1 || !intents) throw new Error(`no epoch and intents in ${url}`);
+    return { epoch: n, intents: intents as Record<string, LeaderboardRow[]> };
+  })();
+  const entry = { at: Date.now(), ttl: epoch === null ? LEADERBOARD_TTL_MS : SETTLED_EPOCH_TTL_MS, board };
+  boards.set(key, entry);
+  board.catch(() => { if (boards.get(key) === entry) boards.delete(key); }); // never keep a failure
+  return board;
+}
+
+function cachedIntentCatalog(intent: string): Promise<CatalogMinerEntry[]> {
+  const hit = intentCatalogs.get(intent);
+  if (hit && Date.now() - hit.at < LEADERBOARD_TTL_MS) return hit.miners;
+  const miners = (async (): Promise<CatalogMinerEntry[]> => {
+    const body = await fetchJson(`${CATALOG_URL}?intent=${encodeURIComponent(intent)}`);
+    if (!Array.isArray(body)) throw new Error(`the catalog for ${intent} is not a list`);
+    return body as CatalogMinerEntry[];
+  })();
+  const entry = { at: Date.now(), miners };
+  intentCatalogs.set(intent, entry);
+  miners.catch(() => { if (intentCatalogs.get(intent) === entry) intentCatalogs.delete(intent); });
+  return miners;
+}
+
+/**
+ * The node's ranking for an intent, from the latest epoch that ranks it,
+ * joined to the catalog so each miner has the id a pinned ask takes and its
+ * price. Free reads (the leaderboard and the catalog), cached. Never throws.
+ */
+export async function intentRanking(intent: string): Promise<IntentRanking> {
+  try {
+    const found = await latestRanked(intent, cachedBoard, LEADERBOARD_EPOCHS_BACK);
+    if (found.epoch === null) {
+      return { intent, epoch: null, miners: [], error: `the leaderboard ranks no miner for ${intent} in epochs ${found.searched.join(', ')}` };
+    }
+    return { intent, epoch: found.epoch, miners: rankMiners(intent, found.rows, await cachedIntentCatalog(intent)) };
+  } catch (err) {
+    return { intent, epoch: null, miners: [], error: `could not read the ranking: ${err instanceof Error ? err.message : String(err)}` };
   }
 }

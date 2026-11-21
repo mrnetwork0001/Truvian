@@ -75,6 +75,34 @@ like the pre-sign check.
 
    An answer bought in the last 10 minutes is reused at $0 instead of bought
    again. A failed answer is never reused.
+
+   **A second opinion when an answer is no evidence.** When the routed answer
+   did not answer, carried no figure, examined nothing, or is not about this
+   token, Shield asks once more, pinned to the next-best miner for that
+   intent (`POST /engine/ask/{minerId}`), and uses that answer only if it is
+   evidence. Otherwise the first answer stands and the token goes to a person.
+   - **Next-best** comes from the node's leaderboard: the latest epoch that
+     ranks the intent (`GET /leaderboard/miners`, then
+     `/leaderboard/miners/epoch/<n>` going back, at most five epochs), joined
+     to `GET /api/miners?intent=` for each miner's catalog id and price. It is
+     the best-ranked miner other than the one that answered, with a score
+     above 0 in that epoch.
+   - **The miner id is the catalog id** from `/api/miners` (checked with one
+     paid call: the node took 80002 as "wash-dex-search given by the
+     caller"). A receipt names the miner's registration instead (4279 for
+     80002), which is not a catalog id.
+   - **Bounded:** at most one extra ask per fact, never retried; only within
+     the budget per decision (the routed asks are committed first, then each
+     second opinion takes its miner's price); never when the request itself
+     was refused (no key, a 4xx); never in place of an answer that holds the
+     token back on its own (a honeypot, a blocking issue).
+   - **Recorded:** the purchase carries `secondOpinion`: why (the first
+     answer's finding), the miner asked with its rank, score and epoch, whether
+     its answer was used and why, and both answers with their signal hashes
+     and receipts. The purchase's own fields are the answer the decision rests
+     on, and its cost covers both asks. An info finding says the same in
+     words, and `cost.secondOpinions` counts them. A repeat within 10 minutes
+     reuses the whole fact, second opinion included, at $0.
 3. **Fixed rules** ([`evaluate()`](../src/shield/preflight.ts), a pure
    function). The thresholds are written into every memo, so anyone can
    re-derive a decision:
@@ -106,7 +134,9 @@ like the pre-sign check.
 | top 10 holders above 50%, with a pool under $1M | review (with a deeper pool this is disclosed as info) |
 | sanctions near match (score ≥ 0.85) or no clear result | review |
 | any check that did not answer, or escrow or budget too low to buy | review |
-| an answer that says it examined nothing ("no code was provided", "insufficient data"), whatever verdict or figure it carries | review: no evidence either way; it can neither clear nor reject a token |
+| an answer that says it examined nothing ("no code was provided", "insufficient data", "the input is merely a token contract address query", "no executable code ... supplied for review", "nothing to assess"), whatever verdict or figure it carries | review: no evidence either way; it can neither clear nor reject a token |
+| a wash figure the answer says it did not measure ("wash volume is not measured") | review: the figure is no evidence either way |
+| a `Secure` verdict or a clean scan in an answer that names neither the token's address nor its symbol or name (as whole words, spelled as the contract reports them) and reports no scan facts | review: "the security review does not mention this token"; a symbol or name that is an ordinary review word ("Secure", "Token") does not count |
 | upgradeable proxy, contract owner | info, disclosed |
 
 ## Measured on 2026-11-20
@@ -146,6 +176,31 @@ $0.26 of escrow per ask while it runs, so asks only run three at a time when
 the escrow holds at least $0.78; below that they queue. Below $0.26, nothing
 is bought and the decision is REVIEW.
 
+## Measured on 2026-11-21, with second opinions
+
+One live run of `PREFLIGHT_LIVE=1 npm run test:preflight` at 09:34 UTC,
+while the API answered slowly: routed asks took 54-64 s when they answered,
+three hit Shield's 90 s timeout and one got a 504 from the gateway three
+times.
+
+| Input | Decision | Memo cost | What happened |
+|---|---|---|---|
+| WETH, $1,000 through the USDC/WETH pool | **REVIEW** | $0.04, 1 second opinion | security: TxLens (rank 2) said "Secure" but "No executable code, configuration files, or system descriptions were supplied for review"; the node's shaping added three issues from general knowledge, which is what held WETH back. Wash: the routed ask timed out, and the second opinion from 80002 DexScreener Search (rank 1 in epoch 30) came back raw (`shape_error answer_unreadable`), so it was not used |
+| the same request again | **REVIEW** | $0.01 | three facts reused; the wash ask was bought again and went to 7378 VerifyWire (rank 4), which read 104 swaps and answered "wash volume is not measured" with no figure, but the node's shaping returned 0% |
+| listing, issuer "Garantex Europe OU" | **REJECT** | $0.04, 3 second opinions | the routed sanctions ask timed out; its second opinion, 302 ChainSight (rank 1 in epoch 29), matched GARANTEX EUROPE OU, so the listing is rejected instead of sent to review. The security (504) and wash (timeout) second opinions came back raw |
+
+Both answers the rules would have taken at face value became rules after
+the run: TxLens's wording now reads as examined nothing, and a wash figure
+the answer says it did not measure is no evidence (`wash.not_measured`).
+
+**Can WETH come back HOLD?** Not with the network as it answered that
+morning. No miner gave a measured wash figure for the pool (TxLens
+"Insufficient data", 80002 raw search results, 7378 "not measured"), and of
+the two top-ranked security reviewers, TxLens examined nothing and 302
+ChainSight answered raw (`shape_error no_fields_found`, for USDC). A second
+opinion lets WETH clear as soon as a next-best miner answers with evidence;
+it does not stand in for evidence.
+
 ## Accounting: tracing what was paid
 
 - **Each memo** lists, per answer, the miner, the signal hash and (since
@@ -160,7 +215,16 @@ is bought and the decision is REVIEW.
   0.18, balance 0.91 (test USDC, 6 decimals).
 - **The Anjoman account's own spend listing** (`GET /agent/spend`) is not a
   complete record: on 2026-11-21 it listed 20 jobs and $0.15, against $1.09
-  charged on the node ledger above. Use the node ledger.
+  charged on the node ledger above. Use the node ledger. It lists no
+  `/engine/ask` calls at all.
+- **A memo's cost is what its receipts show.** An ask that ends without a
+  reply (Shield's 90 s timeout, a gateway 504) has no receipt, but the node
+  can still answer and bill it. In the live run of 2026-11-21 the memos
+  recorded $0.09 in receipts while the escrow's available balance fell
+  $0.26 (20.65 to 20.39; the ledger's unbilled grew from 0.26 to 0.52, with
+  no other decision on the account in that window). That run had six asks
+  without a reply. The ledger gives totals only, so the split per ask is not
+  visible.
 
 ## Failure cases a reviewer can reproduce
 
@@ -168,6 +232,8 @@ is bought and the decision is REVIEW.
 |---|---|---|
 | not a token | token = any wallet, e.g. `0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045` | REJECT, $0, "EIP-7702 delegation to …" |
 | a provider that examined nothing | SQUID on BSC (memo `FKLfi2qT`); unit test on the exact answers | REVIEW: "Security review did not examine the contract" |
+| a review that could be about any contract | unit test on the second half of the live `WOYbyG3x` answer ("Secure. There are no injection vectors ...") | REVIEW: "The security review does not mention this token" |
+| a second opinion | WETH trade while TxLens answers "Insufficient data" (memo `B4k2AxbY`); unit tests with stubbed answers | one pinned ask to the next-best ranked miner, recorded with both signals and receipts; used only if it is evidence |
 | a check does not answer | seen live on 2026-11-20: the facilitator refused one liquidity payment twice in a row ("Payment was rejected by the facilitator"); Shield now retries twice with a backoff | REVIEW: "Pool liquidity: no answer"; the failure is not cached |
 | conflicting sources | a supply answer more than 50 bps from the chain read (unit test with a 12.7% gap) | REVIEW: "Total supply conflicts with the chain" |
 | sanctioned or uncertain screening | issuer `Garantex Europe OU`; a screening with no `matched` value | REJECT; REVIEW, never cleared |
@@ -203,6 +269,21 @@ is bought and the decision is REVIEW.
 - **The auto-routed ask needs a budget of at least $0.26 per message, but
   bills about $0.01.** An agent that sets `maxSpendUsd` to $0.10 is refused
   before anything is bought.
+- **The node's shaping can state what the miner did not.** On 2026-11-21
+  VerifyWire answered `wash_volume_pct` null with `wash_volume_status`
+  "not_measured", and the node returned 0 with field status `ok`. TxLens's
+  security answer had no issues, and the node returned three from general
+  knowledge with a count of 3. The raw answer is on the node at
+  `GET /engine/v1/signal/<signal_hash>`.
+- **The leaderboard ranks miners by slug, per epoch, with gaps.** At 09:00
+  UTC epoch 30 had no `WASH_TRADING_DETECTION_GENERAL` rows (epoch 29 had
+  16); by 09:34 it ranked 80002 first. `LIQUIDITY_DEPTH_VERIFY_GENERAL` is
+  ranked in none of epochs 26-30, so a liquidity answer gets no second
+  opinion. Epoch 25 and earlier answer 404.
+- **The top-ranked wash miner cannot answer this question.** 80002
+  DexScreener Search passes the whole subject ("WETH pool 0x88e6… on
+  Ethereum") to DexScreener's search, gets 30 unrelated WETH pairs, and the
+  node cannot read them into the intent's fields. Each such answer is billed.
 
 ## Run it yourself
 
@@ -210,7 +291,7 @@ is bought and the decision is REVIEW.
 git clone https://github.com/mrnetwork0001/Truvian && cd Truvian && npm install
 cp .env.example .env   # set TELEGRAPH_API_KEY (an anjoman.ai API key with escrow); optional SHIELD_MEMO_KEY
 npm run test:preflight                    # rules on recorded live answers, memo signing; free
-PREFLIGHT_LIVE=1 npm run test:preflight   # real preflights through Telegraph, about $0.08
+PREFLIGHT_LIVE=1 npm run test:preflight   # real preflights through Telegraph: $0.08-0.15 in receipts with second opinions, more if asks time out
 npm run shield                            # http://127.0.0.1:8788/preflight
 ```
 

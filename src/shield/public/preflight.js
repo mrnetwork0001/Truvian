@@ -36,7 +36,7 @@
   };
 
   const NOTES = {
-    trade: 'An agent is about to buy a token. Shield reads the contract from the chain, then buys a security review, the total supply, a wash-trading check and the pool\'s liquidity through Telegraph, one routed request each, and decides HOLD, REVIEW or REJECT. The buy itself is only simulated.',
+    trade: 'An agent is about to buy a token. Shield reads the contract from the chain, then buys a security review, the total supply, a wash-trading check and the pool\'s liquidity through Telegraph, one routed request each, with one second opinion from the next-best ranked miner when an answer examined nothing, and decides HOLD, REVIEW or REJECT. The buy itself is only simulated.',
     listing: 'A listings desk is reviewing a token. Shield reads the contract from the chain, buys a security review, the total supply and a wash-trading check, screens the issuer against sanctions lists, and checks the treasury balance against the chain, then decides LIST, REVIEW or REJECT in a signed memo.',
   };
 
@@ -84,9 +84,28 @@
     }
   }
 
+  const signalLink = (hash, label) => el('a', { href: `${NODE}/engine/v1/signal/${hash}`, target: '_blank', rel: 'noopener', class: 'mono', text: `${label || ''}${hash.slice(0, 10)}…${hash.slice(-6)}` });
+
+  // A second opinion: why the first answer was set aside, who was asked, and both signals.
+  function secondOpinionNote(so) {
+    const who = so.miner ? `${so.miner.id} ${so.miner.name} (rank ${so.miner.rank}, epoch ${so.miner.epoch})` : null;
+    const first = so.first.minerId ? `${so.first.minerId}${so.first.minerName ? ` ${so.first.minerName}` : ''}` : 'the routed ask';
+    const head = so.used ? `second opinion used: ${who}` : who ? `second opinion not used: ${who}` : 'no second opinion';
+    const links = [
+      so.first.signalHash ? signalLink(so.first.signalHash, 'first ') : null,
+      so.second && so.second.signalHash ? signalLink(so.second.signalHash, 'second ') : null,
+    ].filter(Boolean);
+    return el('div', { class: 'second' },
+      el('b', { text: head }),
+      el('div', { text: `first answer (${first}) was no evidence: ${so.reason}` }),
+      el('div', { text: so.outcome }),
+      so.second ? el('div', { text: `second ask: $${so.second.costUsd}${so.second.receipt ? ` · receipt ${so.second.receipt.hash.slice(0, 10)}…${so.second.receipt.hash.slice(-6)}` : ''}` }) : null,
+      links.length ? el('div', {}, ...links.flatMap((a, i) => (i ? [' · ', a] : [a]))) : null);
+  }
+
   function purchaseRow(p) {
     const signal = p.signalHash
-      ? el('span', {}, el('a', { href: `${NODE}/engine/v1/signal/${p.signalHash}`, target: '_blank', rel: 'noopener', class: 'mono', text: `${p.signalHash.slice(0, 10)}…${p.signalHash.slice(-6)}` }))
+      ? el('span', {}, signalLink(p.signalHash))
       : el('span', { class: 'pending', text: '-' });
     const meta = [
       p.minerName ? `${p.minerId} ${p.minerName}` : (p.minerId || '-'),
@@ -99,7 +118,7 @@
       : null;
     return el('tr', { 'data-key': p.key },
       el('td', {}, el('span', { class: 'intent-tag', text: p.intent.replace(/_GENERAL$/, '') })),
-      el('td', {}, answerText(p)),
+      el('td', {}, answerText(p), p.secondOpinion ? secondOpinionNote(p.secondOpinion) : null),
       el('td', { class: 'detail' }, meta, receipt),
       el('td', {}, signal));
   }
@@ -147,6 +166,7 @@
       el('span', {}, 'paid requests ', el('b', { text: String(m.cost.paidRequests) })),
       el('span', {}, 'reused ', el('b', { text: String(m.cost.reusedRequests) })),
       el('span', {}, 'failed ', el('b', { text: String(m.cost.failedRequests) })),
+      m.cost.secondOpinions ? el('span', {}, 'second opinions ', el('b', { text: String(m.cost.secondOpinions) })) : null,
       el('span', {}, 'time ', el('b', { text: `${(m.latencyMs / 1000).toFixed(1)} s` })),
       el('span', {}, 'budget ', el('b', { text: `$${m.cost.budgetUsd.toFixed(2)}` })),
       m.cost.escrowBeforeUsd != null ? el('span', {}, 'escrow before ', el('b', { text: `$${m.cost.escrowBeforeUsd.toFixed(2)}` })) : null,
