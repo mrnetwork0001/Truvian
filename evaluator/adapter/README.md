@@ -165,7 +165,9 @@ same bits for all 30 texts.
 | Tokenizer | `67bc76f8…c456` |
 
 `package/SMART_CONTRACT_AUDIT.safetensors.manifest.json` is what
-`adapterbuild lora` wrote: the node's Stage 1 parser accepted the package,
+`adapterbuild lora` wrote, run locally from a copy of the kit patched to list
+SMART_CONTRACT_AUDIT (the node itself has not yet seen the package): the
+kit's Stage 1 parser accepted the package,
 and it loaded on the foundation and scored the same input twice with
 identical bits (`0xbf909d3f`). The examples repository's
 `evaluator-adapter/inspect-package.ts` also passes it.
