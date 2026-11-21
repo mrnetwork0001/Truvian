@@ -75,6 +75,3 @@ export const KNOWN_TOKEN_NAMES: Record<string, readonly string[]> = {
   WETH: ['Wrapped Ether', 'WETH'],
   WBTC: ['Wrapped BTC', 'Wrapped Bitcoin'],
 };
-
-/** Symbols that mean "the chain's native coin" rather than an ERC-20. */
-export const NATIVE_SYMBOLS = new Set(['ETH', 'POL', 'MATIC', 'BNB', 'AVAX', 'XDAI', 'OKB', 'NATIVE']);

@@ -15,7 +15,7 @@ import {
   LIST_BACKOFF_MS, LIST_TTL_MS, TokenListCache, TokenListUnavailable, fetchTokenList, listedTokens, symbolKey,
 } from '../miner/tokenList.js';
 import { nameAgreement, nameWords, type Agreement } from '../miner/tokenNames.js';
-import { KNOWN_TOKENS, KNOWN_TOKEN_NAMES, NATIVE_SYMBOLS } from '../config/tokens.js';
+import { KNOWN_TOKENS, KNOWN_TOKEN_NAMES } from '../config/tokens.js';
 import { createPublicClient, encodeAbiParameters, formatUnits, http, parseAbi, stringToHex, type PublicClient } from 'viem';
 import { chainFromText, handleTxLookup, normalizeChain, searchRpcs, validateTxLookupInput } from '../miner/txLookup.js';
 import { handleGasPrice, validateGasPriceInput } from '../miner/gasPrice.js';
@@ -400,6 +400,35 @@ async function main() {
   check('an unknown token symbol is refused, not guessed', unknownToken instanceof IntentError && unknownToken.code === 'INVALID_INPUT'
     && unknownToken.message.includes('in parentheses'), unknownToken?.message);
 
+  // A native symbol is the native coin only on its own chain. A "POL" balance
+  // on Ethereum was answered in ETH; POL there is an ERC-20, found the way
+  // total supply finds it (a word given alone: the verified table, which has
+  // no POL on Ethereum, so it is refused).
+  const holder = '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A';
+  const balanceOf = (chain: string, token: string) => handleBalance(validateBalanceInput({ address: holder, chain, token }))
+    .then((r) => ({ symbol: r.token_symbol, address: r.token_address, err: null }), (err) => ({ symbol: null, address: null, err }));
+  const [polOnEthereum, polOnPolygon, maticOnPolygon, ethOnPolygon, ethOnBase, bnbOnBsc, bnbOnEthereum] = await Promise.all([
+    balanceOf('ethereum', 'POL'), balanceOf('polygon', 'POL'), balanceOf('polygon', 'MATIC'), balanceOf('polygon', 'ETH'),
+    balanceOf('base', 'ETH'), balanceOf('bsc', 'BNB'), balanceOf('ethereum', 'BNB'),
+  ]);
+  check('a "POL" balance on Ethereum is not read as ETH: POL there is an ERC-20 the verified table lacks, so it is refused',
+    polOnEthereum.err instanceof IntentError && polOnEthereum.err.code === 'INVALID_INPUT' && polOnEthereum.err.message.includes('in parentheses'),
+    polOnEthereum.err?.message ?? `${polOnEthereum.symbol}`);
+  check('"POL" and "MATIC" balances on Polygon are its native coin', polOnPolygon.symbol === 'POL' && polOnPolygon.address === null
+    && maticOnPolygon.symbol === 'POL' && maticOnPolygon.address === null, `${polOnPolygon.symbol} ${maticOnPolygon.symbol}`);
+  check('"ETH" is native on Base and "BNB" on BNB Smart Chain', ethOnBase.symbol === 'ETH' && ethOnBase.address === null
+    && bnbOnBsc.symbol === 'BNB' && bnbOnBsc.address === null, `${ethOnBase.symbol} ${bnbOnBsc.symbol}`);
+  check('"ETH" on Polygon and "BNB" on Ethereum are not read as those chains\' coins',
+    ethOnPolygon.err instanceof IntentError && ethOnPolygon.err.code === 'INVALID_INPUT'
+      && bnbOnEthereum.err instanceof IntentError && bnbOnEthereum.err.code === 'INVALID_INPUT',
+    `${ethOnPolygon.err?.message ?? ethOnPolygon.symbol} | ${bnbOnEthereum.err?.message ?? bnbOnEthereum.symbol}`);
+  const polByName = await handleBalance(validateBalanceInput({ address: holder, chain: 'ethereum', token: 'Polygon Ecosystem Token (POL)' }))
+    .then((r) => r, (e) => e);
+  const polName = 'a "Polygon Ecosystem Token (POL)" balance on Ethereum reads the POL ERC-20, the contract total supply reads';
+  if (listRefused(polByName)) skip(polName, polByName.message);
+  else check(polName, !(polByName instanceof Error) && polByName.token_address === '0x455e53CBB86018Ac2B8092FdCd39d8444aFFC3F6'
+    && polByName.token_symbol === 'POL', polByName?.message ?? polByName?.token_address);
+
   for (const [key, address] of [['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'],
     ['WBTC (0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599) on Ethereum', '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599'],
     ['DAI (0x6B175474E89094C44Da98b954EedeAC495271d0F) on Ethereum', '0x6B175474E89094C44Da98b954EedeAC495271d0F']] as const) {
@@ -574,7 +603,7 @@ async function main() {
     const bySymbol = new Map<string, typeof listed>();
     for (const t of listed) bySymbol.set(symbolKey(t.symbol), [...(bySymbol.get(symbolKey(t.symbol)) ?? []), t]);
     const twins = [...bySymbol.entries()].find(([sym, sharing]) => /^[A-Z0-9]{2,10}$/.test(sym)
-      && !NATIVE_SYMBOLS.has(sym) && !KNOWN_TOKENS.ethereum?.[sym]
+      && sym !== chainMeta('ethereum').nativeSymbol && sym !== 'NATIVE' && !KNOWN_TOKENS.ethereum?.[sym]
       && new Set(sharing.map((t) => t.address.toLowerCase())).size > 1
       && sharing.every((t) => /^[A-Za-z0-9 .-]+$/.test(t.name) && nameWords(t.name).join(' ') === nameWords(sharing[0]!.name).join(' ')))?.[1];
     if (!twins) {

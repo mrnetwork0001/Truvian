@@ -14,7 +14,7 @@ import {
 } from 'viem';
 import { normalize } from 'viem/ens';
 import { SUPPORTED_CHAINS, chainMeta, getClient, type SupportedChain } from '../config/chains.js';
-import { KNOWN_TOKENS, KNOWN_TOKEN_NAMES, NATIVE_SYMBOLS } from '../config/tokens.js';
+import { KNOWN_TOKENS, KNOWN_TOKEN_NAMES } from '../config/tokens.js';
 import { IntentError } from '../types/index.js';
 import { findListedToken, symbolKey } from './tokenList.js';
 import { namesAgree } from './tokenNames.js';
@@ -323,13 +323,33 @@ async function confirmToken(
   return { token: { address, decimals, symbol, foundIn: located.foundIn, note: located.note }, supply: supply.value };
 }
 
-/** Resolve a balance's token: empty or a native symbol for the chain's coin, else an ERC-20. */
+/**
+ * Names of a chain's own coin besides viem's nativeCurrency symbol (ETH, POL,
+ * BNB, AVAX, XDAI, OKB): Polygon's coin was MATIC before it became POL.
+ */
+const NATIVE_ALIASES: Partial<Record<SupportedChain, string[]>> = { polygon: ['MATIC'] };
+
+/**
+ * Whether `symbol` is `chain`'s own coin, which has no contract: ETH on
+ * Ethereum or Base, POL or MATIC on Polygon. The same symbols on other chains
+ * are ERC-20 tokens (POL and BNB on Ethereum are), and are looked up as such
+ * for balances as for supply.
+ */
+function isNativeOf(chain: SupportedChain, symbol: string): boolean {
+  const s = symbolKey(symbol);
+  return s === 'NATIVE' || s === chainMeta(chain).nativeSymbol.toUpperCase() || (NATIVE_ALIASES[chain]?.includes(s) ?? false);
+}
+
+/**
+ * Resolve a balance's token: none, or the chain's own coin symbol, for the
+ * coin; anything else as an ERC-20, found the way total supply finds it. A
+ * "POL" balance on Ethereum is no longer read as ETH.
+ */
 async function resolveAsset(chain: SupportedChain, raw: string, blockNumber: bigint): Promise<Asset> {
   const meta = chainMeta(chain);
   const ref = parseTokenRef(raw);
-  const symbol = ref.symbol === null ? null : symbolKey(ref.symbol);
-  const native = symbol === null ? ref.name === null : NATIVE_SYMBOLS.has(symbol) || symbol === meta.nativeSymbol;
-  if (!ref.address && native) return { address: null, decimals: 18, symbol: meta.nativeSymbol, foundIn: null, note: null };
+  const native = !ref.address && (ref.symbol === null ? ref.name === null : isNativeOf(chain, ref.symbol));
+  if (native) return { address: null, decimals: 18, symbol: meta.nativeSymbol, foundIn: null, note: null };
   return (await confirmToken(chain, await locateToken(chain, ref), blockNumber)).token;
 }
 
@@ -440,22 +460,6 @@ export interface SupplyInput {
  * the token: its {key} is the token reference.
  */
 const SUPPLY_QUESTION = /^what is the current total supply of (.+?),? in whole tokens\??$/i;
-
-/**
- * Names of a chain's own coin besides viem's nativeCurrency symbol (ETH, POL,
- * BNB, AVAX, XDAI, OKB): Polygon's coin was MATIC before it became POL.
- */
-const NATIVE_ALIASES: Partial<Record<SupportedChain, string[]>> = { polygon: ['MATIC'] };
-
-/**
- * Whether `symbol` is `chain`'s own coin, which has no contract: ETH on
- * Ethereum or Base, POL or MATIC on Polygon. The same symbols on other chains
- * are ERC-20 tokens with a totalSupply() (POL and BNB on Ethereum are).
- */
-function isNativeOf(chain: SupportedChain, symbol: string): boolean {
-  const s = symbolKey(symbol);
-  return s === 'NATIVE' || s === chainMeta(chain).nativeSymbol.toUpperCase() || (NATIVE_ALIASES[chain]?.includes(s) ?? false);
-}
 
 /**
  * The intent sends one `token` string naming the token and its chain:
