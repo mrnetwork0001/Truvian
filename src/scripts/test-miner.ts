@@ -14,7 +14,7 @@ import {
   contractAnswered, handleBalance, handleSupply, parseTokenRef, readText, validateBalanceInput, validateSupplyInput,
 } from '../miner/holdings.js';
 import {
-  LIST_BACKOFF_MS, LIST_TTL_MS, TokenListCache, TokenListUnavailable, fetchTokenList, listedTokens, symbolKey,
+  LIST_BACKOFF_MS, LIST_TTL_MS, TokenListCache, TokenListUnavailable, fetchTokenList, findListedToken, listedTokens, symbolKey,
 } from '../miner/tokenList.js';
 import { nameAgreement, nameWords, type Agreement } from '../miner/tokenNames.js';
 import { KNOWN_TOKENS, KNOWN_TOKEN_NAMES } from '../config/tokens.js';
@@ -404,8 +404,9 @@ async function main() {
         const target = tip - BigInt(Math.round((days * 86_400) / blockSeconds[name]));
         // Read the old block from whichever endpoint still has it. Some keep
         // transactions by hash but prune blocks by number (sepolia.base.org
-        // answers 4444 "pruned history unavailable"), and free tiers drop
-        // requests, so try several neighbouring blocks.
+        // answers 4444 "pruned history unavailable" below about block
+        // 48,000,000), and free tiers drop requests, so try several
+        // neighbouring blocks.
         let sample: { hash: `0x${string}`; block: bigint } | undefined;
         for (let off = 0n; off < 12n && !sample; off++) {
           for (const { client: c } of getRpcClients(name)) {
@@ -420,6 +421,23 @@ async function main() {
           got.block_number !== null && BigInt(got.block_number) === sample.block,
           `${got.status} block ${got.block_number}`,
         );
+        // A "not found" from an endpoint marked full history proves absence
+        // (searchRpcs), so each one must still serve the year-old transaction
+        // and its receipt. An error (a rate limit, a timeout) says nothing
+        // about its history; only a "not found" makes the flag false. On
+        // 2026-11-21 base-sepolia.drpc.org, then marked full history,
+        // answered null for every Base Sepolia transaction older than about
+        // 300 days, which could have turned a real transaction into not_found.
+        if (days === 365) {
+          const forgot: string[] = [];
+          for (const e of getRpcClients(name).filter((r) => r.fullHistory)) {
+            for (const read of [() => e.client.getTransaction({ hash: sample!.hash }), () => e.client.getTransactionReceipt({ hash: sample!.hash })]) {
+              const err = await read().then(() => null, (x) => x);
+              if (err?.name === 'TransactionNotFoundError' || err?.name === 'TransactionReceiptNotFoundError') forgot.push(`${new URL(e.url).host} (${err.name})`);
+            }
+          }
+          check(`${name}: no endpoint marked full history calls the ${age} old transaction or its receipt absent`, forgot.length === 0, forgot.join(', '));
+        }
       } catch (e: any) {
         check(`${name}: ${age} old transaction`, false, e?.message ?? String(e));
       }
@@ -641,6 +659,21 @@ async function main() {
     const got = await handleSupply(validateSupplyInput({ token: question })).then((r) => r.token_address, (e) => `refused: ${e?.message}`);
     check(`"${question}" is answered from the verified table, its name agreeing`, got === address, got);
   }
+  // The verified table holds one contract per symbol, so a name with words
+  // added to the table's name is not taken for it: bridged twins are named
+  // that way. Each was answered with the table contract's supply before
+  // 2026-11-21. The table contract's own name(), read here directly, is not
+  // the name given either, which is why the miner refuses.
+  for (const [question, chain, symbol] of [['USD Coin (Wormhole) (USDC) on Ethereum', 'ethereum', 'USDC'],
+    ['Tether USD (Wormhole) (USDT) on Ethereum', 'ethereum', 'USDT'], ['Bridged USDC (USDC) on Arbitrum', 'arbitrum', 'USDC']] as const) {
+    const given = question.slice(0, question.lastIndexOf(` (${symbol})`));
+    const ownName = await getClient(chain).readContract({ address: KNOWN_TOKENS[chain]![symbol]!.address, abi: erc20, functionName: 'name' })
+      .catch((e) => `unread: ${e?.shortMessage ?? e}`);
+    const refused = await handleSupply(validateSupplyInput({ token: question })).then((r) => r, (e) => e);
+    check(`"${question}" is refused: the verified table's ${symbol} on ${chain} is named "${ownName}", not "${given}"`,
+      nameAgreement(given, [String(ownName)]) !== 3 && refused instanceof IntentError && refused.code === 'INVALID_INPUT'
+        && refused.message.includes('does not agree exactly'), refused?.message ?? `answered ${refused?.token_address}`);
+  }
   const contradictedBalance = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: 'ethereum', token: 'Uniswap (USDC)' }))
     .then(() => null, (e) => e);
   check('a balance of "Uniswap (USDC)" is refused the same way', contradictedBalance instanceof IntentError
@@ -668,6 +701,9 @@ async function main() {
     ['Maker (MKR) on Ethereum', 'ethereum', '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2'],
     // CoinGecko lists it as USDC.E; the contract's symbol() says USDC
     ['Bridged USDC (USDC.e) on Arbitrum', 'arbitrum', '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8'],
+    // two listed LUSD tokens: Liquity's is "Liquity USD" in the list and
+    // "LUSD Stablecoin" by its name(); the list names alone chose 0x31a2E08F… ("LUSD")
+    ['LUSD Stablecoin (LUSD) on Ethereum', 'ethereum', '0x5f98805A4E8be255a32880FDeC7F6728C6568bA0'],
   ];
   for (const [question, chain, address] of nodeQuestions) {
     try {
@@ -686,6 +722,58 @@ async function main() {
       if (listRefused(e)) skip(`"${question}"`, e.message);
       else check(`"${question}"`, false, e?.message ?? String(e));
     }
+  }
+
+  // Why LUSD Stablecoin is Liquity's: read directly, at the answer's block,
+  // its name() is the name given and the other listed LUSD's is not.
+  const lusd = await handleSupply(validateSupplyInput({ token: 'LUSD Stablecoin (LUSD) on Ethereum' })).then((r) => r, (e) => e);
+  const lusdName = 'the listed LUSD chosen is the one whose own name() is "LUSD Stablecoin" at the answer\'s block, and the source says so';
+  if (listRefused(lusd)) {
+    skip(lusdName, lusd.message);
+  } else if (lusd instanceof Error) {
+    check(lusdName, false, lusd.message);
+  } else {
+    const at = BigInt(lusd.blockNumber);
+    const [liquity, other] = await Promise.all(['0x5f98805A4E8be255a32880FDeC7F6728C6568bA0', '0x31a2E08F4232329e4EddB025C0275f43c9cD56D7']
+      .map((address) => eth.readContract({ address: address as `0x${string}`, abi: erc20, functionName: 'name', blockNumber: at })));
+    check(lusdName, nameAgreement('LUSD Stablecoin', [liquity!]) === 3 && nameAgreement('LUSD Stablecoin', [other!]) !== 3
+      && lusd.source.includes('by its name() "LUSD Stablecoin"'), `${liquity} / ${other}; ${lusd.source}`);
+  }
+
+  // Choosing between listed tokens that share a symbol, against a stand-in
+  // list and stand-in name() answers: an exact name() chooses, two exact
+  // names are refused, and a chain that does not answer is an upstream error.
+  {
+    const twinsHost = await standInListHost();
+    const a = '0x00000000000000000000000000000000000000a1';
+    const b = '0x00000000000000000000000000000000000000b2';
+    twinsHost.answers.set('/ethereum/all.json', { status: 200, type: 'application/json', body: JSON.stringify({ tokens: [
+      { chainId: 1, address: a, name: 'Alpha Dollar', symbol: 'TWIN', decimals: 18 },
+      { chainId: 1, address: b, name: 'TWIN', symbol: 'TWIN', decimals: 18 },
+    ] }) });
+    const twinLists = new TokenListCache(twinsHost.base);
+    const ownNames = (names: Record<string, string | null | Error>) => async (address: `0x${string}`) => {
+      const n = names[address.toLowerCase()];
+      if (n instanceof Error) throw n;
+      return n ?? null;
+    };
+    const pick = (name: string, names: Record<string, string | null | Error>) =>
+      findListedToken('ethereum', 'TWIN', name, twinLists, ownNames(names)).then((m) => m, (e) => e);
+    const byOwnName = await pick('Twin Stablecoin', { [a]: 'Twin Stablecoin', [b]: 'twin' });
+    check('a name() that is exactly the name given chooses among tokens sharing a symbol, over a list name that only contains it',
+      !(byOwnName instanceof Error) && byOwnName.token.address.toLowerCase() === a && byOwnName.chosenByName === 'Twin Stablecoin',
+      byOwnName?.message ?? byOwnName?.token?.address);
+    const twoExact = await pick('Twin Stablecoin', { [a]: 'Twin Stablecoin', [b]: 'TWIN-STABLECOIN' });
+    check('two tokens whose names are exactly the name given are refused, naming both',
+      twoExact instanceof IntentError && twoExact.code === 'INVALID_INPUT' && twoExact.message.toLowerCase().includes(a)
+        && twoExact.message.toLowerCase().includes(b.slice(2)), twoExact?.message);
+    const chainSilent = await pick('Twin Stablecoin', { [a]: 'Twin Stablecoin', [b]: new IntentError('UPSTREAM_RPC_ERROR', 'no endpoint answered') });
+    check('a name() the chain did not answer is an upstream error, not a choice made without it',
+      chainSilent instanceof IntentError && chainSilent.code === 'UPSTREAM_RPC_ERROR', chainSilent?.message);
+    const noExact = await pick('Alpha', { [a]: 'Something Else', [b]: null });
+    check('with no exact name, the list names still choose as before ("Alpha" in "Alpha Dollar")',
+      !(noExact instanceof Error) && noExact.token.address.toLowerCase() === a && noExact.chosenByName === null, noExact?.message);
+    await twinsHost.close();
   }
 
   // A given address with no code on the named chain is no contract there.

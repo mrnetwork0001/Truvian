@@ -293,7 +293,20 @@ export interface ListMatch {
   token: ListedToken;
   /** "CoinGecko's Ethereum token list", for the answer's source */
   list: string;
+  /**
+   * The contract's own name(), when it was read to choose between tokens
+   * sharing the symbol and is what chose this one; null otherwise.
+   */
+  chosenByName: string | null;
 }
+
+/**
+ * A contract's name() at the anchoring block, for choosing between listed
+ * tokens that share a symbol: the text, or null when the contract answers no
+ * name(). A chain that does not answer throws, since the choice would then
+ * rest on what one endpoint happened to say.
+ */
+export type NameReader = (address: `0x${string}`) => Promise<string | null>;
 
 /**
  * The candidates whose names agree best with the name given
@@ -319,18 +332,40 @@ function describe(candidates: ListedToken[]): string {
  * name alone, or a word that may be a name, is no symbol to look up. When
  * one token has the symbol it is returned whatever the name; the caller
  * holds it to the name (src/miner/holdings.ts), with its name() to hand.
+ *
+ * When several share the symbol and `nameOf` is given, each candidate's own
+ * name() is read first. The token whose list name or name() is exactly the
+ * name given (the same words, src/miner/tokenNames.ts) is chosen; two such
+ * tokens are refused. Only when none is exactly the name do the list names
+ * rank the candidates. The list names alone chose wrongly: CoinGecko calls
+ * Liquity's LUSD "Liquity USD", whose contract calls itself "LUSD
+ * Stablecoin", and lists another LUSD under the name "LUSD" (0x31a2E08F…,
+ * name() "lUSD"), so "LUSD Stablecoin (LUSD)" was answered for the other one.
  */
 export async function findListedToken(
-  chain: SupportedChain, symbol: string, name: string | null, lists: TokenListCache = coingeckoLists,
+  chain: SupportedChain, symbol: string, name: string | null, lists: TokenListCache = coingeckoLists, nameOf: NameReader | null = null,
 ): Promise<ListMatch> {
   const list = await lists.get(chain);
   const where = `CoinGecko's ${chainMeta(chain).label} token list`;
-  const found = (t: ListedToken): ListMatch => ({ token: { ...t, address: getAddress(t.address) }, list: where });
+  const found = (t: ListedToken, chosenByName: string | null = null): ListMatch => ({
+    token: { ...t, address: getAddress(t.address) }, list: where, chosenByName,
+  });
   const sharing = list.bySymbol.get(symbolKey(symbol)) ?? [];
   if (sharing.length === 0) throw new IntentError('INVALID_INPUT', `no token in ${where} has the symbol ${symbol}; give the contract address`);
   if (sharing.length === 1) return found(sharing[0]!);
+  const refuse = (named: string) => new IntentError('INVALID_INPUT',
+    `${sharing.length} tokens in ${where} have the symbol ${symbol}${named}: ${describe(sharing)}; give the contract address`);
+  if (name !== null && nameOf !== null) {
+    const own = await Promise.all(sharing.map((t) => nameOf(getAddress(t.address))));
+    const exact = sharing.flatMap((t, i) => {
+      const byList = nameAgreement(name, [t.name]) === 3;
+      const byContract = own[i] !== null && nameAgreement(name, [own[i]!]) === 3;
+      return byList || byContract ? [{ t, chosenByName: byList ? null : own[i]! }] : [];
+    });
+    if (exact.length === 1) return found(exact[0]!.t, exact[0]!.chosenByName);
+    if (exact.length > 1) throw refuse(`, and more than one is named exactly "${name}" by the list or its own name()`);
+  }
   const chosen = name !== null ? namedAs(sharing, name) : [];
   if (chosen.length === 1) return found(chosen[0]!);
-  const named = name !== null ? `, and ${chosen.length === 0 ? 'none' : 'more than one'} is named "${name}"` : '';
-  throw new IntentError('INVALID_INPUT', `${sharing.length} tokens in ${where} have the symbol ${symbol}${named}: ${describe(sharing)}; give the contract address`);
+  throw refuse(name !== null ? `, and ${chosen.length === 0 ? 'none' : 'more than one'} is named "${name}"` : '');
 }
