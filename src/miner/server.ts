@@ -10,6 +10,7 @@ import Fastify from 'fastify';
 import { handleGasPrice, validateGasPriceInput } from './gasPrice.js';
 import { handleTxLookup, validateTxLookupInput } from './txLookup.js';
 import { handleBalance, handleSupply, validateBalanceInput, validateSupplyInput } from './holdings.js';
+import { preloadTokenList } from './tokenList.js';
 import { IntentError } from '../types/index.js';
 
 const MINER_ID = process.env.TRUVIAN_MINER_ID ?? 'truvian-miner-01';
@@ -127,4 +128,10 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop()
     app.log.error(err);
     process.exit(1);
   });
+  // Most supply questions name Ethereum tokens. Fetch that list now so the
+  // first of them does not wait for the download; startup does not wait for it.
+  preloadTokenList('ethereum').then(
+    (tokens) => app.log.info(`token list for ethereum preloaded: ${tokens} tokens`),
+    (err) => app.log.warn(`token list for ethereum not preloaded: ${err?.message ?? String(err)}`),
+  );
 }

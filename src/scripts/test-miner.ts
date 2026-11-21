@@ -4,10 +4,14 @@
  * fee-math invariant against the raw RPC receipt, then runs GAS_PRICE and
  * checks internal consistency. Exits non-zero on any failure.
  */
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { SUPPORTED_CHAINS, chainMeta, getClient, getRpcClients, type SupportedChain } from '../config/chains.js';
 import { buildServer } from '../miner/server.js';
 import { handleBalance, handleSupply, parseTokenRef, validateBalanceInput, validateSupplyInput } from '../miner/holdings.js';
-import { fetchTokenList, nameKey, symbolKey } from '../miner/tokenList.js';
+import {
+  LIST_BACKOFF_MS, LIST_TTL_MS, TokenListCache, TokenListUnavailable, fetchTokenList, listedTokens, nameKey, symbolKey,
+} from '../miner/tokenList.js';
 import { KNOWN_TOKENS, NATIVE_SYMBOLS } from '../config/tokens.js';
 import { formatUnits, parseAbi } from 'viem';
 import { chainFromText, handleTxLookup, normalizeChain, searchRpcs, validateTxLookupInput } from '../miner/txLookup.js';
@@ -19,6 +23,40 @@ function check(name: string, cond: boolean, detail = '') {
   console.log(`${cond ? '✅' : '❌'} ${name}${detail ? ` - ${detail}` : ''}`);
   if (!cond) failures++;
 }
+
+interface StandInReply { status: number; type: string; body: string; headers?: Record<string, string> }
+type StandInAnswer = StandInReply | 'hang';
+
+/**
+ * A stand-in for tokens.coingecko.com on a local port: each path answers as
+ * `answers` says ('hang' never answers), and every request is counted.
+ */
+async function standInListHost() {
+  const answers = new Map<string, StandInAnswer>();
+  const asked = new Map<string, number>();
+  const server = createServer((req, res) => {
+    const path = req.url ?? '';
+    asked.set(path, (asked.get(path) ?? 0) + 1);
+    const answer = answers.get(path);
+    if (answer === 'hang') return;
+    if (!answer) { res.writeHead(404).end(); return; }
+    res.writeHead(answer.status, { 'content-type': answer.type, ...answer.headers }).end(answer.body);
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    base: `http://127.0.0.1:${port}`,
+    answers,
+    asked: (path: string) => asked.get(path) ?? 0,
+    close: () => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }),
+  };
+}
+
+/** How tokens.coingecko.com refused on 2026-11-21: HTTP 429 with an HTML page. */
+const RATE_LIMIT_PAGE: StandInReply = {
+  status: 429, type: 'text/html; charset=UTF-8',
+  body: '<!DOCTYPE html><html><head><title>Too Many Requests</title></head><body>error code: 1015</body></html>',
+};
 
 async function main() {
   const client = getClient('base');
@@ -386,7 +424,7 @@ async function main() {
   // A symbol the list gives to several tokens is refused, naming them, when
   // the name does not tell them apart. The case is taken from the live list,
   // so it holds while CoinGecko's entries change.
-  const listed = await fetchTokenList('https://tokens.coingecko.com/ethereum/all.json', 1);
+  const listed = await listedTokens('ethereum');
   const bySymbol = new Map<string, typeof listed>();
   for (const t of listed) bySymbol.set(symbolKey(t.symbol), [...(bySymbol.get(symbolKey(t.symbol)) ?? []), t]);
   const twins = [...bySymbol.entries()].find(([sym, sharing]) => /^[A-Z0-9]{2,10}$/.test(sym)
@@ -407,13 +445,77 @@ async function main() {
   check('a symbol no list holds is refused, not guessed', unlisted instanceof IntentError && unlisted.code === 'INVALID_INPUT', unlisted?.message);
   const noList = await handleSupply(validateSupplyInput({ token: 'Foo (FOO) on Sepolia' })).then(() => null, (e) => e);
   check('a symbol on a chain with no token list asks for the address', noList instanceof IntentError && noList.code === 'INVALID_INPUT', noList?.message);
-  const listDown = await fetchTokenList('https://tokens.coingecko.com/no-such-platform/all.json', 1).then(() => null, (e) => e);
-  check('a token list that cannot be fetched is an upstream error with its reason', listDown instanceof IntentError
-    && listDown.code === 'UPSTREAM_RPC_ERROR' && listDown.message.includes('HTTP 403'), listDown?.message);
-  const listStarted = Date.now();
-  const listSilent = await fetchTokenList('http://10.255.255.1/all.json', 1, 1_000).then(() => null, (e) => e);
-  check('a token list download is abandoned at its timeout', listSilent instanceof IntentError
-    && listSilent.code === 'UPSTREAM_RPC_ERROR' && Date.now() - listStarted < 3_000, `${Date.now() - listStarted} ms: ${listSilent?.message}`);
+
+  // Token list downloads that fail, against a local stand-in for the host.
+  const host = await standInListHost();
+  const listBody = (chainId: number) => JSON.stringify({
+    tokens: [{ chainId, address: '0x1f573d6fb3f13d689ff844b4ce37794d79a7ff1c', name: 'Bancor Network', symbol: 'BNT', decimals: 18 }],
+  });
+  const unavailable = (e: unknown): e is TokenListUnavailable => e instanceof TokenListUnavailable && e.code === 'UPSTREAM_RPC_ERROR';
+  const fetchError = (path: string, timeoutMs?: number) => fetchTokenList(`${host.base}${path}`, 1, timeoutMs).then(() => null, (e) => e);
+  host.answers.set('/denied.json', { status: 403, type: 'application/xml', body: '<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code></Error>' });
+  const denied = await fetchError('/denied.json');
+  check('a list answered with HTTP 403 is an upstream error with its reason, and no rate limit', unavailable(denied)
+    && denied.message.includes('HTTP 403') && !denied.rateLimited, denied?.message);
+  host.answers.set('/limited.json', RATE_LIMIT_PAGE);
+  const limited = await fetchError('/limited.json');
+  check('HTTP 429 with an HTML page is a rate limit', unavailable(limited) && limited.rateLimited && limited.message.includes('HTTP 429'), limited?.message);
+  host.answers.set('/challenge.json', { status: 200, type: 'text/html', body: '<html><body>Just a moment...</body></html>' });
+  const challenge = await fetchError('/challenge.json');
+  check('an HTML page answered with 200 is a refusal, not a list', unavailable(challenge) && challenge.rateLimited && challenge.message.includes('HTML page'), challenge?.message);
+  host.answers.set('/text.json', { status: 200, type: 'text/plain', body: 'tokens: none' });
+  const notJson = await fetchError('/text.json');
+  check('a body that is not JSON is a failure, and no rate limit', unavailable(notJson) && !notJson.rateLimited && notJson.message.includes('not JSON'), notJson?.message);
+  host.answers.set('/silent.json', 'hang');
+  const silentStarted = Date.now();
+  const silent = await fetchError('/silent.json', 500);
+  check('a download is abandoned at its timeout', unavailable(silent) && Date.now() - silentStarted < 2_000,
+    `${Date.now() - silentStarted} ms: ${silent?.message}`);
+
+  // The cache, on a clock the test moves: a failed download is not repeated
+  // until its backoff has passed, and a stale copy answers meanwhile.
+  let clock = 1_800_000_000_000;
+  const lists = new TokenListCache(host.base, () => clock);
+  const listError = (chain: SupportedChain) => lists.get(chain).then(() => null, (e) => e);
+  host.answers.set('/ethereum/all.json', RATE_LIMIT_PAGE);
+  const refusedFirst = await listError('ethereum');
+  const refusedStarted = Date.now();
+  const refusedAgain = await listError('ethereum');
+  check('after a 429 the list is not asked for again within the backoff, and the refusal says for how long',
+    unavailable(refusedFirst) && unavailable(refusedAgain) && refusedAgain.rateLimited && host.asked('/ethereum/all.json') === 1
+      && refusedAgain.message.includes(`not asked for again for another ${LIST_BACKOFF_MS / 1000} s`) && Date.now() - refusedStarted < 100,
+    refusedAgain?.message);
+  const otherChain = await listError('base');
+  check('a 429 holds back every chain\'s list, since it refuses this client', unavailable(otherChain) && otherChain.rateLimited
+    && host.asked('/base/all.json') === 0, otherChain?.message);
+  clock += LIST_BACKOFF_MS;
+  host.answers.set('/ethereum/all.json', { status: 200, type: 'application/json', body: listBody(1) });
+  const recovered = await lists.get('ethereum');
+  check('once the backoff has passed the list is asked for again', recovered.tokens.length === 1 && host.asked('/ethereum/all.json') === 2);
+  clock += LIST_TTL_MS;
+  host.answers.set('/ethereum/all.json', RATE_LIMIT_PAGE);
+  const staleFirst = await lists.get('ethereum');
+  await new Promise((resolve) => setTimeout(resolve, 200)); // the refresh it started is refused meanwhile
+  const staleAgain = await lists.get('ethereum');
+  check('a stale copy answers through a refused refresh, which is not repeated within the backoff',
+    staleFirst === recovered && staleAgain === recovered && host.asked('/ethereum/all.json') === 3);
+  host.answers.set('/arbitrum-one/all.json', { ...RATE_LIMIT_PAGE, headers: { 'retry-after': '300' } });
+  const lists2 = new TokenListCache(host.base, () => clock);
+  await lists2.get('arbitrum').catch(() => undefined);
+  clock += LIST_BACKOFF_MS + 1_000;
+  const withinRetryAfter = await lists2.get('arbitrum').then(() => null, (e) => e);
+  clock += 300_000 - LIST_BACKOFF_MS;
+  host.answers.set('/arbitrum-one/all.json', { status: 200, type: 'application/json', body: listBody(42161) });
+  const afterRetryAfter = await lists2.get('arbitrum').then((l) => l.tokens.length, (e) => e);
+  check('a Retry-After longer than the backoff is honoured', unavailable(withinRetryAfter) && afterRetryAfter === 1
+    && host.asked('/arbitrum-one/all.json') === 2, withinRetryAfter?.message);
+  host.answers.set('/polygon-pos/all.json', { status: 403, type: 'application/xml', body: '<Error/>' });
+  host.answers.set('/binance-smart-chain/all.json', { status: 200, type: 'application/json', body: listBody(56) });
+  const lists3 = new TokenListCache(host.base, () => clock);
+  await lists3.get('polygon').catch(() => undefined);
+  const unaffected = await lists3.get('bsc').then((l) => l.tokens.length, (e) => e);
+  check('a failure that is no refusal of this client holds back only its own list', unaffected === 1, String(unaffected));
+  await host.close();
 
   // every known token address still answers with the symbol and decimals in the table
   let tokenMismatches: string[] = [];
