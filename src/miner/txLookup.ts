@@ -2,9 +2,18 @@
  * ONCHAIN_TX_LOOKUP intent handler.
  * Pure (input) -> payload against live RPC. The payload carries the fields of
  * Telegraph's V2 response format by name; telegraph/truvian-miner.yaml maps them.
+ *
+ * One lookup, two views of it:
+ *  - the default reply is what the node stores and scores. Its judge model
+ *    reads the stored body with keys sorted and only its first 512 tokens,
+ *    so the default holds the intent's six fields, one direct sentence, a
+ *    verdict and where the facts were read, and nothing bulky.
+ *  - ?detail=full adds every raw field: calldata, decoded ERC-20 transfers,
+ *    and the exact fee figures, including the L1 data fee on rollups.
  */
 import { formatEther, getAddress, isHex } from 'viem';
 import {
+  PUBLIC_RPC_TERMS,
   SUPPORTED_CHAINS,
   chainMeta,
   getRpcClients,
@@ -16,9 +25,16 @@ import {
   IntentError,
   type DecodedTransfer,
   type ExecutionStatus,
+  type RpcMethod,
+  type RpcRead,
+  type TxDetail,
+  type TxFullReply,
   type TxLookupInput,
-  type TxLookupResult,
-  type TxPendingResult,
+  type TxMinedReply,
+  type TxNotFoundReply,
+  type TxPendingReply,
+  type TxProvenance,
+  type TxReply,
 } from '../types/index.js';
 
 /** keccak256("Transfer(address,address,uint256)") */
@@ -133,12 +149,15 @@ export function validateTxLookupInput(raw: unknown): TxLookupInput {
   if (!isHex(txHash) || txHash.length !== 66) {
     throw new IntentError('INVALID_INPUT', 'txHash must be a 32-byte 0x-hex string (params: txHash | tx_hash | hash, or a query containing one)');
   }
-  return { chain, txHash: txHash.toLowerCase() as `0x${string}` };
-}
 
-/** Fields that make a not-found outcome readable as the intent's `status: not_found`. */
-function notFoundFields(txHash: string) {
-  return { tx_hash: txHash, status: 'not_found', from: null, to: null, block_number: null, value_eth: null };
+  // ?detail=full asks for the raw fields as well; anything else is a typo
+  // the caller should hear about rather than a silent default.
+  const detailRaw = body.detail === undefined || body.detail === null ? '' : String(body.detail).trim().toLowerCase();
+  if (detailRaw !== '' && detailRaw !== 'full') {
+    throw new IntentError('INVALID_INPUT', `detail must be "full" or left out; got ${String(body.detail)}`);
+  }
+  const detail: TxDetail = detailRaw === 'full' ? 'full' : 'default';
+  return { chain, txHash: txHash.toLowerCase() as `0x${string}`, detail };
 }
 
 /**
@@ -148,35 +167,35 @@ function notFoundFields(txHash: string) {
  *
  * Searching concurrently keeps latency at roughly one RPC round-trip instead
  * of summing one per chain, which matters because validators score on a deadline.
+ *
+ * A hash no chain has is an answer (`status: not_found`), not an error; an
+ * endpoint failure that leaves a chain unsearched is an error, because
+ * absence is only proven by every chain answering.
  */
-export async function handleTxLookup(input: TxLookupInput): Promise<TxLookupResult | TxPendingResult> {
-  if (input.chain) return lookupOnChain(input.chain, input.txHash);
+export async function handleTxLookup(input: TxLookupInput): Promise<TxReply | TxFullReply> {
+  const readAt = new Date().toISOString();
+  if (input.chain) return replyFor(await lookupOnChain(input.chain, input.txHash), input, readAt);
 
   // Fire every chain at once, then await in priority order so a Base hit
   // returns without waiting on the slower chains it raced.
   const inFlight = SEARCH_CHAINS.map((c) =>
     lookupOnChain(c, input.txHash).then(
       (value) => ({ ok: true as const, value }),
-      (error) => ({ ok: false as const, error }),
+      (error: unknown) => ({ ok: false as const, error }),
     ),
   );
-  const settled = [];
+  const absent: RpcRead[] = [];
+  const failures: unknown[] = [];
   for (const pending of inFlight) {
     const outcome = await pending;
-    if (outcome.ok) return outcome.value;
-    settled.push(outcome.error);
+    if (!outcome.ok) { failures.push(outcome.error); continue; }
+    if (outcome.value.kind !== 'absent') return replyFor(outcome.value, input, readAt);
+    absent.push(...outcome.value.reads);
   }
   // Surface a real upstream failure rather than reporting "not found" when
-  // a chain could not be searched: absence is only proven by every chain answering.
-  const rpcFailure = settled.find(
-    (e) => e instanceof IntentError && e.code === 'UPSTREAM_RPC_ERROR',
-  );
-  if (rpcFailure) throw rpcFailure;
-  throw new IntentError(
-    'TX_NOT_FOUND',
-    `transaction ${input.txHash} not found on any supported chain (${SEARCH_CHAINS.join(', ')})`,
-    notFoundFields(input.txHash),
-  );
+  // a chain could not be searched.
+  if (failures.length > 0) throw failures[0];
+  return notFoundReply(input, absent, readAt, SEARCH_CHAINS);
 }
 
 function isNotFound(err: any): boolean {
@@ -256,7 +275,76 @@ function upstream(what: string, err?: any): IntentError {
   return new IntentError('UPSTREAM_RPC_ERROR', detail ? `${what}: ${detail}` : what);
 }
 
+type RpcTx = Awaited<ReturnType<RpcClient['client']['getTransaction']>>;
 type RpcReceipt = Awaited<ReturnType<RpcClient['client']['getTransactionReceipt']>>;
+
+/**
+ * What one chain's endpoints established about a hash. `reads` are the
+ * answers the outcome rests on; the chain tip, which only feeds the
+ * confirmations count of ?detail=full, is kept apart as `tipRead`.
+ */
+type ChainLookup =
+  | { kind: 'mined'; chain: SupportedChain; tx: RpcTx; receipt: RpcReceipt; tip: bigint | null; reads: RpcRead[]; tipRead: RpcRead | null }
+  | { kind: 'pending'; chain: SupportedChain; tx: RpcTx; reads: RpcRead[] }
+  | { kind: 'absent'; chain: SupportedChain; reads: RpcRead[] };
+
+/** Hostname of an endpoint URL, the form provenance names it by. */
+function hostOf(url: string): string {
+  return new URL(url).host;
+}
+
+async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Promise<ChainLookup> {
+  const endpoints = getRpcClients(chain);
+
+  // The transaction and its receipt are separate records and are searched
+  // separately: an endpoint can hold one and have pruned the other.
+  const [txSearch, receiptSearch, tip] = await Promise.all([
+    searchRpcs(endpoints, (c) => c.getTransaction({ hash: txHash })),
+    searchRpcs(endpoints, (c) => c.getTransactionReceipt({ hash: txHash })),
+    // Through the same short-timeout endpoints as the searches. The shared
+    // fallback client used to be asked here, and one throttled endpoint
+    // behind it stalled whole lookups for up to a minute.
+    chainTip(endpoints),
+  ]);
+  const reads = (method: RpcMethod, urls: string[]): RpcRead[] => urls.map((url) => ({ chain, method, host: hostOf(url) }));
+  const searched = [
+    ...reads('eth_getTransactionByHash', txSearch.answeredBy),
+    ...reads('eth_getTransactionReceipt', receiptSearch.answeredBy),
+  ];
+
+  if (!txSearch.found) {
+    if (receiptSearch.found) {
+      throw upstream(`${chain} returned a receipt for ${txHash} but no endpoint returned the transaction itself`);
+    }
+    if (txSearch.provenAbsent) return { kind: 'absent', chain, reads: searched };
+    // No endpoint that could prove absence answered, so absence is not claimed.
+    throw upstream(`${chain} lookup of ${txHash} could not be completed`, txSearch.error);
+  }
+  const tx = txSearch.found;
+
+  if (!receiptSearch.found) {
+    // Pending means the node itself says the transaction is in no block. A
+    // transaction that has a block but whose receipt no endpoint returned is
+    // mined; its outcome is unknown to us, and that is an upstream failure,
+    // not a pending transaction.
+    if (tx.blockNumber !== null) {
+      throw upstream(
+        `${chain} transaction ${txHash} is mined in block ${tx.blockNumber} but no endpoint returned its receipt`,
+        receiptSearch.error,
+      );
+    }
+    return { kind: 'pending', chain, tx, reads: searched };
+  }
+  return {
+    kind: 'mined',
+    chain,
+    tx,
+    receipt: receiptSearch.found,
+    tip: tip?.number ?? null,
+    reads: searched,
+    tipRead: tip ? { chain, method: 'eth_blockNumber', host: hostOf(tip.url) } : null,
+  };
+}
 
 /** Ethereum mainnet block at which Byzantium (EIP-658: a status code in every receipt) activated. */
 const BYZANTIUM_BLOCK = 4_370_000n;
@@ -271,10 +359,8 @@ const BYZANTIUM_BLOCK = 4_370_000n;
  * from its own re-execution. That status is not part of the receipt, and
  * taking it would make the answer depend on which endpoint replied, so for
  * those blocks no execution result is reported. A missing status on any
- * chain reads the same way; it never reads as a revert, which is what a null
- * status was taken for until now (the first Ethereum transaction, block
- * 46147, was reported reverted). Every other chain served here started
- * after Byzantium.
+ * chain reads the same way; it never reads as a revert. Every other chain
+ * served here started after Byzantium.
  */
 export function executionOf(
   chain: SupportedChain,
@@ -286,78 +372,108 @@ export function executionOf(
   return status === 'success' ? 'success' : 'reverted';
 }
 
-async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Promise<TxLookupResult | TxPendingResult> {
+/** The order provenance lists methods in: the transaction, its receipt, the tip. */
+const METHOD_ORDER: RpcMethod[] = ['eth_getTransactionByHash', 'eth_getTransactionReceipt', 'eth_blockNumber'];
+
+/**
+ * Provenance of a reply: the endpoints and methods whose answers it states,
+ * so each view lists only what it shows (the default has no confirmations
+ * count, so it leaves out the eth_blockNumber read behind it).
+ */
+function provenanceOf(
+  reads: RpcRead[],
+  readAt: string,
+  detail: TxDetail,
+  extra: { blockHash?: string; searched?: SupportedChain[] } = {},
+): TxProvenance {
+  const provenance: TxProvenance = {
+    ...(extra.blockHash ? { block_hash: extra.blockHash } : {}),
+    ...(extra.searched ? { chains_searched: extra.searched } : {}),
+    hosts: [...new Set(reads.map((r) => r.host))],
+    methods: METHOD_ORDER.filter((m) => reads.some((r) => r.method === m)),
+    read_at: readAt,
+    terms: PUBLIC_RPC_TERMS,
+  };
+  if (detail === 'full') provenance.reads = reads;
+  return provenance;
+}
+
+/** The reply for one chain's outcome; a chain that has no such transaction answers not_found. */
+function replyFor(found: ChainLookup, input: TxLookupInput, readAt: string): TxReply | TxFullReply {
+  if (found.kind === 'mined') return minedReply(found, input, readAt);
+  if (found.kind === 'pending') return pendingReply(found, input, readAt);
+  return notFoundReply(input, found.reads, readAt, null);
+}
+
+/** Exact native value in whole coins: formatEther is exact. */
+function valueText(wei: bigint, chain: SupportedChain): string {
+  return `${formatEther(wei)} ${chainMeta(chain).nativeSymbol}`;
+}
+
+function minedReply(
+  m: Extract<ChainLookup, { kind: 'mined' }>,
+  input: TxLookupInput,
+  readAt: string,
+): TxMinedReply | TxFullReply {
+  const { chain, tx, receipt } = m;
   const meta = chainMeta(chain);
-  const endpoints = getRpcClients(chain);
-
-  // The transaction and its receipt are separate records and are searched
-  // separately: an endpoint can hold one and have pruned the other.
-  const [txSearch, receiptSearch, tip] = await Promise.all([
-    searchRpcs(endpoints, (c) => c.getTransaction({ hash: txHash })),
-    searchRpcs(endpoints, (c) => c.getTransactionReceipt({ hash: txHash })),
-    // Through the same short-timeout endpoints as the searches. The shared
-    // fallback client used to be asked here, and one throttled endpoint
-    // behind it stalled whole lookups for up to a minute.
-    chainTip(endpoints),
-  ]);
-  const latestBlock = tip?.number ?? null;
-
-  if (!txSearch.found) {
-    if (receiptSearch.found) {
-      throw upstream(`${chain} returned a receipt for ${txHash} but no endpoint returned the transaction itself`);
-    }
-    if (txSearch.provenAbsent) {
-      throw new IntentError('TX_NOT_FOUND', `transaction ${txHash} not found on ${chain}`, notFoundFields(txHash));
-    }
-    // No endpoint that could prove absence answered, so absence is not claimed.
-    throw upstream(`${chain} lookup of ${txHash} could not be completed`, txSearch.error);
-  }
-  const tx = txSearch.found;
-  const chainLabel = meta.label;
   const hash = tx.hash.toLowerCase();
-  const from = getAddress(tx.from);
-  const valueText = `${formatEther(tx.value)} ${meta.nativeSymbol} (${tx.value} wei)`;
-  // formatEther is exact; Number() of it is the nearest double, the same for the same value
-  const valueEth = Number(formatEther(tx.value));
+  const from = tx.from.toLowerCase();
+  const to = receipt.to ? receipt.to.toLowerCase() : null;
+  const created = receipt.contractAddress ? receipt.contractAddress.toLowerCase() : null;
+  const execution = executionOf(chain, receipt);
+  const value = `${valueText(tx.value, chain)} (${tx.value} wei)`;
 
-  if (!receiptSearch.found) {
-    // Pending means the node itself says the transaction is in no block. A
-    // transaction that has a block but whose receipt no endpoint returned is
-    // mined; its outcome is unknown to us, and that is an upstream failure,
-    // not a pending transaction.
-    if (tx.blockNumber !== null) {
-      throw upstream(
-        `${chain} transaction ${txHash} is mined in block ${tx.blockNumber} but no endpoint returned its receipt`,
-        receiptSearch.error,
-      );
-    }
-    const to = tx.to ? getAddress(tx.to) : null;
-    const answer = [
-      `Transaction ${hash} on ${chainLabel} (chain id ${meta.chainId}) is pending: it has been broadcast but is not yet included in a block.`,
-      to
-        ? `It would transfer ${valueText} from ${from} to the recipient ${to}.`
-        : `It was sent from ${from} to create a contract, with a value of ${valueText}.`,
-    ].join(' ');
-    return {
-      answer,
-      signal: answer,
-      source: `${chainLabel} JSON-RPC eth_getTransactionByHash (no receipt yet)`,
-      confidence: 0.9,
-      tx_hash: hash,
-      status: 'pending',
-      from,
-      to,
-      block_number: null,
-      value_eth: valueEth,
-      chain,
-      chainId: meta.chainId,
-      txHash: hash,
-      valueWei: tx.value.toString(),
-      nonce: tx.nonce,
-      inputData: tx.input,
-    };
-  }
-  const receipt = receiptSearch.found;
+  // Rollups that bill L1 data separately put it on the receipt as l1Fee: the
+  // OP-stack chains and Scroll do, the others here do not (checked against
+  // raw receipts 2026-11-19). Read it from the receipt rather than from a
+  // per-chain flag, so the total is right wherever the field appears. viem's
+  // types don't surface it on generic clients.
+  const l1Fee = BigInt((receipt as any).l1Fee ?? 0);
+  const totalFee = receipt.gasUsed * receipt.effectiveGasPrice + l1Fee;
+
+  // The outcome first, then what moved, value exact in wei. Only a transaction
+  // whose receipt says it succeeded is said to have transferred anything or
+  // created a contract: a reverted one transferred nothing (only its fee was
+  // paid), and one from before Byzantium has no recorded result to say so with.
+  const head = `Transaction ${hash} on ${meta.label} (chain id ${meta.chainId})`;
+  const sent = to
+    ? `It was sent from ${from} to the recipient ${to} with a value of ${value}`
+    : `It was sent from ${from} to create a contract, with a value of ${value}`;
+  const answer =
+    execution === 'success'
+      ? `${head} succeeded in block ${receipt.blockNumber}. ${to
+        ? `It transferred ${value} from ${from} to the recipient ${to}.`
+        : `It was sent from ${from} and created contract ${created} with a value of ${value}.`}`
+      : execution === 'reverted'
+        ? `${head} reverted in block ${receipt.blockNumber} (receipt status 0). ${sent}, and its execution was rolled back.`
+        : `${head} was confirmed in block ${receipt.blockNumber}. ${sent}. Its receipt predates Byzantium (block 4,370,000), so it records no execution result.`;
+
+  const reply: TxMinedReply = {
+    answer,
+    tx_hash: hash,
+    // The intent's vocabulary: a mined transaction is `confirmed` unless its
+    // execution reverted.
+    status: execution === 'reverted' ? 'reverted' : 'confirmed',
+    from,
+    to,
+    // Block heights are far below 2^53, so the number is exact
+    block_number: Number(receipt.blockNumber),
+    // formatEther is exact; Number() of it is the nearest double, the same for the same value
+    value_eth: Number(formatEther(tx.value)),
+    chain,
+    verdict: execution === 'success' ? 'succeeded' : execution === 'reverted' ? 'reverted' : 'no_execution_result',
+    confidence: 0.99,
+    checked_at: new Date().toISOString(),
+    receipt: { execution_status: execution, gas_used: receipt.gasUsed.toString(), total_fee_wei: totalFee.toString() },
+    provenance: provenanceOf(
+      input.detail === 'full' && m.tipRead ? [...m.reads, m.tipRead] : m.reads,
+      readAt,
+      input.detail,
+      { blockHash: receipt.blockHash.toLowerCase() },
+    ),
+  };
+  if (input.detail !== 'full') return reply;
 
   const erc20Transfers: DecodedTransfer[] = [];
   for (const log of receipt.logs) {
@@ -374,53 +490,15 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
     }
   }
 
-  // Rollups that bill L1 data separately put it on the receipt as l1Fee: the
-  // OP-stack chains and Scroll do, the others here do not (checked against
-  // raw receipts 2026-11-19). Read it from the receipt rather than from a
-  // per-chain flag, so the total is right wherever the field appears. viem's
-  // types don't surface it on generic clients.
-  const l1Fee = BigInt((receipt as any).l1Fee ?? 0);
-  const totalFee = receipt.gasUsed * receipt.effectiveGasPrice + l1Fee;
-
-  const execution = executionOf(chain, receipt);
-  const statusWord = execution === 'success' ? 'succeeded' : execution === 'reverted' ? 'reverted' : 'was confirmed';
-  const to = receipt.to ? getAddress(receipt.to) : null;
-  const created = receipt.contractAddress ? getAddress(receipt.contractAddress) : null;
+  // The answer, with the function selector the calldata starts with
   const selector = tx.input && tx.input.length >= 10 ? tx.input.slice(0, 10) : null;
-  // Scored text covers exactly the fact scope ground truth is observed to use
-  // (tx, chain, status, block, value, from/to, selector) - the rank-1 miner
-  // scores 0.981 with this scope, and extra numerics (fees, log counts) cost
-  // precision under the live scorer. Full detail stays in structured fields.
-  const answerParts = [
-    `Transaction ${hash} on ${chainLabel} (chain id ${meta.chainId}) ${statusWord} in block ${receipt.blockNumber}.`,
-    execution === 'not_recorded'
-      // no recorded result, so nothing is said to have been transferred or created
-      ? `It was sent from ${from} ${to ? `to the recipient ${to}` : 'to create a contract'} with a value of ${valueText}. Its receipt predates Byzantium (block 4,370,000), so it records no execution result.`
-      : to
-        ? `It transferred ${valueText} from ${from} to the recipient ${to}${selector && selector !== '0x' ? `, invoking function selector ${selector}` : ''}.`
-        : `It was sent from ${from} and created contract ${created} with a value of ${valueText}.`,
-  ];
-  const answer = answerParts.join(' ');
+  const signal = selector ? `${answer} The calldata starts with function selector ${selector}.` : answer;
+  const createdChecksum = receipt.contractAddress ? getAddress(receipt.contractAddress) : null;
 
   return {
-    answer,
-    // signal is our YAML signal_mapping.label_field - the node's "internal
-    // standard" translation is built from mapped fields, so this must carry
-    // the full factual statement (verified: the rank-1 miner's `signal` is
-    // its complete answer sentence, not a label).
-    signal: answer,
-    source: `${chainLabel} JSON-RPC eth_getTransactionReceipt + eth_getTransactionByHash`,
-    confidence: 0.99,
-    tx_hash: hash,
-    // The intent's vocabulary: a mined transaction is `confirmed` unless its
-    // execution reverted. The receipt's own word is in execution_status.
-    status: execution === 'reverted' ? 'reverted' : 'confirmed',
-    from,
-    to,
-    // Block heights are far below 2^53, so the number is exact
-    block_number: Number(receipt.blockNumber),
-    value_eth: valueEth,
-    chain,
+    ...reply,
+    signal,
+    source: `${meta.label} JSON-RPC ${reply.provenance.methods.join(', ')} from ${reply.provenance.hosts.join(', ')}`,
     chainId: meta.chainId,
     txHash: hash,
     valueWei: tx.value.toString(),
@@ -430,13 +508,95 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
     blockNumber: receipt.blockNumber.toString(),
     blockHash: receipt.blockHash.toLowerCase(),
     transactionIndex: receipt.transactionIndex,
-    contractAddress: created,
+    contractAddress: createdChecksum,
     gasUsed: receipt.gasUsed.toString(),
     effectiveGasPrice: receipt.effectiveGasPrice.toString(),
     l1FeeWei: l1Fee.toString(),
     totalFeeWei: totalFee.toString(),
     logCount: receipt.logs.length,
     erc20Transfers,
-    confirmations: latestBlock === null ? null : (latestBlock - receipt.blockNumber + 1n).toString(),
+    confirmations: m.tip === null ? null : (m.tip - receipt.blockNumber + 1n).toString(),
+  };
+}
+
+function pendingReply(
+  p: Extract<ChainLookup, { kind: 'pending' }>,
+  input: TxLookupInput,
+  readAt: string,
+): TxPendingReply | TxFullReply {
+  const { chain, tx } = p;
+  const meta = chainMeta(chain);
+  const hash = tx.hash.toLowerCase();
+  const from = tx.from.toLowerCase();
+  const to = tx.to ? tx.to.toLowerCase() : null;
+  const value = `${valueText(tx.value, chain)} (${tx.value} wei)`;
+  const head = `Transaction ${hash} on ${meta.label} (chain id ${meta.chainId}) is pending: it has been broadcast but is not yet in a block.`;
+  const answer = to
+    ? `${head} It was sent from ${from} to the recipient ${to} with a value of ${value}.`
+    : `${head} It was sent from ${from} to create a contract, with a value of ${value}.`;
+  const reply: TxPendingReply = {
+    answer,
+    tx_hash: hash,
+    status: 'pending',
+    from,
+    to,
+    block_number: null,
+    value_eth: Number(formatEther(tx.value)),
+    chain,
+    verdict: 'pending',
+    confidence: 0.9,
+    checked_at: new Date().toISOString(),
+    provenance: provenanceOf(p.reads, readAt, input.detail),
+  };
+  if (input.detail !== 'full') return reply;
+  return {
+    ...reply,
+    signal: answer,
+    source: `${meta.label} JSON-RPC ${reply.provenance.methods.join(', ')} from ${reply.provenance.hosts.join(', ')} (no receipt yet)`,
+    chainId: meta.chainId,
+    txHash: hash,
+    valueWei: tx.value.toString(),
+    nonce: tx.nonce,
+    inputData: tx.input,
+  };
+}
+
+/**
+ * `searched`: the chains a lookup with no chain named went through; their
+ * list is the scope of the absence, so it travels in the provenance.
+ */
+function notFoundReply(
+  input: TxLookupInput,
+  reads: RpcRead[],
+  readAt: string,
+  searched: SupportedChain[] | null,
+): TxNotFoundReply | TxFullReply {
+  const chain = searched ? null : input.chain;
+  const answer = chain
+    ? `Transaction ${input.txHash} was not found on ${chainMeta(chain).label}: the endpoints read hold no transaction or receipt with this hash, so it is in no ${chainMeta(chain).label} block.`
+    : `Transaction ${input.txHash} was not found on any of the ${SEARCH_CHAINS.length} chains this miner serves: the endpoints read hold no transaction or receipt with this hash, so it is in no block on any of them.`;
+  const reply: TxNotFoundReply = {
+    answer,
+    tx_hash: input.txHash,
+    status: 'not_found',
+    from: null,
+    to: null,
+    block_number: null,
+    value_eth: null,
+    chain,
+    verdict: 'not_found',
+    // Absence rests on endpoints agreeing that a record does not exist, which
+    // is weaker evidence than a receipt that does.
+    confidence: 0.95,
+    checked_at: new Date().toISOString(),
+    provenance: provenanceOf(reads, readAt, input.detail, searched ? { searched } : {}),
+  };
+  if (input.detail !== 'full') return reply;
+  return {
+    ...reply,
+    signal: answer,
+    source: `JSON-RPC ${reply.provenance.methods.join(', ')} from ${reply.provenance.hosts.join(', ')}`,
+    chainId: chain ? chainMeta(chain).chainId : null,
+    txHash: input.txHash,
   };
 }

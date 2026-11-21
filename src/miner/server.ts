@@ -75,6 +75,7 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
   // Primary Telegraph-facing endpoints (GET + query params). The response
   // body IS the payload: `answer` leads for nodes that read the whole answer
   // with a parser model; the intent's own fields follow for nodes that read by path.
+  // /tx answers concisely unless asked for ?detail=full (see txLookup.ts).
   app.get('/tx', async (req) => handleTxLookup(validateTxLookupInput(req.query)));
   app.get('/gas', async (req) => handleGasPrice(validateGasPriceInput(req.query ?? {})));
   app.get('/balance', async (req) => handleBalance(validateBalanceInput(req.query ?? {})));
@@ -92,9 +93,11 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
     if (err instanceof IntentError) {
       // Intent routes must ALWAYS return a scoreable `answer` string. Validators
       // score the answer text; a bare error body carries none and scores exactly
-      // 0 - strictly worse than stating plainly that the record was not found.
+      // 0 - strictly worse than stating plainly what could not be answered.
       // (Measured: every miner that degrades to 200+prose scores above zero;
-      // every miner that returns an answer-less error scores zero.)
+      // every miner that returns an answer-less error scores zero.) A
+      // transaction that does not exist is not an error: /tx answers it as
+      // status not_found.
       if (isIntentRoute(req.url) && err.code !== 'UPSTREAM_RPC_ERROR') {
         const answer = err.answerText(requestSubject(req.url));
         return reply.status(200).send({
@@ -102,7 +105,6 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
           signal: answer,
           source: 'Truvian onchain lookup over public JSON-RPC',
           confidence: 0,
-          ...err.fields,
           resolved: false,
           error: err.code,
           message: err.message,

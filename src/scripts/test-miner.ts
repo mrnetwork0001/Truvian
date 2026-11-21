@@ -1,8 +1,10 @@
 /**
- * Live verification of both intent handlers against Base mainnet.
- * Picks a real recent transaction, runs ONCHAIN_TX_LOOKUP on it, checks the
- * fee-math invariant against the raw RPC receipt, then runs GAS_PRICE and
- * checks internal consistency. Exits non-zero on any failure.
+ * Live verification of the intent handlers against public RPC.
+ * Picks a real recent Base transaction, runs ONCHAIN_TX_LOOKUP on it and
+ * checks the default reply's shape and provenance, then the raw fields of
+ * ?detail=full, including the fee-math invariant, against the raw receipt;
+ * then GAS_PRICE, WALLET_BALANCE_CHECK and TOKEN_TOTAL_SUPPLY_VERIFY.
+ * Exits non-zero on any failure.
  */
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -16,8 +18,10 @@ import {
 } from '../miner/tokenList.js';
 import { nameAgreement, nameWords, type Agreement } from '../miner/tokenNames.js';
 import { KNOWN_TOKENS, KNOWN_TOKEN_NAMES } from '../config/tokens.js';
-import { createPublicClient, encodeAbiParameters, formatUnits, http, parseAbi, stringToHex, type PublicClient } from 'viem';
-import { chainFromText, executionOf, handleTxLookup, normalizeChain, searchRpcs, validateTxLookupInput } from '../miner/txLookup.js';
+import { createPublicClient, encodeAbiParameters, formatEther, formatUnits, http, parseAbi, stringToHex, type PublicClient } from 'viem';
+import {
+  SEARCH_CHAINS, chainFromText, executionOf, handleTxLookup, normalizeChain, searchRpcs, validateTxLookupInput,
+} from '../miner/txLookup.js';
 import { handleGasPrice, validateGasPriceInput } from '../miner/gasPrice.js';
 import { parseTxStatus } from '../shield/verdict.js';
 import { IntentError } from '../types/index.js';
@@ -127,19 +131,24 @@ async function main() {
   if (!sampleHash) throw new Error('could not find a recent Base tx with logs');
   console.log(`sample Base tx: ${sampleHash}\n`);
 
-  // --- ONCHAIN_TX_LOOKUP ---
+  // The HTTP surface is the contract: ?detail=full is how the raw fields are reached.
+  const app = buildServer();
+  app.log.level = 'warn';
+  const fullTx = async (chain: string, hash: string) =>
+    (await app.inject({ method: 'GET', url: `/tx?chain=${chain}&tx_hash=${hash}&detail=full` })).json();
+
+  // --- ONCHAIN_TX_LOOKUP: the default reply ---
   const txInput = validateTxLookupInput({ chain: 'base', txHash: sampleHash });
   const tx = await handleTxLookup(txInput);
-  console.log(JSON.stringify(tx, null, 2).slice(0, 1200), '\n...');
-  if (tx.status === 'pending') throw new Error('a mined sample transaction was reported pending');
+  console.log(JSON.stringify(tx, null, 2), '\n');
+  if (tx.status !== 'confirmed') throw new Error(`a mined, successful sample transaction was reported ${tx.status}`);
 
   const rawReceipt = await client.getTransactionReceipt({ hash: sampleHash });
   const rawL1Fee = BigInt((rawReceipt as any).l1Fee ?? 0);
-  check('execution_status matches raw receipt', tx.execution_status === rawReceipt.status);
+  const rawTx = await client.getTransaction({ hash: sampleHash });
 
   // Telegraph V2 response format (GET /engine/v1/intents/ONCHAIN_TX_LOOKUP):
   // tx_hash, status, from, to, block_number (scored), value_eth
-  const rawTx = await client.getTransaction({ hash: sampleHash });
   check('V2 tx_hash is the lowercase hash', tx.tx_hash === sampleHash.toLowerCase());
   check('V2 status uses the intent enum', tx.status === 'confirmed', tx.status);
   check(
@@ -152,66 +161,122 @@ async function main() {
     typeof tx.value_eth === 'number' && Math.abs(tx.value_eth - Number(rawTx.value) / 1e18) < 1e-9,
     String(tx.value_eth),
   );
-  check('V2 from/to are the receipt addresses', tx.from.toLowerCase() === rawReceipt.from.toLowerCase()
-    && (tx.to ?? '').toLowerCase() === (rawReceipt.to ?? '').toLowerCase());
-  check('blockNumber matches', tx.blockNumber === rawReceipt.blockNumber.toString());
+  check('V2 from/to are the receipt addresses, in lower case', tx.from === rawReceipt.from.toLowerCase()
+    && tx.to === (rawReceipt.to ? rawReceipt.to.toLowerCase() : null), `${tx.from} -> ${tx.to}`);
+
+  // concise: the intent's fields, the answer, verdict, confidence, time, the
+  // receipt's outcome and cost, provenance; nothing raw
+  const NOT_FOUND_KEYS = ['answer', 'block_number', 'chain', 'checked_at', 'confidence', 'from', 'provenance', 'status', 'to', 'tx_hash', 'value_eth', 'verdict'];
+  const DEFAULT_KEYS = [...NOT_FOUND_KEYS, 'receipt'].sort();
+  check('default reply has exactly the concise keys', JSON.stringify(Object.keys(tx).sort()) === JSON.stringify(DEFAULT_KEYS), Object.keys(tx).sort().join(','));
+  check('default reply carries no raw fields or duplicates (signal, source, inputData, erc20Transfers, camelCase)',
+    !Object.keys(tx).some((k) => /[A-Z]/.test(k) || ['signal', 'source', 'inputData', 'erc20Transfers'].includes(k)));
+  check('default reply is concise: under 1,300 bytes', JSON.stringify(tx).length < 1_300, `${JSON.stringify(tx).length} bytes`);
+  check('verdict and confidence state a successful mined transaction', tx.verdict === 'succeeded' && tx.confidence === 0.99, `${tx.verdict} ${tx.confidence}`);
+  check('receipt summary is the receipt\'s status, gas used and total fee incl. the L1 fee',
+    tx.receipt.execution_status === 'success' && tx.receipt.gas_used === rawReceipt.gasUsed.toString()
+      && BigInt(tx.receipt.total_fee_wei) === rawReceipt.gasUsed * rawReceipt.effectiveGasPrice + rawL1Fee,
+    `${tx.receipt.gas_used} gas, ${tx.receipt.total_fee_wei} wei`);
+  const isIsoUtc = (s: unknown) => typeof s === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(s);
+  check('checked_at and provenance.read_at are ISO UTC times, read before checked',
+    isIsoUtc(tx.checked_at) && isIsoUtc(tx.provenance.read_at) && tx.provenance.read_at <= tx.checked_at,
+    `${tx.provenance.read_at} .. ${tx.checked_at}`);
+
+  // provenance: which endpoints answered, which methods, the block hash, the terms
+  const hostsOf = (name: SupportedChain) => new Set(getRpcClients(name).map(({ url }) => new URL(url).host));
+  check('provenance block_hash is the receipt block hash', tx.provenance.block_hash === rawReceipt.blockHash.toLowerCase());
+  check('provenance hosts are Base endpoints from src/config/chains.ts',
+    tx.provenance.hosts.length > 0 && tx.provenance.hosts.every((h) => hostsOf('base').has(h)), tx.provenance.hosts.join(', '));
+  check('provenance methods are the two reads the reply states',
+    JSON.stringify(tx.provenance.methods) === JSON.stringify(['eth_getTransactionByHash', 'eth_getTransactionReceipt']), tx.provenance.methods.join(', '));
+  check('provenance states the registry terms', JSON.stringify(tx.provenance.terms) === JSON.stringify(PUBLIC_RPC_TERMS));
+  check('provenance lists no search when a chain was named', !('chains_searched' in tx.provenance) && !('reads' in tx.provenance));
+
+  // answer: the outcome and block first, then sender, recipient and exact value
+  check('answer present and number-first',
+    tx.answer.startsWith(`Transaction ${tx.tx_hash} on Base (chain id 8453) succeeded in block ${tx.block_number}.`), tx.answer);
+  check('answer names sender and recipient', tx.answer.includes(tx.from) && (tx.to === null || tx.answer.includes(tx.to)));
+  check('answer states the exact value, in ETH and in wei', tx.answer.includes(`${formatEther(rawTx.value)} ETH (${rawTx.value} wei)`));
+  check('Shield reads the answer as a success', parseTxStatus(tx.answer) === 'success');
+
+  // --- ?detail=full: the default reply plus every raw field ---
+  const full = await fullTx('base', sampleHash);
+  check('detail=full keeps every default field', DEFAULT_KEYS.filter((k) => !['checked_at', 'provenance'].includes(k))
+    .every((k) => JSON.stringify(full[k]) === JSON.stringify((tx as any)[k])));
+  check('detail=full execution_status matches raw receipt', full.execution_status === rawReceipt.status, full.execution_status);
+  check('detail=full blockNumber matches', full.blockNumber === rawReceipt.blockNumber.toString());
   check(
     'fee invariant: totalFee = gasUsed*effectiveGasPrice + l1Fee',
-    BigInt(tx.totalFeeWei) === rawReceipt.gasUsed * rawReceipt.effectiveGasPrice + rawL1Fee,
-    `total=${tx.totalFeeWei} l1=${tx.l1FeeWei}`,
+    BigInt(full.totalFeeWei) === rawReceipt.gasUsed * rawReceipt.effectiveGasPrice + rawL1Fee,
+    `total=${full.totalFeeWei} l1=${full.l1FeeWei}`,
   );
-  check('l1Fee captured on OP-stack chain', BigInt(tx.l1FeeWei) === rawL1Fee, tx.l1FeeWei);
-  check('logCount matches', tx.logCount === rawReceipt.logs.length, String(tx.logCount));
-  check('no JS numbers in wei fields', /^[0-9]+$/.test(tx.totalFeeWei) && /^[0-9]+$/.test(tx.valueWei));
+  check('l1Fee captured on OP-stack chain', BigInt(full.l1FeeWei) === rawL1Fee, full.l1FeeWei);
+  check('gasUsed and effectiveGasPrice are the receipt figures',
+    full.gasUsed === rawReceipt.gasUsed.toString() && full.effectiveGasPrice === rawReceipt.effectiveGasPrice.toString());
+  check('logCount matches', full.logCount === rawReceipt.logs.length, String(full.logCount));
+  check('no JS numbers in wei fields', /^[0-9]+$/.test(full.totalFeeWei) && /^[0-9]+$/.test(full.valueWei));
   check(
     'transfer amounts are decimal strings',
-    tx.erc20Transfers.every((t) => /^[0-9]+$/.test(t.amount)),
-    `${tx.erc20Transfers.length} transfers decoded`,
+    Array.isArray(full.erc20Transfers) && full.erc20Transfers.every((t: { amount: string }) => /^[0-9]+$/.test(t.amount)),
+    `${full.erc20Transfers?.length} transfers decoded`,
   );
-
-  // answer-first format: the composed answer must carry the exact figures
-  check('answer present and number-first', tx.answer.length > 50 && tx.answer.startsWith('Transaction 0x'));
-  check('answer contains tx hash', tx.answer.includes(tx.txHash));
-  check('answer contains block number', tx.answer.includes(`block ${tx.blockNumber}`));
-  check('answer contains from/to addresses', tx.answer.includes(tx.from) && (tx.to === null || tx.answer.includes(tx.to)));
-  check('scored answer stays in ground-truth scope (no fee numerics)', !tx.answer.includes(tx.totalFeeWei));
-  check('total fee still in structured payload', BigInt(tx.totalFeeWei) > 0n);
-  check('answer states status word', /succeeded|reverted/.test(tx.answer));
-  check('signal carries the full answer (scored via label_field)', tx.signal === tx.answer);
-  check('answer includes function selector when present', tx.inputData === '0x' || tx.answer.includes(tx.inputData.slice(0, 10)));
+  check('detail=full inputData is the raw calldata', full.inputData === rawTx.input);
+  check('detail=full signal is the answer plus the function selector', full.signal.startsWith(tx.answer)
+    && (full.inputData === '0x' || full.signal.includes(`function selector ${full.inputData.slice(0, 10)}`)));
+  check('detail=full keeps the receipt summary and its parts agree', JSON.stringify(full.receipt) === JSON.stringify(tx.receipt)
+    && full.totalFeeWei === tx.receipt.total_fee_wei && full.gasUsed === tx.receipt.gas_used);
+  check('scored answer stays in ground-truth scope (no fee numerics)', !tx.answer.includes(full.totalFeeWei));
+  check('detail=full provenance adds each read, the tip read included',
+    Array.isArray(full.provenance.reads) && full.provenance.reads.some((r: { method: string }) => r.method === 'eth_blockNumber')
+    && full.provenance.methods.includes('eth_blockNumber'));
 
   // flexible input aliases
   const viaAlias = validateTxLookupInput({ chain: 'BASE', tx_hash: sampleHash });
   check('input aliases: tx_hash + case-insensitive chain', viaAlias.chain === 'base' && viaAlias.txHash === sampleHash.toLowerCase());
   const viaQuery = validateTxLookupInput({ query: `look up ${sampleHash} on base please` });
   check('input via natural-language query', viaQuery.txHash === sampleHash.toLowerCase());
+  check('detail defaults to the concise reply; "full" is accepted in any case',
+    viaAlias.detail === 'default' && validateTxLookupInput({ chain: 'base', tx_hash: sampleHash, detail: 'FULL' }).detail === 'full');
 
-  // determinism: same input twice -> identical scored payload (confirmations may differ)
+  // determinism: same input twice -> identical facts (the read times and the
+  // answering endpoint are provenance, not facts)
   const tx2 = await handleTxLookup(txInput);
-  if (tx2.status === 'pending') throw new Error('a mined sample transaction was reported pending');
-  const scrub = ({ confirmations, ...rest }: typeof tx) => rest;
-  check('deterministic: identical payload on repeat call', JSON.stringify(scrub(tx)) === JSON.stringify(scrub(tx2)));
+  const facts = ({ checked_at, provenance, ...rest }: Record<string, unknown>) => JSON.stringify(rest);
+  check('deterministic: identical facts on repeat call', facts(tx as any) === facts(tx2 as any)
+    && tx2.provenance.block_hash === tx.provenance.block_hash);
 
-  // error path: unknown tx
-  const missing = await handleTxLookup(
-    validateTxLookupInput({ chain: 'base', txHash: `0x${'ab'.repeat(32)}` }),
-  ).then(() => null, (e) => e);
-  check('unknown tx -> TX_NOT_FOUND', missing instanceof IntentError && missing.code === 'TX_NOT_FOUND');
-  check(
-    'TX_NOT_FOUND carries V2 status not_found and the hash',
-    missing instanceof IntentError && missing.fields.status === 'not_found' && missing.fields.tx_hash === `0x${'ab'.repeat(32)}`,
-  );
+  // unknown tx: an answer in the intent's vocabulary, with the reads that prove it
+  const missing = await handleTxLookup(validateTxLookupInput({ chain: 'base', txHash: `0x${'ab'.repeat(32)}` }));
+  check('unknown tx -> status not_found with the hash and null fields', missing.status === 'not_found'
+    && missing.tx_hash === `0x${'ab'.repeat(32)}` && missing.block_number === null && missing.from === null
+    && missing.value_eth === null && missing.verdict === 'not_found' && missing.chain === 'base');
+  check('not_found names the endpoints that proved absence',
+    missing.provenance.hosts.length > 0 && missing.provenance.hosts.every((h) => hostsOf('base').has(h))
+    && missing.provenance.methods.includes('eth_getTransactionByHash') && !('block_hash' in missing.provenance),
+    missing.provenance.hosts.join(', '));
+  check('Shield reads the not-found answer as not found', parseTxStatus(missing.answer) === 'not_found', missing.answer);
+
+  // A reverted transaction keeps its block and says so in the intent's words
+  // (Ethereum, block 26462180, found 2026-11-21).
+  const rev = await handleTxLookup(validateTxLookupInput({ chain: 'ethereum', tx_hash: '0x67e131e375de08f4f4702d9cc8eb21f0a6ddb1f98789e773a941265f67942eaf' }));
+  check('reverted tx: status reverted, verdict reverted, its block kept', rev.status === 'reverted' && rev.verdict === 'reverted'
+    && rev.block_number === 26462180 && parseTxStatus(rev.answer) === 'reverted', `${rev.status} ${rev.block_number}`);
+  check('a reverted tx is not said to have transferred anything',
+    !/transferred|created contract/.test(rev.answer) && /execution was rolled back/.test(rev.answer)
+      && rev.status === 'reverted' && rev.receipt.execution_status === 'reverted', rev.answer);
 
   // Before Byzantium (Ethereum block 4,370,000) receipts had no status field.
   // The first Ethereum transaction (block 46147) used to be reported reverted.
   const firstTx = '0x5c504ed432cb51138bcf09aa5e8a410dd4a1e204ef84bfed1be16dfba1b22060';
   const preByzantium = await handleTxLookup(validateTxLookupInput({ chain: 'ethereum', tx_hash: firstTx }));
   check('pre-Byzantium tx is confirmed with no recorded execution result, not reverted',
-    preByzantium.status === 'confirmed' && preByzantium.block_number === 46147 && preByzantium.execution_status === 'not_recorded',
-    `${preByzantium.status} ${preByzantium.status !== 'pending' ? preByzantium.execution_status : ''}`);
+    preByzantium.status === 'confirmed' && preByzantium.block_number === 46147 && preByzantium.verdict === 'no_execution_result',
+    `${preByzantium.status} ${preByzantium.verdict}`);
   check('pre-Byzantium answer says the receipt records no execution result, and Shield reads it as confirmed',
-    /records no execution result/.test(preByzantium.answer) && !/revert|fail|transferred/i.test(preByzantium.answer)
+    /records no execution result/.test(preByzantium.answer) && !/revert|fail/i.test(preByzantium.answer)
     && parseTxStatus(preByzantium.answer) === 'success', preByzantium.answer);
+  const preByzantiumFull = await fullTx('ethereum', firstTx);
+  check('pre-Byzantium detail=full execution_status is not_recorded', preByzantiumFull.execution_status === 'not_recorded', preByzantiumFull.execution_status);
   // Endpoints disagree about that receipt: geth-style ones return `root` and no
   // `status`, others fill a status in from re-execution. Neither may change the answer.
   const statuses: string[] = [];
@@ -269,16 +334,19 @@ async function main() {
       const got = await handleTxLookup(validateTxLookupInput({ chain: String(chainMeta(name).chainId), tx_hash: hash }));
       const raw = await c.getTransactionReceipt({ hash });
       check(
-        `${name}: lookup by chain id returns the receipt's block`,
-        got.status !== 'pending' && BigInt(got.block_number) === raw.blockNumber && got.chain === name
-          && got.answer.includes(` ${chainMeta(name).nativeSymbol} (`),
-        `${got.status} block ${got.block_number}`,
+        `${name}: lookup by chain id returns the receipt's block, named endpoints and the value in ${chainMeta(name).nativeSymbol}`,
+        got.block_number !== null && BigInt(got.block_number) === raw.blockNumber && got.chain === name
+          && got.answer.includes(` ${chainMeta(name).nativeSymbol} (`)
+          && got.provenance.hosts.length > 0 && got.provenance.hosts.every((h) => hostsOf(name).has(h)),
+        `${got.status} block ${got.block_number} from ${got.provenance.hosts.join(', ')}`,
       );
       // the receipt's own l1Fee, where it has one, belongs in the total (OP-stack chains and Scroll)
       const rawL1 = BigInt((raw as any).l1Fee ?? 0);
+      const gotFull = await fullTx(name, hash);
       check(
-        `${name}: total fee = gasUsed * effectiveGasPrice + the receipt's L1 fee`,
-        got.status !== 'pending' && BigInt(got.totalFeeWei) === raw.gasUsed * raw.effectiveGasPrice + rawL1,
+        `${name}: detail=full total fee = gasUsed * effectiveGasPrice + the receipt's L1 fee, as the default receipt states it`,
+        gotFull.totalFeeWei !== undefined && BigInt(gotFull.totalFeeWei) === raw.gasUsed * raw.effectiveGasPrice + rawL1
+          && got.status !== 'not_found' && got.status !== 'pending' && got.receipt.total_fee_wei === gotFull.totalFeeWei,
         `l1Fee ${rawL1}`,
       );
     } catch (e: any) {
@@ -349,7 +417,7 @@ async function main() {
         const got = await handleTxLookup(validateTxLookupInput({ chain: name, tx_hash: sample.hash }));
         check(
           `${name}: ${age} old transaction returns its block`,
-          got.status !== 'pending' && BigInt(got.block_number) === sample.block,
+          got.block_number !== null && BigInt(got.block_number) === sample.block,
           `${got.status} block ${got.block_number}`,
         );
       } catch (e: any) {
@@ -361,16 +429,25 @@ async function main() {
   // speed: a dead endpoint must not stall a lookup (validators score on a deadline)
   const timed = async (input: Record<string, string>) => {
     const started = Date.now();
-    const outcome = await handleTxLookup(validateTxLookupInput(input)).then(() => 'found', (e) => (e instanceof IntentError ? e.code : 'error'));
-    return { outcome, ms: Date.now() - started };
+    const reply = await handleTxLookup(validateTxLookupInput(input)).catch((e) => e);
+    const outcome: string = reply instanceof IntentError ? reply.code : reply instanceof Error ? 'error' : reply.status;
+    return { reply, outcome, ms: Date.now() - started };
   };
   const knownHash = '0xa1c4b88b9ab5f6efc19a52f9d9d0c8ebd63023598f0bbbb7654bcdf44f7e2a36';
   const foundNoChain = await timed({ hash: knownHash });
   check('a known hash with no chain named is found across all chains within 5 s',
-    foundNoChain.outcome === 'found' && foundNoChain.ms < 5_000, `${foundNoChain.ms} ms`);
+    foundNoChain.outcome === 'confirmed' && foundNoChain.reply.chain === 'ethereum' && foundNoChain.ms < 5_000,
+    `${foundNoChain.outcome} in ${foundNoChain.ms} ms`);
   const unknownNoChain = await timed({ hash: `0x${'e1'.repeat(32)}` });
-  check('an unknown hash with no chain named is answered within 8 s',
-    unknownNoChain.outcome === 'TX_NOT_FOUND' && unknownNoChain.ms < 8_000, `${unknownNoChain.outcome} in ${unknownNoChain.ms} ms`);
+  check('an unknown hash with no chain named is answered not_found within 8 s',
+    unknownNoChain.outcome === 'not_found' && unknownNoChain.ms < 8_000, `${unknownNoChain.outcome} in ${unknownNoChain.ms} ms`);
+  if (unknownNoChain.outcome === 'not_found') {
+    const p = unknownNoChain.reply.provenance;
+    check('a no-chain not_found lists every chain searched and endpoints from more than one chain',
+      unknownNoChain.reply.chain === null && JSON.stringify(p.chains_searched) === JSON.stringify(SEARCH_CHAINS)
+        && p.hosts.some((h: string) => hostsOf('base').has(h)) && p.hosts.some((h: string) => hostsOf('ethereum').has(h)),
+      `${p.hosts.length} hosts`);
+  }
 
   // error path: bad input
   const bad = (() => { try { validateTxLookupInput({ chain: 'base', txHash: '0x123' }); return null; } catch (e) { return e; } })();
@@ -783,16 +860,23 @@ async function main() {
 
   // --- HTTP surface: the exact bodies the node reads through intent_mapping ---
   console.log('');
-  const app = buildServer();
   const viaHttp = await app.inject({ method: 'GET', url: `/tx?tx_hash=${sampleHash}&chain=base` });
   const body = viaHttp.json();
   check('GET /tx returns the V2 fields at top level', viaHttp.statusCode === 200 && body.tx_hash === sampleHash.toLowerCase()
     && body.status === 'confirmed' && typeof body.block_number === 'number' && typeof body.value_eth === 'number');
+  check('GET /tx returns the concise reply by default', JSON.stringify(Object.keys(body).sort()) === JSON.stringify(DEFAULT_KEYS)
+    && typeof body.provenance?.block_hash === 'string', Object.keys(body).sort().join(','));
   const gone = await app.inject({ method: 'GET', url: `/tx?tx_hash=0x${'ab'.repeat(32)}&chain=base` });
   const goneBody = gone.json();
-  check('GET /tx for an unknown hash returns 200 with status not_found and answer text',
+  check('GET /tx for an unknown hash returns 200 with status not_found, answer text and provenance',
     gone.statusCode === 200 && goneBody.status === 'not_found' && goneBody.tx_hash === `0x${'ab'.repeat(32)}`
-      && goneBody.block_number === null && typeof goneBody.answer === 'string' && goneBody.answer.length > 40);
+      && goneBody.block_number === null && typeof goneBody.answer === 'string' && goneBody.answer.length > 40
+      && JSON.stringify(Object.keys(goneBody).sort()) === JSON.stringify(NOT_FOUND_KEYS) && goneBody.provenance.hosts.length > 0);
+  const goneFull = await fullTx('base', `0x${'ab'.repeat(32)}`);
+  check('GET /tx?detail=full for an unknown hash adds the raw fields it has', goneFull.status === 'not_found'
+    && goneFull.chainId === 8453 && goneFull.txHash === `0x${'ab'.repeat(32)}` && Array.isArray(goneFull.provenance.reads));
+  const typo = await app.inject({ method: 'GET', url: `/tx?tx_hash=${sampleHash}&chain=base&detail=everything` });
+  check('an unknown detail value is refused with answer text, not ignored', typo.statusCode === 200 && typo.json().error === 'INVALID_INPUT');
   const gasHttp = await app.inject({ method: 'GET', url: '/gas?chain=ethereum' });
   const gasBody = gasHttp.json();
   check('GET /gas returns the V2 fields at top level', gasHttp.statusCode === 200 && gasBody.chain === 'ethereum'
