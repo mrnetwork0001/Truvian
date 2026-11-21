@@ -279,7 +279,43 @@ export function notExamined(...texts: unknown[]): string | null {
   return null;
 }
 
-function securityFindings(p: Purchase | undefined): Finding[] {
+/**
+ * Words any review uses whatever it is about. A token's deployer picks its
+ * symbol and name, so a token called "Secure" or "Token" is not mentioned by
+ * a generic answer that begins "Secure." or talks about "the token contract".
+ */
+const REVIEW_WORDS = new Set(['secure', 'insecure', 'needs changes', 'token', 'contract', 'coin', 'address', 'input', 'query', 'request', 'the', 'no', 'none']);
+
+/**
+ * How a security answer shows it is about this token: it names the token's
+ * address, or its symbol or name as a whole word, spelled as the contract
+ * reports it, or it reports scan facts (honeypot, taxes, holders), which come
+ * only from scanning a deployed contract. Returns what it found, or null.
+ *
+ * Seen live (memo WOYbyG3x): "Secure. ... there are no injection vectors,
+ * authentication, or exposure concerns present. No further issues
+ * identified." That answer names no token at all. A generic answer like it
+ * could pass for any token, so a "Secure" verdict or a clean scan clears a
+ * token only when the answer refers to that token.
+ */
+export function mentionsToken(texts: unknown[], token: Pick<TokenFacts, 'address' | 'symbol' | 'name'>): string | null {
+  const parts = texts.flatMap((t) => (typeof t === 'string' ? [t] : Array.isArray(t) ? t.map(String) : []));
+  const all = parts.join('\n');
+  if (all.toLowerCase().includes(token.address.toLowerCase())) return `its address ${token.address}`;
+  for (const [what, word] of [['symbol', token.symbol], ['name', token.name]] as const) {
+    const w = word?.trim();
+    if (!w || w.length < 2 || REVIEW_WORDS.has(w.toLowerCase())) continue;
+    const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'u').test(all)) return `its ${what} "${w}"`;
+  }
+  for (const part of parts) {
+    const f = summaryFacts(part);
+    if (f.honeypot !== null || f.buyTax !== null || f.sellTax !== null || f.top10 !== null) return 'scan facts (honeypot, taxes, holders)';
+  }
+  return null;
+}
+
+function securityFindings(p: Purchase | undefined, token: TokenFacts): Finding[] {
   if (!p || !p.ok || !p.fields) return [unavailable(p, 'security', 'Security review')];
   const examined = notExamined(p.fields.summary, p.fields.issues);
   if (examined) {
@@ -289,16 +325,26 @@ function securityFindings(p: Purchase | undefined): Finding[] {
       source: 'telegraph', evidence: ['security'],
     }];
   }
-  return securityFindingsFrom(p, p.fields);
+  return securityFindingsFrom(p, p.fields, token);
 }
 
-function securityFindingsFrom(p: Purchase, f: Record<string, unknown>): Finding[] {
+function securityFindingsFrom(p: Purchase, f: Record<string, unknown>, token: TokenFacts): Finding[] {
   const out: Finding[] = [];
   const verdict = str(f.verdict);
   const count = num(f.vulnerability_count);
   const summary = str(f.summary);
   const facts = summaryFacts(summary);
   const ev: PurchaseKey[] = ['security'];
+  const about = mentionsToken([summary, f.issues], token);
+  const notAbout = (claim: string): Finding => {
+    const names = [token.symbol, token.name ? `"${token.name}"` : null, `the address ${token.address}`].filter((x): x is string => Boolean(x));
+    const named = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : names[0];
+    return {
+      rule: 'security.not_about_token', severity: 'review', title: 'The security review does not mention this token',
+      detail: `The answer ${claim} but does not name ${named}, and reports no scan facts (honeypot, taxes, holders). An answer that could be about any contract is no evidence that this one is safe.`,
+      source: 'telegraph', evidence: ev,
+    };
+  };
 
   if (verdict === 'Insecure') out.push({ rule: 'security.insecure', severity: 'block', title: 'Security review: insecure', detail: summary ?? 'The security review judged the contract insecure.', source: 'telegraph', evidence: ev });
   else if (verdict === 'Needs changes') out.push({ rule: 'security.needs_changes', severity: 'review', title: 'Security review: needs changes', detail: summary ?? 'The security review asked for changes.', source: 'telegraph', evidence: ev });
@@ -323,9 +369,12 @@ function securityFindingsFrom(p: Purchase, f: Record<string, unknown>): Finding[
     out.push({ rule: 'security.issue', severity: /honeypot|blacklist|cannot sell|rug/i.test(issue) ? 'block' : 'review', title: 'Security review issue', detail: issue, source: 'telegraph', evidence: ev });
   }
 
-  // Clearing needs a positive basis: a Secure verdict, or no verdict but every scan fact present and clean.
+  // Clearing needs a positive basis about this token: a Secure verdict, or no
+  // verdict but every scan fact present and clean, in an answer that refers to it.
   if (verdict === 'Secure') {
-    out.push({ rule: 'security.secure', severity: 'pass', title: 'Security review: secure', detail: summary ?? 'The security review judged the contract secure.', source: 'telegraph', evidence: ev });
+    out.push(about
+      ? { rule: 'security.secure', severity: 'pass', title: 'Security review: secure', detail: summary ?? 'The security review judged the contract secure.', source: 'telegraph', evidence: ev }
+      : notAbout('gives the verdict "Secure"'));
   } else if (verdict === null) {
     const complete = facts.honeypot !== null && facts.buyTax !== null && facts.sellTax !== null && facts.top10 !== null;
     if (!complete) {
@@ -335,11 +384,13 @@ function securityFindingsFrom(p: Purchase, f: Record<string, unknown>): Finding[
         source: 'telegraph', evidence: ev,
       });
     } else if (!out.some((x) => (x.severity === 'block' || x.severity === 'review') && x.rule !== 'security.holder_concentration')) {
-      out.push({
-        rule: 'security.scan_clean', severity: 'pass', title: 'Contract scan clean',
-        detail: `No verdict field (status ${JSON.stringify(p.fieldStatus)}), so the decision rests on the scan facts reported: honeypot ${facts.honeypot}, buy tax ${pct(facts.buyTax!)}, sell tax ${pct(facts.sellTax!)}, top 10 holders ${pct(facts.top10!)}.`,
-        source: 'telegraph', evidence: ev,
-      });
+      out.push(about
+        ? {
+          rule: 'security.scan_clean', severity: 'pass', title: 'Contract scan clean',
+          detail: `No verdict field (status ${JSON.stringify(p.fieldStatus)}), so the decision rests on the scan facts reported: honeypot ${facts.honeypot}, buy tax ${pct(facts.buyTax!)}, sell tax ${pct(facts.sellTax!)}, top 10 holders ${pct(facts.top10!)}.`,
+          source: 'telegraph', evidence: ev,
+        }
+        : notAbout('reports a clean scan'));
     }
   }
   return out;
@@ -440,7 +491,7 @@ export function evaluate(
       decisionRule: 'any blocking finding rejects',
     };
   }
-  const security = securityFindings(by('security'));
+  const security = securityFindings(by('security'), facts);
   const depth = by('liquidity')?.ok ? num(by('liquidity')!.fields?.liquidity_usd) : null;
   for (const f of security) {
     if (f.rule === 'security.holder_concentration' && depth !== null && depth >= POLICY.concentrationDeepLiquidityUsd) {

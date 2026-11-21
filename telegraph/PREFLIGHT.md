@@ -107,6 +107,7 @@ like the pre-sign check.
 | sanctions near match (score ≥ 0.85) or no clear result | review |
 | any check that did not answer, or escrow or budget too low to buy | review |
 | an answer that says it examined nothing ("no code was provided", "insufficient data", "the input is merely a token contract address query", "nothing to assess"), whatever verdict or figure it carries | review: no evidence either way; it can neither clear nor reject a token |
+| a `Secure` verdict or a clean scan in an answer that names neither the token's address nor its symbol or name (as whole words, spelled as the contract reports them) and reports no scan facts | review: "the security review does not mention this token"; a symbol or name that is an ordinary review word ("Secure", "Token") does not count |
 | upgradeable proxy, contract owner | info, disclosed |
 
 ## Measured on 2026-11-20

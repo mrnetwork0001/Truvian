@@ -18,6 +18,7 @@ import {
   normalizePreflightRequest,
   PreflightInputError,
   runPreflight,
+  mentionsToken,
   notExamined,
   summaryFacts,
   type Purchase,
@@ -319,6 +320,35 @@ const liquidityWeth = bought('liquidity', 'LIQUIDITY_DEPTH_VERIFY_GENERAL', { li
   const r = evaluate(tradeWeth, wethFacts, [securityWethNvd, supplyWeth, washWethTxLens, liquidityWeth], null);
   check('B4k2AxbY replayed: the NVD review counts as a review (three issues, verdict Secure)', r.findings.filter((f) => f.rule === 'security.issue').length === 3 && r.findings.some((f) => f.rule === 'security.secure') && !r.findings.some((f) => f.rule === 'security.not_examined'));
   check('B4k2AxbY replayed: TxLens\'s "Insufficient data" wash answer is no evidence, decision REVIEW as live', r.findings.some((f) => f.rule === 'wash.not_examined') && r.decision === 'REVIEW');
+}
+
+// ---------- unit: a pass must be about this token ----------
+
+{
+  const usdc = { address: USDC, symbol: 'USDC', name: 'USD Coin' };
+  check('WOYbyG3x "Secure" names no token', mentionsToken([secureQueryOnly.fields!.summary, secureQueryOnly.fields!.issues], usdc) === null);
+  check('FKLfi2qT "Secure" names no token', mentionsToken(['Secure. No code, configuration, or system description was provided to evaluate, so there are no observable security weaknesses to address.'], { address: SQUID, symbol: 'SQUID', name: 'Squid Game' }) === null);
+  check('the GoPlus scan names USDC by its address', /address/.test(mentionsToken([securityUsdc.fields!.summary], usdc) ?? ''));
+  check('the NVD review (B4k2AxbY) names WETH as a word', /symbol "WETH"/.test(mentionsToken([securityWethNvd.fields!.summary, securityWethNvd.fields!.issues], wethFacts) ?? ''), String(mentionsToken([securityWethNvd.fields!.summary, securityWethNvd.fields!.issues], wethFacts)));
+  check('"WETH9" alone is not the word WETH', mentionsToken(['The WETH9 contract is a legacy implementation.'], wethFacts) === null);
+  check('the address counts in any letter case', mentionsToken([`Secure: ${USDC.toLowerCase()} is fine`], usdc) !== null);
+  check('scan facts count as being about a contract', mentionsToken(['Secure. honeypot: no; buy tax 0%, sell tax 0%'], usdc) !== null);
+  check('a token named after a review word is not "mentioned" by a generic answer', mentionsToken(['Secure. No further issues identified.'], { address: USDC, symbol: 'Secure', name: 'Token' }) === null);
+
+  // The second half of the live WOYbyG3x answer, verbatim: it says nothing about examining, so only the token rule catches it.
+  const generic = bought('security', 'SECURITY_REVIEW_GENERAL', {
+    verdict: 'Secure', vulnerability_count: 0, issues: null,
+    summary: 'Secure. There are no injection vectors, authentication, or exposure concerns present. No further issues identified.',
+  }, { verdict: 'ok', vulnerability_count: 'ok', issues: 'missing', summary: 'ok' });
+  check('the generic tail is not "examined nothing" (the token rule must catch it)', notExamined(generic.fields!.summary) === null);
+  const r = evaluate(tradeUsdc, usdcFacts, [generic, supplyUsdc, washUsdc, liquidityUsdc], null);
+  const finding = r.findings.find((f) => f.rule === 'security.not_about_token');
+  check('a "Secure" that names no token is a review finding, not a pass: REVIEW', finding?.severity === 'review' && !r.findings.some((f) => f.rule === 'security.secure') && r.decision === 'REVIEW', r.findings.map((f) => `${f.rule}:${f.severity}`).join(','));
+  check('the finding says what the answer failed to name', finding?.title === 'The security review does not mention this token' && finding.detail.includes(USDC) && finding.detail.includes('USDC'), finding?.detail);
+  const named = evaluate(tradeUsdc, usdcFacts, [{ ...generic, fields: { ...generic.fields!, summary: 'Secure. USDC has no injection vectors, authentication, or exposure concerns. No further issues identified.' } }, supplyUsdc, washUsdc, liquidityUsdc], null);
+  check('the same "Secure" naming USDC passes, and USDC clears: HOLD', named.decision === 'HOLD' && named.findings.some((f) => f.rule === 'security.secure'), named.findings.filter((f) => f.severity === 'review').map((f) => f.rule).join(','));
+  const nvd = evaluate(tradeWeth, wethFacts, [securityWethNvd, supplyWeth, washWethTxLens, liquidityWeth], null);
+  check('the NVD review of WETH still passes the token rule', !nvd.findings.some((f) => f.rule === 'security.not_about_token'));
 }
 
 {
