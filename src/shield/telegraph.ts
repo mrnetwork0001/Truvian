@@ -803,20 +803,79 @@ async function askRoutedApiKey(
  *    answered in the same second
  * A miner that answered badly is not retried: that is a real answer.
  */
+/** The engine route refused the request shape or does not exist (as opposed to a failed answer). */
+class EngineRouteError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+  }
+}
+
+/**
+ * The routed ask without the agent: POST /engine/ask with the intent and its
+ * typed params, paid from the same escrow as /agent/chat.
+ *
+ * Verified 2026-11-21: one ask answered in 3 s and billed exactly the one
+ * miner call it used ($0.01). The reply carries the node's envelope in
+ * `result` (the same shape as the agent's trace step) plus a payment
+ * `receipt`: receipt_hash, rail, payer, the paid miner's registration,
+ * amount and settlement epoch. The agent route took 10-50 s per answer, and
+ * its agent went on making billed calls to other miners after Shield already
+ * had its answer, so a decision cost about twice what the answers did.
+ */
+async function askEngineApiKey(
+  v2Intent: string,
+  sent: Record<string, unknown>,
+  key: string,
+): Promise<{ body: unknown; headers: Headers; latencyMs: number; receipt?: Record<string, unknown> }> {
+  const startedAt = Date.now();
+  const release = await apiKeySlot();
+  try {
+    const res = await fetch(`${API_URL}/engine/ask`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ intent: v2Intent, params: sent }),
+      signal: AbortSignal.timeout(API_KEY_TIMEOUT_MS),
+    });
+    const body = await readBody(res);
+    if (!res.ok) {
+      const text = typeof body === 'string' ? body : JSON.stringify(body);
+      throw new EngineRouteError(res.status, `http ${res.status}: ${text.slice(0, 200)}`);
+    }
+    const record = asRecord(body) ?? {};
+    const envelope = asRecord(record.result);
+    if (!envelope) throw new Error(`engine ask returned no result: ${JSON.stringify(record).slice(0, 200)}`);
+    const receipt = asRecord(record.receipt);
+    const out: { body: unknown; headers: Headers; latencyMs: number; receipt?: Record<string, unknown> } = {
+      body: envelope, headers: res.headers, latencyMs: Date.now() - startedAt,
+    };
+    if (receipt) out.receipt = receipt;
+    return out;
+  } finally {
+    release();
+  }
+}
+
 async function askApiKeyWithRetry(
   v2Intent: string,
   sent: Record<string, unknown>,
   key: string,
   question: string,
-): Promise<{ body: unknown; headers: Headers; latencyMs: number }> {
+): Promise<{ body: unknown; headers: Headers; latencyMs: number; receipt?: Record<string, unknown> }> {
   const transient = (message: string) =>
     /^(terminated|fetch failed)$|^http 5\d\d|api stream ended without a miner answer|payment was rejected by the facilitator/i.test(message);
+  // The engine route first; the agent route only if the engine route is not
+  // there at all (404/405), never after an answer may have been bought.
+  let useAgent = process.env.SHIELD_API_ROUTE === 'agent';
   // Two retries with a short backoff: on 2026-11-20 one liquidity ask was
   // refused by the facilitator twice in a row, a second apart.
   for (let attempt = 0; ; attempt++) {
     try {
-      return await askRoutedApiKey(v2Intent, sent, key, question);
+      return useAgent ? await askRoutedApiKey(v2Intent, sent, key, question) : await askEngineApiKey(v2Intent, sent, key);
     } catch (err) {
+      if (!useAgent && err instanceof EngineRouteError && (err.status === 404 || err.status === 405)) {
+        useAgent = true;
+        continue;
+      }
       const message = err instanceof Error ? err.message : String(err);
       if (attempt >= 2 || !transient(message)) throw err;
       await new Promise((r) => setTimeout(r, 1_000 * (attempt + 1)));
@@ -1168,9 +1227,42 @@ export interface TypedAnswer {
   costUsd?: number;
   /** Telegraph signal hash, resolvable at GET /engine/v1/signal/{hash} */
   signalHash?: string;
+  /** The payment receipt the engine route returns for this answer */
+  receipt?: PaymentReceipt;
+  /** The ranked position of the miner that answered (1 = top), when reported */
+  servedRank?: number;
   latencyMs: number;
   /** Why there is no answer, when ok is false */
   error?: string;
+}
+
+/** One escrow payment for one answer, as the node reported it. */
+export interface PaymentReceipt {
+  hash: string;
+  rail: string;
+  payer: string;
+  /** Registration id of the miner that was paid */
+  miner: string;
+  amountUsd: number;
+  epochId: number | null;
+  settlement: string;
+}
+
+function toReceipt(raw: Record<string, unknown> | undefined): PaymentReceipt | undefined {
+  if (!raw) return undefined;
+  const hash = typeof raw.receipt_hash === 'string' ? raw.receipt_hash : null;
+  const amount = Number(raw.amount_uusdc);
+  if (!hash || !Number.isFinite(amount)) return undefined;
+  const epoch = Number(raw.epoch_id);
+  return {
+    hash,
+    rail: String(raw.rail ?? ''),
+    payer: String(raw.payer ?? ''),
+    miner: String(raw.miner ?? ''),
+    amountUsd: amount / USDC_ATOMIC_PER_USD,
+    epochId: Number.isFinite(epoch) ? epoch : null,
+    settlement: String(raw.settlement ?? ''),
+  };
 }
 
 /**
@@ -1199,8 +1291,13 @@ export async function askTypedIntent(intent: string, params: Record<string, unkn
     if (typeof minerId === 'string' || typeof minerId === 'number') out.minerId = String(minerId);
     const minerName = firstString(record, ['miner_name', 'minerName']);
     if (minerName) out.minerName = minerName;
-    const cost = record.cost_usd ?? record.costUsd;
+    // What was billed: the receipt when there is one, else the envelope's total (all payments), else its cost.
+    const receipt = toReceipt(done.receipt);
+    if (receipt) out.receipt = receipt;
+    const cost = receipt?.amountUsd ?? record.cost_usd_total ?? record.cost_usd ?? record.costUsd;
     if (typeof cost === 'number' && Number.isFinite(cost)) out.costUsd = cost;
+    const rank = Number(record.served_rank);
+    if (Number.isFinite(rank) && rank > 0) out.servedRank = rank;
     const signalHash = firstString(record, ['signal_hash', 'signalHash']);
     if (signalHash) out.signalHash = signalHash;
     if (!out.ok) out.error = `the node returned no ${intent} response fields`;

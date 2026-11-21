@@ -22,7 +22,7 @@
  *     clear a token: it is a REVIEW finding, not a pass.
  */
 import type { SupportedChain } from '../config/chains.js';
-import { apiKeyBalanceUsd, askTypedIntent, type TypedAnswer } from './telegraph.js';
+import { apiKeyBalanceUsd, askTypedIntent, type PaymentReceipt, type TypedAnswer } from './telegraph.js';
 import { parseAddress, parseChain, readBalanceGwei, readTokenFacts, TokenFactsError, type TokenFacts } from './tokenFacts.js';
 
 export type PreflightMode = 'trade' | 'listing';
@@ -57,6 +57,10 @@ export interface Purchase {
   /** Billed for this memo: 0 when the answer was reused */
   costUsd: number;
   signalHash?: string;
+  /** The escrow payment for this answer (engine route); on a reused answer, the original payment */
+  receipt?: PaymentReceipt;
+  /** Ranked position of the miner that answered, when the node reports it */
+  servedRank?: number;
   latencyMs: number;
   error?: string;
   /** True when a fresh earlier answer to the same request was reused instead of bought again */
@@ -474,6 +478,8 @@ async function buy(key: PurchaseKey, intent: string, params: Record<string, unkn
   if (answer.minerId) out.minerId = answer.minerId;
   if (answer.minerName) out.minerName = answer.minerName;
   if (answer.signalHash) out.signalHash = answer.signalHash;
+  if (answer.receipt) out.receipt = answer.receipt;
+  if (answer.servedRank !== undefined) out.servedRank = answer.servedRank;
   if (answer.error) out.error = answer.error;
   return out;
 }
@@ -568,7 +574,7 @@ export async function runPreflight(req: PreflightRequest, events: PreflightEvent
     },
     network: {
       telegraphNode: process.env.TELEGRAPH_NODE_URL ?? 'https://devnode.telegraphprotocol.com',
-      routing: 'one routed ask per fact (POST /agent/chat with intent and params); the node picks its ranked miner',
+      routing: 'one routed ask per fact (POST /engine/ask with intent and params, paid from escrow); the node picks its ranked miner and returns a payment receipt',
       settlement: 'Anjoman escrow, test USDC on Ethereum Sepolia (testnet)',
       note: 'Telegraph Season II runs on testnet settlement; the facts checked are about the mainnet chain named in input.chain.',
     },

@@ -55,10 +55,14 @@ like the pre-sign check.
    - the proxy implementation and admin (EIP-1967 or ZeppelinOS slots).
 
    An address with no contract code is rejected here, and nothing is bought.
-2. **One routed Telegraph request per fact.** Each request goes through
-   Anjoman's API (`POST /agent/chat` with `intent` and typed `params`). The
-   node routes it once to its ranked miner, and the answer is paid from
-   escrow. The same fact is never bought from several miners.
+2. **One routed Telegraph request per fact.** Each request goes to Anjoman's
+   routed ask (`POST https://backend.telegraphprotocol.com/engine/ask` with
+   `intent` and typed `params`). The node routes it once to its ranked miner,
+   the answer is paid from escrow, and the reply carries a payment receipt
+   that goes into the memo. Since 2026-11-21 08:20 UTC this is one billed
+   miner call per fact. Before that, Shield used the agent route
+   (`/agent/chat`), whose agent kept making billed calls to other miners
+   after Shield had its answer (see Accounting below).
 
    | Fact | Intent | Scored field used |
    |---|---|---|
@@ -122,15 +126,41 @@ These runs are against the live network, using `npm run test:preflight` with
 | listing with issuer "Garantex Europe OU" | **REJECT** | $0.04 | | OFAC SDN match, score 1; also a unit test on the recorded answer |
 | listing: UNI by "Uniswap Labs", governance timelock as treasury ([memo](https://truvian.xyz/preflight?m=Pi1JfTCY)) | **REVIEW** | $0.04 | 109 s | the security reviewer refused ("intellectual property policies"), the wash check said "Insufficient data", and the issuer scored 0.85 against OFAC SDN without matching: each goes to a person. The treasury balance (0.2377 ETH) agreed with the chain read |
 
-**Cost per decision:** $0.04 for a trade preflight and $0.04-0.06 for a
-listing review. A repeat within 10 minutes costs $0. Nothing is spent on
-inputs that are not tokens.
+**Cost per decision, corrected on 2026-11-21.** The memos above record what
+the answers Shield used were billed: $0.04 for a trade preflight and
+$0.04-0.06 for a listing review. The node's ledger shows those runs actually
+cost more, about $0.07 per preflight and $0.09 per listing review, because
+the agent route Shield then used made extra billed calls to other miners
+(and one refused answer that the memo recorded as $0). Since 2026-11-21
+08:20 UTC Shield asks through `/engine/ask`, which bills exactly the one
+miner call it routes: $0.01 per answer, each with a receipt, so a trade
+preflight costs $0.04 and a listing review $0.04-0.06, now matching the
+memo. A repeat within 10 minutes costs $0. Nothing is spent on inputs that
+are not tokens.
 
-**Latency:** 50-110 s. Almost all of it is the routed ask: 10-50 s per answer
-through the agent route, three at a time. The node holds $0.26 of escrow per
-ask while it runs, so asks only run three at a time when the escrow holds at
-least $0.78; below that they queue. Below $0.26, nothing is bought and the
-decision is REVIEW.
+**Latency:** each answer takes as long as the ranked miner that serves it.
+On 2026-11-21 through `/engine/ask`: total supply about 3 s, liquidity about
+8 s, the security review about 22 s. A decision takes as long as its slowest
+answer plus the chain reads, 25-85 s in the runs so far. The node holds
+$0.26 of escrow per ask while it runs, so asks only run three at a time when
+the escrow holds at least $0.78; below that they queue. Below $0.26, nothing
+is bought and the decision is REVIEW.
+
+## Accounting: tracing what was paid
+
+- **Each memo** lists, per answer, the miner, the signal hash and (since
+  2026-11-21 08:20 UTC) the payment receipt: `receipt_hash`, `rail`
+  (`escrow`), `payer`, the paid miner's registration id, the amount and the
+  settlement epoch.
+- **The signal** resolves on the node:
+  `GET https://devnode.telegraphprotocol.com/engine/v1/signal/<signal_hash>`.
+- **The payer's ledger** is public on the node:
+  `GET https://devnode.telegraphprotocol.com/v1/ledger/account/0x29476125898638c8634a97fdca8994530e8c9055`.
+  At 08:18 UTC on 2026-11-21 it read: deposited 2.00, charged 1.09, unbilled
+  0.18, balance 0.91 (test USDC, 6 decimals).
+- **The Anjoman account's own spend listing** (`GET /agent/spend`) is not a
+  complete record: on 2026-11-21 it listed 20 jobs and $0.15, against $1.09
+  charged on the node ledger above. Use the node ledger.
 
 ## Failure cases a reviewer can reproduce
 
