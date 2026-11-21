@@ -180,16 +180,17 @@ export class IntentError extends Error {
   /**
    * Plain-language statement of the outcome, used as the `answer` on intent
    * routes so a failed lookup still returns scoreable text rather than an
-   * empty error body.
+   * empty error body. `subject` is what the route's request must identify;
+   * the default is the transaction lookup's.
    */
-  get answerText(): string {
+  answerText(subject = 'a transaction to look up'): string {
     switch (this.code) {
       case 'TX_NOT_FOUND':
         return `${this.message.charAt(0).toUpperCase()}${this.message.slice(1)}. The transaction hash is well formed but no matching transaction exists on the chains searched, so it was never mined there or belongs to a chain this miner does not serve.`;
       case 'CHAIN_UNSUPPORTED':
         return `The requested chain is not served by this miner. ${this.message.charAt(0).toUpperCase()}${this.message.slice(1)}.`;
       case 'INVALID_INPUT':
-        return `The request did not identify a transaction to look up. ${this.message}.`;
+        return `The request did not identify ${subject}. ${this.message.charAt(0).toUpperCase()}${this.message.slice(1)}.`;
       default:
         return this.message;
     }
