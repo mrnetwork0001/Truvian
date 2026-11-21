@@ -1,7 +1,7 @@
 /**
  * CoinGecko's public token lists, used to find the contract of a token that a
- * question names by symbol or name when the verified table in
- * src/config/tokens.ts does not hold it.
+ * question names by a symbol in parentheses ("Bancor (BNT)") when the
+ * verified table in src/config/tokens.ts does not hold it.
  *
  * The node asks about any token: "Kelp DAO Restaked ETH (rsETH) on Ethereum",
  * "Bancor (BNT) on Ethereum". CoinGecko publishes one list per chain at
@@ -151,26 +151,20 @@ export async function fetchTokenList(url: string, chainId: number, timeoutMs = L
 export interface TokenList {
   tokens: ListedToken[];
   bySymbol: Map<string, ListedToken[]>;
-  byName: Map<string, ListedToken[]>;
   /** When the download finished, by the cache's clock */
   fetchedAt: number;
 }
 
 function indexList(tokens: ListedToken[], fetchedAt: number): TokenList {
   const bySymbol = new Map<string, ListedToken[]>();
-  const byName = new Map<string, ListedToken[]>();
-  const add = (map: Map<string, ListedToken[]>, key: string, t: ListedToken) => {
-    if (!key) return;
-    const at = map.get(key);
-    // the same contract is sometimes listed twice, in different letter case
-    if (!at) map.set(key, [t]);
-    else if (!at.some((o) => o.address.toLowerCase() === t.address.toLowerCase())) at.push(t);
-  };
   for (const t of tokens) {
-    add(bySymbol, symbolKey(t.symbol), t);
-    add(byName, nameKey(t.name), t);
+    const key = symbolKey(t.symbol);
+    const at = bySymbol.get(key);
+    // the same contract is sometimes listed twice, in different letter case
+    if (!at) bySymbol.set(key, [t]);
+    else if (!at.some((o) => o.address.toLowerCase() === t.address.toLowerCase())) at.push(t);
   }
-  return { tokens, bySymbol, byName, fetchedAt };
+  return { tokens, bySymbol, fetchedAt };
 }
 
 /** A download that failed, and until when (by the cache's clock) its list is not asked for again. */
@@ -298,10 +292,9 @@ export async function listedTokens(chain: SupportedChain, lists: TokenListCache 
   return (await lists.get(chain)).tokens;
 }
 
-/** A located token and what it was matched on: the symbol asked for, or (no symbol matching) its name. */
+/** A token located by its symbol. */
 export interface ListMatch {
   token: ListedToken;
-  by: 'symbol' | 'name';
   /** "CoinGecko's Ethereum token list", for the answer's source */
   list: string;
 }
@@ -325,36 +318,23 @@ function describe(candidates: ListedToken[]): string {
 }
 
 /**
- * Find a token in the chain's list by its symbol, using the name to choose
- * when several tokens share the symbol, or by its exact name when no symbol
- * was given. `symbol === name` means one bare word was given, which may be
- * either ("BNT", "Chainlink"). Refuses, naming the candidates, rather than
- * choose between tokens the name does not separate.
+ * Find a token in the chain's list by the symbol a question gave in
+ * parentheses, using the name before it to choose when several tokens share
+ * the symbol. Refuses, naming the candidates, rather than choose between
+ * tokens the name does not separate. A list is never searched by name: a
+ * name alone, or a word that may be a name, is no symbol to look up.
  */
 export async function findListedToken(
-  chain: SupportedChain, symbol: string | null, name: string | null, lists: TokenListCache = coingeckoLists,
+  chain: SupportedChain, symbol: string, name: string | null, lists: TokenListCache = coingeckoLists,
 ): Promise<ListMatch> {
   const list = await lists.get(chain);
   const where = `CoinGecko's ${chainMeta(chain).label} token list`;
-  const found = (t: ListedToken, by: ListMatch['by']): ListMatch => ({ token: { ...t, address: getAddress(t.address) }, by, list: where });
-  const loneWord = symbol !== null && symbol === name;
-
-  if (symbol !== null) {
-    const bySymbol = list.bySymbol.get(symbolKey(symbol)) ?? [];
-    if (bySymbol.length === 1) return found(bySymbol[0]!, 'symbol');
-    if (bySymbol.length > 1) {
-      const chosen = name !== null && !loneWord ? namedAs(bySymbol, name) : [];
-      if (chosen.length === 1) return found(chosen[0]!, 'symbol');
-      const named = name !== null && !loneWord ? `, and ${chosen.length === 0 ? 'none' : 'more than one'} is named "${name}"` : '';
-      throw new IntentError('INVALID_INPUT', `${bySymbol.length} tokens in ${where} have the symbol ${symbol}${named}: ${describe(bySymbol)}; give the contract address`);
-    }
-    if (!loneWord) throw new IntentError('INVALID_INPUT', `no token in ${where} has the symbol ${symbol}; give the contract address`);
-  }
-  if (name === null) throw new IntentError('INVALID_INPUT', 'no token symbol, name or contract address was given');
-  const byName = list.byName.get(nameKey(name)) ?? [];
-  if (byName.length === 1) return found(byName[0]!, 'name');
-  if (byName.length > 1) {
-    throw new IntentError('INVALID_INPUT', `${byName.length} tokens in ${where} are named "${name}": ${describe(byName)}; give the symbol or the contract address`);
-  }
-  throw new IntentError('INVALID_INPUT', `no token in ${where} has the ${loneWord ? 'symbol or name' : 'name'} "${name}"; give the symbol in parentheses or the contract address`);
+  const found = (t: ListedToken): ListMatch => ({ token: { ...t, address: getAddress(t.address) }, list: where });
+  const sharing = list.bySymbol.get(symbolKey(symbol)) ?? [];
+  if (sharing.length === 0) throw new IntentError('INVALID_INPUT', `no token in ${where} has the symbol ${symbol}; give the contract address`);
+  if (sharing.length === 1) return found(sharing[0]!);
+  const chosen = name !== null ? namedAs(sharing, name) : [];
+  if (chosen.length === 1) return found(chosen[0]!);
+  const named = name !== null ? `, and ${chosen.length === 0 ? 'none' : 'more than one'} is named "${name}"` : '';
+  throw new IntentError('INVALID_INPUT', `${sharing.length} tokens in ${where} have the symbol ${symbol}${named}: ${describe(sharing)}; give the contract address`);
 }

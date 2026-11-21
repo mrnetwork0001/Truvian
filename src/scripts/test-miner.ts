@@ -361,9 +361,10 @@ async function main() {
     && usdcBase.balance_exact === formatUnits(usdcRaw, 6) && usdcBase.token_symbol === 'USDC', `${usdcBase.balance_exact} USDC`);
   const byAddr = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: '8453', token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }));
   check('a token by contract address and chain id reads the same contract', byAddr.token_address === KNOWN_TOKENS.base!.USDC!.address && byAddr.token_symbol === 'USDC' && byAddr.chain === 'base', byAddr.token_symbol);
+  // a word given alone is answered from the verified table or refused, so a list refusal here would itself be a failure
   const unknownToken = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: 'ethereum', token: 'NOTATOKEN' })).then(() => null, (e) => e);
-  if (listRefused(unknownToken)) skip('an unknown token symbol is refused, not guessed', unknownToken.message);
-  else check('an unknown token symbol is refused, not guessed', unknownToken instanceof IntentError && unknownToken.code === 'INVALID_INPUT');
+  check('an unknown token symbol is refused, not guessed', unknownToken instanceof IntentError && unknownToken.code === 'INVALID_INPUT'
+    && unknownToken.message.includes('in parentheses'), unknownToken?.message);
 
   for (const [key, address] of [['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'],
     ['WBTC (0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599) on Ethereum', '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599'],
@@ -385,22 +386,41 @@ async function main() {
   // How the node writes a token (nginx access log since registration 6146 went
   // active): "<name> (<symbol>) on <chain>", "<symbol> (<address>) on <chain>"
   // or "<address> on <chain>". The chain is the words after the last " on ".
-  const refCases: Array<[string, SupportedChain, string | null, string | null, string | null]> = [
-    ['Kelp DAO Restaked ETH (rsETH) on Ethereum', 'ethereum', null, 'rsETH', 'Kelp DAO Restaked ETH'],
-    ['Bancor (BNT) on Ethereum', 'ethereum', null, 'BNT', 'Bancor'],
-    ['0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6 on Polygon', 'polygon', '0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6', null, null],
-    ['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', 'ethereum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', null, null],
-    ['Arbitrum (ARB) on Ethereum', 'ethereum', null, 'ARB', 'Arbitrum'],
-    ['Brett (ETH) (BRETT) on Base', 'base', null, 'BRETT', 'Brett (ETH)'],
-    ['What is the current total supply of Bancor (BNT) on Ethereum, in whole tokens?', 'ethereum', null, 'BNT', 'Bancor'],
-    ['USDC on Arbitrum', 'arbitrum', null, 'USDC', 'USDC'],
+  // [token, chain, address, symbol, symbol given alone (bare), name]
+  const refCases: Array<[string, SupportedChain, string | null, string | null, boolean, string | null]> = [
+    ['Kelp DAO Restaked ETH (rsETH) on Ethereum', 'ethereum', null, 'rsETH', false, 'Kelp DAO Restaked ETH'],
+    ['Bancor (BNT) on Ethereum', 'ethereum', null, 'BNT', false, 'Bancor'],
+    ['0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6 on Polygon', 'polygon', '0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6', null, false, null],
+    ['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', 'ethereum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', null, false, null],
+    ['Arbitrum (ARB) on Ethereum', 'ethereum', null, 'ARB', false, 'Arbitrum'],
+    ['Brett (ETH) (BRETT) on Base', 'base', null, 'BRETT', false, 'Brett (ETH)'],
+    ['What is the current total supply of Bancor (BNT) on Ethereum, in whole tokens?', 'ethereum', null, 'BNT', false, 'Bancor'],
+    ['(rsETH) on Ethereum', 'ethereum', null, 'rsETH', false, null],
+    ['USDC on Arbitrum', 'arbitrum', null, 'USDC', true, null],
+    ['Bitcoin on Ethereum', 'ethereum', null, 'Bitcoin', true, null],
+    ['Kelp DAO Restaked ETH on Ethereum', 'ethereum', null, null, false, 'Kelp DAO Restaked ETH'],
   ];
-  const refMisses = refCases.filter(([token, chain, address, symbol, name]) => {
+  const refMisses = refCases.filter(([token, chain, address, symbol, bare, name]) => {
     const got = validateSupplyInput({ token });
-    return got.chain !== chain || got.ref.address !== address || got.ref.symbol !== symbol || got.ref.name !== name;
+    return got.chain !== chain || got.ref.address !== address || got.ref.symbol !== symbol || got.ref.bare !== bare || got.ref.name !== name;
   });
   check('a token reference splits into address, or symbol and name, and the chain after its last " on "',
     refMisses.length === 0, refMisses.map(([t]) => t).join(' | '));
+
+  // A word given alone is answered only from the verified table, since it may
+  // be a name as well as a symbol: "Bitcoin on Ethereum" was answered for the
+  // meme token whose symbol is BITCOIN (0x72e4f9F8…, supply 1,000,000,000).
+  // Words with no symbol at all are not looked up either.
+  for (const question of ['Bitcoin on Ethereum', 'BNT on Ethereum', 'Kelp DAO Restaked ETH on Ethereum']) {
+    const refused = await handleSupply(validateSupplyInput({ token: question })).then(() => null, (e) => e);
+    check(`"${question}" is refused, asking for the symbol in parentheses or the contract address`,
+      refused instanceof IntentError && refused.code === 'INVALID_INPUT' && refused.message.includes('in parentheses')
+        && refused.message.includes('contract address'), refused?.message);
+  }
+  const listForWords = await listedTokens('ethereum').catch((e) => e);
+  const wordsListed = 'CoinGecko\'s Ethereum list has the symbols BITCOIN and BNT, so those refusals are not for want of a listing';
+  if (listRefused(listForWords)) skip(wordsListed, listForWords.message);
+  else check(wordsListed, Array.isArray(listForWords) && ['BITCOIN', 'BNT'].every((s) => listForWords.some((t) => symbolKey(t.symbol) === s)));
   check('a name in parentheses is not taken for a symbol', parseTokenRef('Polygon Bridged WBTC (Polygon POS)').symbol === null);
   const solana = (() => { try { validateSupplyInput({ token: 'Wrapped SOL (SOL) on Solana' }); return null; } catch (e) { return e; } })();
   check('a token on a chain this miner does not serve is refused, not read on Ethereum', solana instanceof IntentError && solana.code === 'CHAIN_UNSUPPORTED');
@@ -598,6 +618,11 @@ async function main() {
       && supplyRefusal.answer.startsWith('The request did not identify an ERC-20 token whose total supply can be read.')
       && !/transaction/i.test(supplyRefusal.answer), supplyRefusal.answer);
   }
+  const bitcoinHttp = await app.inject({ method: 'GET', url: '/total-supply?token=Bitcoin+on+Ethereum' });
+  const bitcoinBody = bitcoinHttp.json();
+  check('GET /total-supply for "Bitcoin on Ethereum" answers 200 with a refusal that asks for the symbol in parentheses',
+    bitcoinHttp.statusCode === 200 && bitcoinBody.resolved === false && bitcoinBody.error === 'INVALID_INPUT'
+      && bitcoinBody.total_supply === undefined && bitcoinBody.answer.includes('in parentheses'), bitcoinBody.answer);
   const balanceRefusal = (await app.inject({ method: 'GET', url: '/balance?address=0x123&chain=ethereum' })).json();
   check('a refused balance request is worded about a wallet balance, not a transaction', balanceRefusal.error === 'INVALID_INPUT'
     && balanceRefusal.answer.startsWith('The request did not identify a wallet and a token whose balance can be read.')

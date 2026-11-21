@@ -95,9 +95,16 @@ function sameSymbol(asked: string, reported: string): boolean {
 export interface TokenRef {
   /** EIP-55. When given it is the token, whatever else the text says. */
   address: `0x${string}` | null;
-  /** The last parenthesised word, or a bare word given alone */
+  /** The last parenthesised word, or a word given alone */
   symbol: string | null;
-  /** The text before the symbol's parentheses, or words given without any. Equal to `symbol` for a bare word, which may be either. */
+  /**
+   * True when the symbol is a word given alone, without parentheses ("USDC",
+   * "Bitcoin"). Such a word may be a name as well as a symbol, so only the
+   * verified table answers it: "Bitcoin" is no symbol there, though a meme
+   * token in CoinGecko's Ethereum list has the symbol BITCOIN.
+   */
+  bare: boolean;
+  /** The text before the symbol's parentheses, or several words given without a symbol */
   name: string | null;
 }
 
@@ -105,7 +112,7 @@ const ADDRESS_IN_TEXT = /(?<![0-9A-Za-z])0x[0-9a-fA-F]{40}(?![0-9A-Za-z])/;
 
 /**
  * Read a token reference the way the node writes one: "Kelp DAO Restaked ETH
- * (rsETH)", "Bancor (BNT)", "USDC (0xA0b8…)", "0x1BFD…", or a bare "USDC".
+ * (rsETH)", "Bancor (BNT)", "USDC (0xA0b8…)", "0x1BFD…", or a lone "USDC".
  * A contract address wins. Otherwise the symbol is the last parenthesised
  * word, since names carry parentheses of their own ("Brett (ETH) (BRETT)"),
  * and the name before it is kept to choose between tokens sharing a symbol.
@@ -113,11 +120,13 @@ const ADDRESS_IN_TEXT = /(?<![0-9A-Za-z])0x[0-9a-fA-F]{40}(?![0-9A-Za-z])/;
 export function parseTokenRef(text: string): TokenRef {
   const t = text.replace(/\s+/g, ' ').trim();
   const address = t.match(ADDRESS_IN_TEXT)?.[0];
-  if (address) return { address: getAddress(address), symbol: null, name: null };
+  if (address) return { address: getAddress(address), symbol: null, bare: false, name: null };
   const symbolGroup = [...t.matchAll(/\(([^()\s]+)\)/g)].at(-1);
-  if (symbolGroup) return { address: null, symbol: symbolGroup[1]!, name: t.slice(0, symbolGroup.index).trim() || null };
-  if (t === '') return { address: null, symbol: null, name: null };
-  return t.includes(' ') ? { address: null, symbol: null, name: t } : { address: null, symbol: t, name: t };
+  if (symbolGroup) return { address: null, symbol: symbolGroup[1]!, bare: false, name: t.slice(0, symbolGroup.index).trim() || null };
+  if (t === '') return { address: null, symbol: null, bare: false, name: null };
+  return t.includes(' ')
+    ? { address: null, symbol: null, bare: false, name: t }
+    : { address: null, symbol: t, bare: true, name: null };
 }
 
 /** Where a token's contract is, and the symbol its symbol() must report (null for a given address). */
@@ -127,18 +136,31 @@ interface Located {
   foundIn: string | null;
 }
 
-/** The verified table first (src/config/tokens.ts), then CoinGecko's list for the chain. */
+/**
+ * Where to read the token: the address given; else the symbol in the
+ * verified table (src/config/tokens.ts); else, for a symbol given in
+ * parentheses only, CoinGecko's list for the chain. A word given alone is
+ * never looked up in the list, and words with no symbol are not looked up at
+ * all: each would be a guess at what the question meant.
+ */
 async function locateToken(chain: SupportedChain, ref: TokenRef): Promise<Located> {
   if (ref.address) return { address: ref.address, expectedSymbol: null, foundIn: null };
-  const known = ref.symbol ? KNOWN_TOKENS[chain]?.[symbolKey(ref.symbol)] : undefined;
-  if (known && ref.symbol) return { address: known.address, expectedSymbol: ref.symbol, foundIn: null };
+  const label = chainMeta(chain).label;
+  if (ref.symbol === null) {
+    throw new IntentError('INVALID_INPUT', ref.name === null
+      ? 'no token symbol, name or contract address was given'
+      : `"${ref.name}" gives no symbol and no contract address; give the symbol in parentheses after the name, as in "${ref.name} (SYMBOL)", or the contract address`);
+  }
+  const known = KNOWN_TOKENS[chain]?.[symbolKey(ref.symbol)];
+  if (known) return { address: known.address, expectedSymbol: ref.symbol, foundIn: null };
+  if (ref.bare) {
+    const table = Object.keys(KNOWN_TOKENS[chain] ?? {});
+    throw new IntentError('INVALID_INPUT', `"${ref.symbol}" is not a symbol in the verified token table for ${label}`
+      + `${table.length > 0 ? ` (${table.join(', ')})` : ''}, and a word given alone may be a name as well as a symbol, so public token lists are not searched for it;`
+      + ' give the symbol in parentheses, as in "Bancor (BNT)", or the contract address');
+  }
   const match = await findListedToken(chain, ref.symbol, ref.name);
-  return {
-    address: match.token.address,
-    // a token found by its name must report the symbol the list gives it
-    expectedSymbol: match.by === 'symbol' && ref.symbol ? ref.symbol : match.token.symbol,
-    foundIn: `found in ${match.list} as "${match.token.name}"`,
-  };
+  return { address: match.token.address, expectedSymbol: ref.symbol, foundIn: `found in ${match.list} as "${match.token.name}"` };
 }
 
 /** Read the located contract at the block, and hold it to the symbol asked for. */
