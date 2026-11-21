@@ -6,7 +6,8 @@
  * against each address). On Arbitrum and Polygon the canonical USDT contract
  * now reports its symbol as USD₮0 / USDT0; it is still listed as USDT, the
  * name callers use. A token given by address needs no entry here: its
- * decimals and symbol are read from the contract.
+ * decimals and symbol are read from the contract. A symbol missing here is
+ * looked up in CoinGecko's token list for the chain (src/miner/tokenList.ts).
  */
 import type { SupportedChain } from './chains.js';
 
