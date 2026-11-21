@@ -260,15 +260,15 @@ sequenceDiagram
   N->>R: GET /tx, tx_hash and<br/>chain=ethereum<br/>from intent_mapping
   R->>P: transaction and receipt<br/>full-history endpoints<br/>in order, 3 s each
   P-->>R: receipt in<br/>block 46,147
-  R-->>N: block_number 46147<br/>status, from, to, value_eth<br/>answer text
+  R-->>N: block_number 46147<br/>status, from, to, value_eth<br/>answer, receipt, provenance
   N->>T: the same question to up<br/>to three truth sources
   T-->>N: median reference value
-  N->>N: comparator: block_number only, 1 bps
+  N->>N: comparator: block_number only, 1 bps<br/>(seat empty on Nov 21:<br/>GENERIC judgment scores)
   N->>L: epoch score and rank for<br/>ONCHAIN_TX_LOOKUP_GENERAL
   Note over N,L: template: In which block was transaction {key} included?<br/>other tolerances: gas_price_gwei 2,500 bps,<br/>balance 100 bps, total_supply 50 bps
 ```
 
-The node reads the answer by path through the descriptor's `intent_mapping`, so only `block_number` is scored for a lookup; the answer text is for people. The template, the question key and the comparator settings are the node's own (`GET /engine/v1/intents/<INTENT>` → `evaluation.comparator`, read Nov 21). A pruned endpoint answers null instead of an error, so the miner treats null as no evidence and keeps searching, and "not found" needs a full-history endpoint to say so, confirmed by a second ([`src/miner/txLookup.ts`](src/miner/txLookup.ts)). For supply, a symbol in parentheses after a name, as in `Bancor (BNT)`, finds the contract in a verified table or CoinGecko's token list for that chain; the name must agree, and the contract's `symbol()` must match at the block before any figure is given ([`src/miner/tokenList.ts`](src/miner/tokenList.ts), [`src/miner/holdings.ts`](src/miner/holdings.ts)).
+The intent's format names a comparator on `block_number`, but no comparator holds the seat: on Nov 21 at 10:13 UTC the node resolved `ONCHAIN_TX_LOOKUP_GENERAL`, `WALLET_BALANCE_CHECK_GENERAL` and `TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL` to its GENERIC judgment model (`GET /api/wasm?resolve=<INTENT>`: `served_by` GENERIC, `generic_fallback` true), which reads the stored reply as JSON with its keys sorted and only its first 512 tokens; gas price is scored by its comparator. So the default `/tx` reply is concise: the intent's fields, one answer, the receipt's outcome, gas and total fee (L1 fee included), and a provenance block naming the public endpoints and methods it was read from, the block hash, the read time and the terms those endpoints are used on (no licence held or claimed, terms of use not reviewed). `&detail=full` adds the calldata, decoded ERC-20 transfers and every fee part; an unknown hash answers `status: not_found` with the endpoints that proved it absent. The template, the question key and the comparator settings are the node's own (`GET /engine/v1/intents/<INTENT>` → `evaluation.comparator`, read Nov 21). A pruned endpoint answers null instead of an error, so the miner treats null as no evidence and keeps searching, and "not found" needs a full-history endpoint to say so, confirmed by a second ([`src/miner/txLookup.ts`](src/miner/txLookup.ts)). For supply, a symbol in parentheses after a name, as in `Bancor (BNT)`, finds the contract in a verified table or CoinGecko's token list for that chain; the name must agree, and the contract's `symbol()` must match at the block before any figure is given ([`src/miner/tokenList.ts`](src/miner/tokenList.ts), [`src/miner/holdings.ts`](src/miner/holdings.ts)).
 
 ### Preflight: what cannot clear a token
 
