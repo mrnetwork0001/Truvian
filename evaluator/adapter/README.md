@@ -9,7 +9,9 @@ least 70% of 30 hidden pairs correctly to take the seat.
 **Status, 2026-11-21 21:10 UTC: v1 was registered (id 175) and rejected; v2
 was registered at 21:16 UTC as id 182 (tx
 `0xf548bd976429d872a8e1e3ebd1dc20069612826f31a6ac3a2909f10b201e0d4a`,
-package URL pinned to commit `d8f8958`) and awaits the node's check.** v1 ordered 10 of the
+package URL pinned to commit `d8f8958`), and rejected at 22:50 UTC: "ordered
+8 of 15 public pairs correctly (53.3%)".** See [What the node's
+check holds](#what-the-nodes-check-holds). v1 ordered 10 of the
 node's 15 public pairs (66.7%, the floor is 70%). v2 ([below](#version-2))
 is trained on production-style contracts and audit-finding answers. The
 executor now serves v2, so the v1 notes below describe v1's package and
@@ -412,6 +414,29 @@ copy to this repository.
 nginx on the scorer server now logs the body of every request to the runnable
 URL in `/var/log/nginx/scorer-body.log`. The node's next public-pair batch can
 then be replayed against later versions.
+
+### What the node's check holds
+
+The request-body log caught the node's batch for registration 182 (30
+texts, 22:50 UTC, `input_root c8274bbf…`). The texts were decoded with the
+pinned tokenizer on the scorer server. They are kept there, not in this
+repository, because the pool does not publish its rows. Scoring the first
+text of each pair as the better answer reproduces the node's count exactly
+(8 of 15), so that is the order the node sends.
+
+The 15 pairs were of three kinds, none like our training data:
+
+| Kind | Pairs | v2 | What separates the answers |
+|---|---|---|---|
+| Access control, answered as JSON `{target, authorization_check}` | 8 | 4 right, 3 wrong, 1 tie | The prompt quotes the function, which names its modifier. The better answer gives that modifier's definition; the worse one gives another modifier's, from another codebase |
+| An address and a token name ("Audit the smart contract at 0x… (Name)") | 4 | 2 right, 2 wrong | A short description against the same fixed refusal sentence in every pair |
+| An old Solidity 0.4 contract with line numbers, answered as a fixed "Verdict / Finding / line / Fix" template | 3 | 2 right, 1 tie | The right vulnerability class and line against a wrong one, or a vague answer |
+
+Two pairs have prompts at the 512-token limit. Both answers are cut off
+entirely, so they score the same and count as wrong for any adapter. The
+best possible score on this batch is 13 of 15, and 11 are needed. Both
+our versions trained on formats the pool does not use, which explains most
+of the misses. A v3 would be trained on these three formats.
 
 ## Limits
 
