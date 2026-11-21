@@ -14,6 +14,9 @@
 import { createPublicClient, formatUnits, getAddress, http, isAddress, type PublicClient } from 'viem';
 import { arbitrum, mainnet, polygon } from 'viem/chains';
 import { chainMeta, type RpcClient, type SupportedChain } from '../config/chains.js';
+import { TruthError, twoAgree } from './agree.js';
+
+export { TruthError };
 
 /** The chains ONCHAIN_METRIC_VERIFY_GENERAL accepts (its `chain` enum), plus their ids. */
 export const TRUTH_CHAINS = ['ethereum', 'polygon', 'arbitrum'] as const;
@@ -63,18 +66,6 @@ export function stateArchives(chain: TruthChain): RpcClient[] {
  */
 const FINALITY_DEPTH = 128n;
 
-export class TruthError extends Error {
-  constructor(
-    /** HTTP status: 400 bad request, 422 unanswerable, 502 sources disagree, 503 not enough sources */
-    public readonly status: 400 | 422 | 502 | 503,
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'TruthError';
-  }
-}
-
 export interface BalanceQuery {
   chain: TruthChain;
   address: `0x${string}`;
@@ -116,16 +107,7 @@ export function parseBalanceQuery(raw: Record<string, unknown>): BalanceQuery {
   return { chain, address: getAddress(address), block: BigInt(blockRaw) };
 }
 
-function host(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
-  }
-}
-
 interface Reading {
-  endpoint: string;
   balance: bigint;
   nonce: number;
 }
@@ -135,7 +117,7 @@ async function read(endpoint: RpcClient, q: BalanceQuery): Promise<Reading> {
     endpoint.client.getBalance({ address: q.address, blockNumber: q.block }),
     endpoint.client.getTransactionCount({ address: q.address, blockNumber: q.block }),
   ]);
-  return { endpoint: endpoint.url, balance, nonce };
+  return { balance, nonce };
 }
 
 /** The chain tip from the first endpoint that answers; null if none does. */
@@ -171,24 +153,11 @@ export async function balanceAt(q: BalanceQuery, endpoints: RpcClient[] = stateA
     throw new TruthError(422, 'BLOCK_IN_FUTURE', `block ${q.block} is beyond the ${q.chain} tip (${head}); a balance there does not exist yet`);
   }
 
-  const readings: Reading[] = [];
-  const failures: string[] = [];
-  for (const endpoint of archives) {
-    if (readings.length === 2) break;
-    try {
-      readings.push(await read(endpoint, q));
-    } catch (err: any) {
-      failures.push(`${host(endpoint.url)}: ${(err?.shortMessage ?? err?.message ?? String(err)).slice(0, 80)}`);
-    }
-  }
-  if (readings.length < 2) {
-    throw new TruthError(503, 'NOT_ENOUGH_SOURCES', `need two agreeing archive reads, got ${readings.length} (${failures.join('; ')})`);
-  }
-  const [a, b] = readings as [Reading, Reading];
-  if (a.balance !== b.balance || a.nonce !== b.nonce) {
-    throw new TruthError(502, 'SOURCES_DISAGREE',
-      `${host(a.endpoint)} says ${a.balance} wei / nonce ${a.nonce}, ${host(b.endpoint)} says ${b.balance} wei / nonce ${b.nonce}`);
-  }
+  const { value: a, agreed_by } = await twoAgree(archives, (endpoint) => read(endpoint, q), {
+    key: (r) => `${r.balance}/${r.nonce}`,
+    show: (r) => `${r.balance} wei / nonce ${r.nonce}`,
+    what: 'archive reads',
+  });
 
   const answer: BalanceAnswer = {
     chain: q.chain,
@@ -198,7 +167,7 @@ export async function balanceAt(q: BalanceQuery, endpoints: RpcClient[] = stateA
     balance_wei: a.balance.toString(),
     balance_gwei: formatUnits(a.balance, 9),
     tx_count: a.nonce,
-    agreed_by: [host(a.endpoint), host(b.endpoint)],
+    agreed_by,
   };
   // Only final blocks are cached: a recent block can still be reorganised away.
   if (head - q.block >= FINALITY_DEPTH) {
