@@ -42,3 +42,6 @@ video/node_modules/
 video/out/
 video/assets/
 video/narration/*.mp3
+
+# Claude Code worktrees (local scratch checkouts, never source)
+/.claude/worktrees/
