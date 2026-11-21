@@ -26,7 +26,7 @@ power a working application, it is not enough."
 
 ## 2. Our Season I result
 
-- **3rd place, Miner track - $600.** Announced 2026-09-30.
+- **3rd place, Miner track - $600.** Announced 2026-09-28.
   <https://x.com/Telegraphprotoc/status/2104484144684098021>
 - Miner `truvian-onchain-truth`, registration **#172**, catalog id **8453** - still live.
 - WASM evaluator regs **#544** then **#617** - held `ONCHAIN_TX_LOOKUP` champion
