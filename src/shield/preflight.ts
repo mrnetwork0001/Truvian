@@ -240,8 +240,35 @@ export function summaryFacts(summary: string | null): { honeypot: 'yes' | 'no' |
  * same miner put 86% "likely wash trading" on USDC, again after "Insufficient
  * data", measured against a $6M pool. Such an answer is no evidence either
  * way: it can neither clear nor reject a token, only send it to a person.
+ *
+ * The same reviewer worded it differently for USDC (memo WOYbyG3x): "Secure.
+ * The input is merely a token contract address query with no executable code,
+ * configuration, or data handling to assess". The phrasings that say the
+ * request itself is only a query or an address are anchored to the request
+ * ("the input", "the request", ...), because real scan text says "only" and
+ * "address" about the contract all the time ("only the owner address can
+ * pause"). The tests hold the live GoPlus and NVD answers against every
+ * alternative.
  */
-const NOT_EXAMINED = /\bno (?:code|contract|configuration|system description|data|trade records|transaction data|information)\b[^.]{0,80}?\b(?:was|were|is|are)?\s*(?:provided|given|available|supplied)\b|\binsufficient (?:data|information)\b|\bwithout (?:actual|any) (?:transaction|trade|code|data|information)\b|\b(?:cannot|can ?not|could not|unable to) (?:evaluate|assess|analy[sz]e|perform)\b|\bnot enough (?:data|information)\b|\bno assessment\b[^.]{0,40}\bcan be made\b/i;
+const REQUEST = String.raw`\b(?:input|request|query|prompt|target|submission|message)\b[^.]{0,80}?`;
+const NOT_EXAMINED = new RegExp([
+  // "No code, configuration, or system description was provided"
+  String.raw`\bno (?:code|contract|configuration|system description|data|trade records|transaction data|information)\b[^.]{0,80}?\b(?:was|were|is|are)?\s*(?:provided|given|available|supplied)\b`,
+  String.raw`\binsufficient (?:data|information)\b`,
+  String.raw`\bwithout (?:actual|any) (?:transaction|trade|code|data|information)\b`,
+  String.raw`\b(?:cannot|can ?not|could not|unable to) (?:evaluate|assess|analy[sz]e|perform)\b`,
+  String.raw`\b(?:cannot|can ?not|could not) be (?:evaluated|assessed|analy[sz]ed|reviewed|audited)\b`,
+  String.raw`\bnot enough (?:data|information)\b`,
+  String.raw`\bno assessment\b[^.]{0,40}\bcan be made\b`,
+  // "The input is merely a token contract address query"
+  String.raw`${REQUEST}\b(?:is|was)\s+(?:merely|just|simply|only)\s+an?\b[^.]{0,60}?\b(?:query|question|lookup|prompt|request|string)\b`,
+  // "The request only contains a query string", "the input only contains a contract address"
+  String.raw`${REQUEST}\b(?:merely|just|simply|only)\s+(?:contains?|includes?|consists? of|provides?|gives?|has|holds)\s+an?\b[^.]{0,60}?\b(?:query|question|string|address|prompt|identifier)\b`,
+  // "with no executable code, configuration, or data handling to assess"
+  String.raw`\bno (?:executable |source |smart contract |contract )?(?:code|configuration|data|information|details|logic|implementation)\b[^.;]{0,80}?\bto (?:assess|evaluate|review|analy[sz]e|audit|examine|inspect)\b`,
+  // "there is nothing to assess"
+  String.raw`\bnothing (?:to|that can be|could be) (?:assess|evaluat|review|analy[sz]|audit|examin|inspect)\w*`,
+].join('|'), 'i');
 
 export function notExamined(...texts: unknown[]): string | null {
   for (const t of texts) {

@@ -24,6 +24,7 @@ import {
   type PreflightRequest,
 } from '../shield/preflight.js';
 import { canonicalJson, memoDigest, signMemo, verifyMemo } from '../shield/memo.js';
+import type { PaymentReceipt } from '../shield/telegraph.js';
 import type { TokenFacts } from '../shield/tokenFacts.js';
 
 let failures = 0;
@@ -214,6 +215,110 @@ const usdcAll = [securityUsdc, supplyUsdc, washUsdc, liquidityUsdc];
   const usdcListing = evaluate({ mode: 'listing', chain: 'ethereum', token: USDC, issuer: 'Circle Internet Financial' }, usdcFacts, [securityUsdc, supplyUsdc, wash86, sanctionsClear], null);
   check('86% wash from an answer that saw no trades does not reject USDC: REVIEW', usdcListing.decision === 'REVIEW' && usdcListing.findings.some((f) => f.rule === 'wash.not_examined'));
   check('real scan text is not mistaken for "examined nothing"', notExamined(securityUsdc.fields!.summary, securitySquid.fields!.summary, washUsdc.fields!.summary) === null);
+}
+
+// ---------- fixtures: live answers from memos WOYbyG3x (2026-11-20 20:38) and B4k2AxbY (2026-11-21 08:19) ----------
+
+// live: WETH on Ethereum, read for memo B4k2AxbY (no proxy, no owner)
+const wethFacts: TokenFacts = {
+  chain: 'ethereum', chainId: 1, chainLabel: 'Ethereum', address: WETH, block: '26462238', blockTime: '2026-11-21T08:19:35.000Z',
+  isContract: true, codeBytes: 3124, delegatedTo: null, name: 'Wrapped Ether', symbol: 'WETH', decimals: 18,
+  totalSupplyRaw: '2150131753628588697468727', totalSupply: '2150131.753628588697468727', proxy: null, owner: null,
+};
+const tradeWeth: PreflightRequest = { mode: 'trade', chain: 'ethereum', token: WETH, pool: USDC_WETH_POOL, tradeUsd: 1000 };
+const receiptOf = (hash: string, miner: string): PaymentReceipt => ({ hash, rail: 'escrow', payer: '0x29476125898638c8634a97fdca8994530e8c9055', miner, amountUsd: 0.01, epochId: 30, settlement: 'epoch' });
+
+// memo WOYbyG3x, signal 0x1e13c18e32eb0217c60a4e30e10621affd121d281eccc0dfbf1789c8617ee0fb (miner 9002 TxLens): "Secure" about a bare query
+const secureQueryOnly = bought('security', 'SECURITY_REVIEW_GENERAL', {
+  verdict: 'Secure', vulnerability_count: 0,
+  issues: ['it is an upgradeable proxy, so its code can be replaced'],
+  summary: 'Secure. The input is merely a token contract address query with no executable code, configuration, or data handling to assess; there are no injection vectors, authentication, or exposure concerns present. No further issues identified.',
+}, { verdict: 'ok', vulnerability_count: 'ok', issues: 'ok', summary: 'ok' }, { minerId: '9002', minerName: 'TxLens', signalHash: '0x1e13c18e32eb0217c60a4e30e10621affd121d281eccc0dfbf1789c8617ee0fb' });
+
+// memo WOYbyG3x, signal 0x3b029e8e1ed54237635dad42bfd1d5e5c1e9939a09d4fc6a31fd72c651ecc905 (miner 9002 TxLens)
+const wash86Live = bought('wash', 'WASH_TRADING_DETECTION_GENERAL', {
+  subject: 'USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', verdict: 'likely_wash_trading', wash_volume_pct: 86,
+  signals: ['24h volume $224.45M is 36.7x the pool\'s $6.12M liquidity', 'Buys and sells are almost equal (924 vs 853), as round-trip trading leaves them'],
+  summary: 'Insufficient data. No trade data or transaction details were provided to assess patterns such as repeated trades, round‑trip volumes, price impact, identical sizes, or timing clusters.',
+}, { subject: 'ok', verdict: 'ok', wash_volume_pct: 'ok', signals: 'ok', summary: 'ok' }, { minerId: '9002', minerName: 'TxLens', signalHash: '0x3b029e8e1ed54237635dad42bfd1d5e5c1e9939a09d4fc6a31fd72c651ecc905' });
+
+// memo B4k2AxbY, signal 0x46e2f154f2856fd7bc3436d169feff5a73b79706dff24a0d42b436ab910732aa (miner 77007 NVD Keyword Review, served rank 1)
+const securityWethNvd = bought('security', 'SECURITY_REVIEW_GENERAL', {
+  verdict: 'Secure', vulnerability_count: 0,
+  issues: [
+    'CWE-668 Exposure of Resource to Wrong Sphere (Lack of EIP-20 compliance)',
+    'CWE-252 Unchecked Return Value (Race conditions in approve)',
+    'Low (integration hazard): the fallback function accepts any call without reverting (deposit();), so a call to a function the contract does not have, such as permit, succeeds silently; an integrator that assumes the call worked can be misled (the "phantom function" pattern). The 2022 Multichain (AnySwap) exploit used this against WETH: its permit call to WETH did nothing and did not revert. This is from general knowledge, not the code shown.',
+  ],
+  summary: 'The WETH9 contract is a legacy implementation that predates the finalized ERC-20 standard, leading to integration hazards such as the lack of return values in certain scenarios and the standard ERC-20 \'approve\' race condition. General knowledge indicates that while the contract is battle-tested and secure for its intended use as a bridge for Ether, its manual implementation of transfer logic and lack of current best-practice protections make it less robust than modern token standards. Low (integration hazard): see issues.',
+}, { verdict: 'ok', vulnerability_count: 'ok', issues: 'ok', summary: 'ok' }, {
+  minerId: '77007', minerName: 'NVD Keyword Review', servedRank: 1, signalHash: '0x46e2f154f2856fd7bc3436d169feff5a73b79706dff24a0d42b436ab910732aa',
+  receipt: receiptOf('0xf8e43ef6d9f26a1cd377980e0d15527fbd46dc9f21b2de4f8070ec6ea7820b0c', '3858'),
+});
+
+// memo B4k2AxbY, signal 0x57bb4f2b73514959a9baa0e61dbf9f7399054e2f78891005910986621334e190 (miner 4433 LiveCert)
+const supplyWeth = bought('supply', 'TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL', { total_supply: 2150135.6263283747 }, { total_supply: 'ok' }, {
+  minerId: '4433', minerName: 'LiveCert — Sourced Answers for Agents', servedRank: 1, signalHash: '0x57bb4f2b73514959a9baa0e61dbf9f7399054e2f78891005910986621334e190',
+  receipt: receiptOf('0x84cf18d03b10523254935b6251dd1c18f7aee9045cea7f2eedf97747d1211540', '6126'),
+});
+
+// memo B4k2AxbY, signal 0x12a3d4a9461b0d4e687dcdfe30a1e51ef2756591a28a59eb6d2e4b5e322217be (miner 9002 TxLens, served rank 3):
+// TxLens's own answer was only "Insufficient data"; the node's shaping filled in the 0% and the volume signals
+const washWethTxLens = bought('wash', 'WASH_TRADING_DETECTION_GENERAL', {
+  subject: 'WETH pool 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640 on Ethereum', verdict: 'inconclusive', wash_volume_pct: 0,
+  signals: ['24h volume $140.22M is 2.1x the pool\'s $67.57M liquidity', '5925 buys and 4761 sells in 24h'],
+  summary: 'Insufficient data. The query references a WETH pool address, but no transaction logs, timestamps, or trade details are provided, so wash‑trading indicators cannot be evaluated.',
+}, { subject: 'ok', verdict: 'ok', wash_volume_pct: 'ok', signals: 'ok', summary: 'ok' }, {
+  minerId: '9002', minerName: 'TxLens', servedRank: 3, signalHash: '0x12a3d4a9461b0d4e687dcdfe30a1e51ef2756591a28a59eb6d2e4b5e322217be',
+  receipt: receiptOf('0x1ad16bfe7dd504441ff0b775304ddc7b30917fa69ac72ea1bf210fd64615269d', '6121'),
+});
+
+// memo B4k2AxbY, signal 0xa660248967ec8cf8ff536ca6895e07c3f848699eda201cda7beba4439cfdf5ef (miner 7373 VerifyWire)
+const liquidityWeth = bought('liquidity', 'LIQUIDITY_DEPTH_VERIFY_GENERAL', { liquidity_usd: 67634825.4031 }, { liquidity_usd: 'ok' }, {
+  minerId: '7373', minerName: 'VerifyWire Liquidity Depth', servedRank: 1, signalHash: '0xa660248967ec8cf8ff536ca6895e07c3f848699eda201cda7beba4439cfdf5ef',
+  receipt: receiptOf('0xa16fd7b39f997f0dc05606337c9089f2406304b8e8eb0d0856355bb57d246aea', '4434'),
+});
+
+// ---------- unit: "examined nothing", widened ----------
+
+{
+  const said = notExamined(secureQueryOnly.fields!.summary, secureQueryOnly.fields!.issues);
+  check('"merely a token contract address query" is read as examined nothing (memo WOYbyG3x)', said !== null, String(said));
+  const r = evaluate(tradeUsdc, usdcFacts, [secureQueryOnly, supplyUsdc, washUsdc, liquidityUsdc], null);
+  check('the WOYbyG3x "Secure" no longer clears USDC: not_examined, no pass', r.findings.some((f) => f.rule === 'security.not_examined') && !r.findings.some((f) => f.rule === 'security.secure') && r.decision === 'REVIEW', r.findings.filter((f) => f.evidence.includes('security')).map((f) => `${f.rule}:${f.severity}`).join(','));
+  check('the live WOYbyG3x wash answer (86%, "Insufficient data") is examined nothing', notExamined(wash86Live.fields!.summary) !== null);
+  for (const [name, text] of [
+    ['request only contains a query string', 'The request only contains a query string, so no review is possible.'],
+    ['input only contains a contract address', 'The input only contains a contract address.'],
+    ['nothing to assess', 'Secure. There is nothing to assess in a bare address.'],
+    ['no source code to review', 'Secure. The provided target is just a contract address; there is no source code to review.'],
+    ['an echoed target that is merely a lookup', `Secure. The target ${USDC} (USDC token contract) on Ethereum is merely an address lookup.`],
+    ['cannot be assessed', 'The security of the contract cannot be assessed from an address alone.'],
+  ] as const) check(`examined nothing: ${name}`, notExamined(text) !== null);
+}
+
+{
+  // Every live scan text Shield clears on must stay readable as a scan.
+  const wethGoPlus = "Wrapped Ether (WETH) at 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 on Ethereum is low risk. honeypot: no; buy tax 0%, sell tax 0%; mintable: unknown; owner: none reported; top 10 holders own 58.2%, per GoPlus's contract scan.";
+  const real: Array<[string, unknown]> = [
+    ['GoPlus USDC summary', securityUsdc.fields!.summary],
+    ['GoPlus SQUID summary', securitySquid.fields!.summary],
+    ['GoPlus WETH summary', wethGoPlus],
+    ['GoPlus proxy issue', securityUsdc.fields!.issues],
+    ['wash scan on the USDC/WETH pool', washUsdc.fields!.summary],
+    ['NVD WETH summary (B4k2AxbY)', securityWethNvd.fields!.summary],
+    ...(securityWethNvd.fields!.issues as string[]).map((t, i): [string, unknown] => [`NVD WETH issue ${i + 1} (B4k2AxbY)`, t]),
+    // wording of real findings that uses "only", "address", "input" or "code" about the contract
+    ['"input is only checked against the zero address"', 'The input is only checked against the zero address before transferFrom.'],
+    ['"only has a single owner address"', 'The contract only has a single owner address that can pause transfers.'],
+    ['"only contains a transfer function ... owner address"', 'The contract only contains a transfer function that sends fees to the owner address.'],
+    ['"only a question of time"', 'This is only a question of time before the owner mints more.'],
+    ['"honeypot: yes ... blacklist"', 'Honeypot: yes. Sellers are blocked by a blacklist.'],
+  ];
+  for (const [name, text] of real) check(`real scan text is not "examined nothing": ${name}`, notExamined(text) === null, String(notExamined(text)));
+  const r = evaluate(tradeWeth, wethFacts, [securityWethNvd, supplyWeth, washWethTxLens, liquidityWeth], null);
+  check('B4k2AxbY replayed: the NVD review counts as a review (three issues, verdict Secure)', r.findings.filter((f) => f.rule === 'security.issue').length === 3 && r.findings.some((f) => f.rule === 'security.secure') && !r.findings.some((f) => f.rule === 'security.not_examined'));
+  check('B4k2AxbY replayed: TxLens\'s "Insufficient data" wash answer is no evidence, decision REVIEW as live', r.findings.some((f) => f.rule === 'wash.not_examined') && r.decision === 'REVIEW');
 }
 
 {

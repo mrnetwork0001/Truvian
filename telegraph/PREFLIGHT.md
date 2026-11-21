@@ -106,7 +106,7 @@ like the pre-sign check.
 | top 10 holders above 50%, with a pool under $1M | review (with a deeper pool this is disclosed as info) |
 | sanctions near match (score ≥ 0.85) or no clear result | review |
 | any check that did not answer, or escrow or budget too low to buy | review |
-| an answer that says it examined nothing ("no code was provided", "insufficient data"), whatever verdict or figure it carries | review: no evidence either way; it can neither clear nor reject a token |
+| an answer that says it examined nothing ("no code was provided", "insufficient data", "the input is merely a token contract address query", "nothing to assess"), whatever verdict or figure it carries | review: no evidence either way; it can neither clear nor reject a token |
 | upgradeable proxy, contract owner | info, disclosed |
 
 ## Measured on 2026-11-20
