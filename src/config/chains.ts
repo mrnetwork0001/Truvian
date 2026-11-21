@@ -127,7 +127,15 @@ const REGISTRY: Record<SupportedChain, ChainEntry> = {
   avalanche: {
     chain: avalanche,
     label: 'Avalanche C-Chain',
-    rpcs: [full('https://api.avax.network/ext/bc/C/rpc'), full('https://avalanche.drpc.org')],
+    // Re-probed 2026-11-21 with transactions 10 to 500 days old, three reads
+    // each: avalanche.drpc.org, listed as full history, answered null for
+    // every one older than about 250 days and for every receipt, even at 10
+    // days; 43114.rpc.thirdweb.com served them all, as did api.avax.network.
+    rpcs: [
+      full('https://api.avax.network/ext/bc/C/rpc'),
+      full('https://43114.rpc.thirdweb.com'),
+      recent('https://avalanche.drpc.org'),
+    ],
     isOpStack: false,
   },
   scroll: {
