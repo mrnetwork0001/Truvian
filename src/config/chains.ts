@@ -46,6 +46,23 @@ interface RpcEndpoint {
   fullHistory: boolean;
 }
 
+/**
+ * What is known about the terms on which every endpoint below is used. Answers
+ * quote it in their provenance, so it must stay true of the whole table: each
+ * endpoint is a public URL that answers without an API key, account or
+ * payment; Truvian holds no licence or agreement with any operator and claims
+ * none; and no operator's terms of use have been reviewed. An endpoint used
+ * on other terms (a key, a paid plan, a reviewed agreement) needs its own
+ * statement before it is added.
+ */
+export const PUBLIC_RPC_TERMS = {
+  access: 'public endpoints, no API key, account or payment',
+  licence: 'none held or claimed',
+  terms_of_use: 'not reviewed',
+} as const;
+
+export type RpcTerms = typeof PUBLIC_RPC_TERMS;
+
 interface ChainEntry {
   chain: Chain;
   /** Display name used in composed answers */

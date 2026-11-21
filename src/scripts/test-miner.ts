@@ -6,7 +6,7 @@
  */
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { SUPPORTED_CHAINS, chainMeta, getClient, getRpcClients, type SupportedChain } from '../config/chains.js';
+import { PUBLIC_RPC_TERMS, SUPPORTED_CHAINS, chainMeta, getClient, getRpcClients, type SupportedChain } from '../config/chains.js';
 import { buildServer } from '../miner/server.js';
 import {
   contractAnswered, handleBalance, handleSupply, parseTokenRef, readText, validateBalanceInput, validateSupplyInput,
@@ -249,6 +249,12 @@ async function main() {
   check('chain named in free text is detected', textMisses.length === 0, textMisses.map(([r]) => r).join(' | '));
   const unsupported = (() => { try { validateTxLookupInput({ chain: 'solana', txHash: sampleHash }); return null; } catch (e) { return e; } })();
   check('unserved chain rejected by name', unsupported instanceof IntentError && unsupported.code === 'CHAIN_UNSUPPORTED');
+
+  // PUBLIC_RPC_TERMS says every endpoint is used without a key, account or payment
+  const keyed = SUPPORTED_CHAINS.flatMap((name) => getRpcClients(name).map(({ url }) => new URL(url)))
+    .filter((u) => u.username !== '' || u.password !== '' || u.search !== '' || /[A-Za-z0-9_-]{24,}/.test(u.pathname));
+  check(`every registry endpoint is a public keyless URL, as PUBLIC_RPC_TERMS states ("${PUBLIC_RPC_TERMS.access}")`,
+    keyed.length === 0, keyed.map(String).join(', '));
 
   // every registered chain answers a real lookup: newest block's first transaction
   for (const name of SUPPORTED_CHAINS) {
