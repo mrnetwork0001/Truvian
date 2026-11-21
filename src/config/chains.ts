@@ -186,9 +186,25 @@ const REGISTRY: Record<SupportedChain, ChainEntry> = {
   'base-sepolia': {
     chain: baseSepolia,
     label: 'Base Sepolia',
+    // Re-probed 2026-11-21 (tip 61,713,283) with transactions from 100 to 700
+    // days old, each read three times by hash:
+    //  - sepolia.base.org returned every transaction and receipt, but refuses
+    //    blocks by number below about 48,000,000 (4444 "pruned history
+    //    unavailable"), so it cannot supply a sample block, only look one up
+    //  - base-sepolia-public.nodies.app returned every block, transaction and
+    //    receipt; 84532.rpc.thirdweb.com did too until it answered HTTP 429
+    //    after about 30 calls in a minute
+    //  - base-sepolia.drpc.org, listed as full history, answered null for
+    //    every transaction older than about 300 days (and free-plan timeouts
+    //    for some newer ones); base-sepolia-rpc.publicnode.com the same, null
+    //    below about block 48,000,000
+    //  - base-sepolia.gateway.tenderly.co timed out; gateway.tatum.io allows 5
+    //    calls a minute; 1rpc.io, therpc.io, blockpi and ankr refused keyless calls
     rpcs: [
       full('https://sepolia.base.org'),
-      full('https://base-sepolia.drpc.org'),
+      full('https://base-sepolia-public.nodies.app'),
+      full('https://84532.rpc.thirdweb.com'),
+      recent('https://base-sepolia.drpc.org'),
       recent('https://base-sepolia-rpc.publicnode.com'),
     ],
     isOpStack: true,

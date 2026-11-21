@@ -404,8 +404,9 @@ async function main() {
         const target = tip - BigInt(Math.round((days * 86_400) / blockSeconds[name]));
         // Read the old block from whichever endpoint still has it. Some keep
         // transactions by hash but prune blocks by number (sepolia.base.org
-        // answers 4444 "pruned history unavailable"), and free tiers drop
-        // requests, so try several neighbouring blocks.
+        // answers 4444 "pruned history unavailable" below about block
+        // 48,000,000), and free tiers drop requests, so try several
+        // neighbouring blocks.
         let sample: { hash: `0x${string}`; block: bigint } | undefined;
         for (let off = 0n; off < 12n && !sample; off++) {
           for (const { client: c } of getRpcClients(name)) {
@@ -420,6 +421,23 @@ async function main() {
           got.block_number !== null && BigInt(got.block_number) === sample.block,
           `${got.status} block ${got.block_number}`,
         );
+        // A "not found" from an endpoint marked full history proves absence
+        // (searchRpcs), so each one must still serve the year-old transaction
+        // and its receipt. An error (a rate limit, a timeout) says nothing
+        // about its history; only a "not found" makes the flag false. On
+        // 2026-11-21 base-sepolia.drpc.org, then marked full history,
+        // answered null for every Base Sepolia transaction older than about
+        // 300 days, which could have turned a real transaction into not_found.
+        if (days === 365) {
+          const forgot: string[] = [];
+          for (const e of getRpcClients(name).filter((r) => r.fullHistory)) {
+            for (const read of [() => e.client.getTransaction({ hash: sample!.hash }), () => e.client.getTransactionReceipt({ hash: sample!.hash })]) {
+              const err = await read().then(() => null, (x) => x);
+              if (err?.name === 'TransactionNotFoundError' || err?.name === 'TransactionReceiptNotFoundError') forgot.push(`${new URL(e.url).host} (${err.name})`);
+            }
+          }
+          check(`${name}: no endpoint marked full history calls the ${age} old transaction or its receipt absent`, forgot.length === 0, forgot.join(', '));
+        }
       } catch (e: any) {
         check(`${name}: ${age} old transaction`, false, e?.message ?? String(e));
       }
