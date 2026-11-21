@@ -664,6 +664,17 @@ export class Spend {
   adjust(deltaUsd: number): void {
     this.committedUsd += deltaUsd;
   }
+  /**
+   * Settle an ask committed at `estimateUsd`. A reply says what was billed (its
+   * receipt, or the envelope's cost). An ask that ended without one, at Shield's
+   * timeout or a gateway 504, keeps its estimate: the node can still answer and
+   * bill it (2026-11-21: $0.26 left the escrow while the receipts showed $0.09).
+   * A refused request was never charged.
+   */
+  settle(estimateUsd: number, a: Pick<TypedAnswer, 'ok' | 'costUsd' | 'receipt' | 'refused'>): void {
+    if (a.receipt || a.ok || a.costUsd !== undefined) this.adjust((a.costUsd ?? 0) - estimateUsd);
+    else if (a.refused) this.adjust(-estimateUsd);
+  }
 }
 
 /** What a second opinion is asked through: the live node, or stubs in tests. */
@@ -752,7 +763,7 @@ export async function withSecondOpinion(plan: Omit<Planned, 'question'>, firstAs
     pinned = { intent, params, ok: false, fields: null, fieldStatus: {}, latencyMs: 0, error: err instanceof Error ? err.message : String(err) };
   }
   const second = answerOf(pinned);
-  ctx.spend.adjust(second.costUsd - m.priceUsd);
+  ctx.spend.settle(m.priceUsd, pinned);
   so.second = second;
   const secondLacking = noEvidence({ ...resolved(second), reused: false, boughtAt: '' }, ctx);
   so.used = secondLacking === null;
@@ -789,7 +800,7 @@ async function buy(plan: Planned, ctx: FactContext & { spend: Spend }): Promise<
       at: now,
       fact: (async () => {
         const first = await askTypedIntent(plan.intent, plan.params, plan.question);
-        ctx.spend.adjust((first.costUsd ?? 0) - ROUTED_ASK_USD);
+        ctx.spend.settle(ROUTED_ASK_USD, first);
         return withSecondOpinion(plan, first, ctx);
       })(),
     };

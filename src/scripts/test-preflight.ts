@@ -584,6 +584,16 @@ const wethGoPlusScan = bought('security', 'SECURITY_REVIEW_GENERAL', {
   const b = await withSecondOpinion({ key: 'wash', intent: WASH, params: washParams }, typed(washWethTxLens, washParams), wethCtx(0.04, 0.04), broke.deps);
   check('over budget: not asked, nothing spent, the memo says so', broke.calls.pinned.length === 0 && b.costUsd === washWethTxLens.costUsd && b.secondOpinion?.second === null && /budget/.test(b.secondOpinion?.outcome ?? ''), b.secondOpinion?.outcome);
 
+  // The budget keeps what an ask without a reply may still cost.
+  const ledger = (fn: (s: Spend) => void) => { const s = new Spend(0.1, 0.04); fn(s); return Number(s.committedUsd.toFixed(6)); };
+  check('budget: an answered ask settles at its receipt', ledger((s) => s.settle(0.01, { ok: true, costUsd: 0.01, receipt: washWethTxLens.receipt! })) === 0.04);
+  check('budget: an ask that timed out keeps its estimate (the node can still bill it)', ledger((s) => s.settle(0.01, { ok: false })) === 0.04);
+  check('budget: a refused request is refunded (it was never charged)', ledger((s) => s.settle(0.01, { ok: false, refused: true })) === 0.03);
+  const slow = stubDeps(washRanking, { intent: WASH, params: washParams, ok: false, fields: null, fieldStatus: {}, latencyMs: 90_000, error: 'The operation was aborted due to timeout' });
+  const slowCtx = wethCtx();
+  const t = await withSecondOpinion({ key: 'wash', intent: WASH, params: washParams }, typed(washWethTxLens, washParams), slowCtx, slow.deps);
+  check('a pinned ask that timed out is not used, and its price stays committed', t.secondOpinion?.used === false && Math.abs(slowCtx.spend.committedUsd - 0.05) < 1e-9, String(slowCtx.spend.committedUsd));
+
   // No ranking for the intent (LIQUIDITY_DEPTH_VERIFY_GENERAL in epochs 26-30), or the leaderboard unreachable.
   const liquidityFailed = failed('liquidity', 'LIQUIDITY_DEPTH_VERIFY_GENERAL', 'miner step failed: timeout');
   const none = stubDeps({ intent: 'LIQUIDITY_DEPTH_VERIFY_GENERAL', epoch: null, miners: [], error: 'the leaderboard ranks no miner for LIQUIDITY_DEPTH_VERIFY_GENERAL in epochs 30, 29, 28, 27, 26' }, washExaminedStub);
