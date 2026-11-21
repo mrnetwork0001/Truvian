@@ -36,6 +36,7 @@ import {
 import { canonicalJson, memoDigest, signMemo, verifyMemo } from '../shield/memo.js';
 import {
   askPinnedIntent,
+  errorBodyText,
   latestRanked,
   rankMiners,
   typedAnswerFrom,
@@ -459,6 +460,10 @@ const washCatalog: CatalogMinerEntry[] = [
   boardsSeen.length = 0;
   const capped = await latestRanked('LIQUIDITY_DEPTH_VERIFY_GENERAL', board({ 30: {}, 29: {}, 28: {}, 27: {}, 26: {} }), 2);
   check('ranking: the search goes back at most the epochs allowed', capped.epoch === null && capped.searched.join(',') === '30,29,28' && boardsSeen.length === 3);
+
+  const gatewayPage = '<!DOCTYPE html>\n<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->\n<head>\n<title>backend.telegraphprotocol.com | 504: Gateway time-out</title>\n</head><body>...</body></html>';
+  check('a gateway\'s HTML error page is named by its title, not quoted', errorBodyText(gatewayPage) === 'an HTML error page, "backend.telegraphprotocol.com | 504: Gateway time-out"' && errorBodyText('<html><body>x</body></html>') === 'an HTML error page', errorBodyText(gatewayPage));
+  check('a JSON error body is kept as text', errorBodyText({ error: 'invalid_params' }) === '{"error":"invalid_params"}');
 
   const saved = process.env.TELEGRAPH_API_KEY;
   delete process.env.TELEGRAPH_API_KEY;

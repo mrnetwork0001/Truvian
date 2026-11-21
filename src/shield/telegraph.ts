@@ -742,10 +742,7 @@ async function askRoutedApiKey(
       await res.body?.cancel();
       await new Promise((r) => setTimeout(r, 1_500));
     }
-    if (!res.ok || !res.body) {
-      const body = await readBody(res);
-      throw new Error(`http ${res.status}: ${(typeof body === 'string' ? body : JSON.stringify(body)).slice(0, 200)}`);
-    }
+    if (!res.ok || !res.body) throw new Error(`http ${res.status}: ${errorBodyText(await readBody(res))}`);
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -841,10 +838,7 @@ async function askEngineApiKey(
       signal: AbortSignal.timeout(API_KEY_TIMEOUT_MS),
     });
     const body = await readBody(res);
-    if (!res.ok) {
-      const text = typeof body === 'string' ? body : JSON.stringify(body);
-      throw new EngineRouteError(res.status, `http ${res.status}: ${text.slice(0, 200)}`);
-    }
+    if (!res.ok) throw new EngineRouteError(res.status, `http ${res.status}: ${errorBodyText(body)}`);
     const record = asRecord(body) ?? {};
     const envelope = asRecord(record.result);
     if (!envelope) throw new Error(`engine ask returned no result: ${JSON.stringify(record).slice(0, 200)}`);
@@ -964,6 +958,18 @@ function parseAnswerBody(body: unknown, headers: Headers, v2?: { intent: ShieldI
     undefined;
   if (signalHash) out.signalHash = signalHash;
   return out;
+}
+
+/**
+ * An error reply as short text for a memo. A gateway in front of the API
+ * answers 502/504 with an HTML page (seen on 2026-11-21: a 504 whose body began
+ * "<!DOCTYPE html> <!--[if lt IE 7]>"); it is named by its title, not quoted.
+ */
+export function errorBodyText(body: unknown): string {
+  const text = typeof body === 'string' ? body : JSON.stringify(body);
+  if (!/^\s*</.test(text)) return text.slice(0, 200);
+  const title = text.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.replace(/\s+/g, ' ').trim();
+  return title ? `an HTML error page, "${title.slice(0, 120)}"` : 'an HTML error page';
 }
 
 async function readBody(res: Response): Promise<unknown> {
