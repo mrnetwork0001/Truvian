@@ -20,7 +20,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
-import { formatUnits } from 'viem';
+import { formatUnits, parseAbi } from 'viem';
 import { getClient, getRpcClients, type SupportedChain } from '../config/chains.js';
 import { TRUTH_CHAINS, stateArchives } from '../truth/balance.js';
 
@@ -223,10 +223,111 @@ async function verifyTruvianBalanceSource() {
   check('truvian: a chain the intent does not allow gives no value', outside.value === null, outside.value === null ? outside.why : outside.value);
 }
 
+/** The intent's comparator from the node: its question keys and tolerance. */
+async function comparator(intent: string): Promise<{ question_keys: string[]; tolerance_bps: number; question_template: string }> {
+  const res = await fetch(`https://devnode.telegraphprotocol.com/engine/v1/intents/${intent}`, { signal: AbortSignal.timeout(20_000) });
+  const spec: any = await res.json();
+  return spec.evaluation.comparator;
+}
+
+/** Relative difference in basis points between two exact decimal strings, to 1e-6 bps. */
+function bpsApart(a: string, b: string): number {
+  const x = Number(a);
+  const y = Number(b);
+  return y === 0 ? (x === 0 ? 0 : Infinity) : (Math.abs(x - y) / Math.abs(y)) * 10_000;
+}
+
+/** The first answer from the miner registry's endpoints one by one (src/config/chains.ts), a read independent of the truth API's own pairing. */
+async function registryRead<T>(chain: SupportedChain, read: (c: ReturnType<typeof getRpcClients>[number]) => Promise<T | null>): Promise<T | null> {
+  for (const e of getRpcClients(chain).filter((x) => x.fullHistory)) {
+    const v = await read(e).catch(() => null);
+    if (v !== null) return v;
+  }
+  return null;
+}
+
+const ERC20_ABI = parseAbi(['function totalSupply() view returns (uint256)', 'function decimals() view returns (uint8)']);
+
+/**
+ * Our current-state and transaction sources: total supply, wallet balance,
+ * transaction block. Each of the node's own question keys is turned into the
+ * request by hand (the step the node does with the mapping's `how`), sent
+ * through the descriptor to the live API, and compared with a read from the
+ * miner's registry endpoints: within the intent's own tolerance for the two
+ * current-state values, which move between the two reads, and exactly for
+ * the block number.
+ */
+async function verifyTruvianStateSources() {
+  {
+    const intent = 'TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL';
+    const src = load('token-total-supply-truvian.yaml');
+    checkDescriptor(src, intent);
+    const cmp = await comparator(intent);
+    for (const key of cmp.question_keys) {
+      const got = await ask(src, intent, { token: key });
+      const address = key.match(/0x[0-9a-fA-F]{40}/)?.[0] as `0x${string}` | undefined;
+      const truth = address ? await registryRead('ethereum', async ({ client }) => {
+        const [supply, decimals] = await Promise.all([
+          client.readContract({ address, abi: ERC20_ABI, functionName: 'totalSupply' }),
+          client.readContract({ address, abi: ERC20_ABI, functionName: 'decimals' }),
+        ]);
+        return formatUnits(supply, decimals);
+      }) : null;
+      const off = got.value !== null && truth !== null ? bpsApart(got.value, truth) : Infinity;
+      check(`supply: "${key}" within the intent's ${cmp.tolerance_bps} bps of totalSupply() read separately`, off <= cmp.tolerance_bps,
+        got.value !== null ? `${got.value} vs ${truth} (${off.toFixed(6)} bps)` : got.why);
+    }
+    const nochain = await ask(src, intent, { token: 'USDC' });
+    check('supply: a token with no chain gives no value', nochain.value === null, nochain.value === null ? nochain.why : nochain.value);
+    const unlisted = await ask(src, intent, { token: 'Kelp DAO Restaked ETH (rsETH) on Ethereum' });
+    check('supply: a symbol outside the verified table gives no value', unlisted.value === null, unlisted.value === null ? unlisted.why : unlisted.value);
+  }
+  console.log('');
+  {
+    const intent = 'WALLET_BALANCE_CHECK_GENERAL';
+    const src = load('wallet-balance-truvian.yaml');
+    checkDescriptor(src, intent);
+    const cmp = await comparator(intent);
+    for (const key of cmp.question_keys) {
+      // "the ETH balance of 0x… (beacon deposit contract) on Ethereum": the native coin, so token is left empty
+      const m = key.match(/^the (\S+) balance of (0x[0-9a-fA-F]{40}).* on (\S+)$/);
+      if (!m || m[1] !== 'ETH') { check(`wallet: question key "${key}" is an ETH balance this script can turn into a request`, false); continue; }
+      const address = m[2] as `0x${string}`;
+      const got = await ask(src, intent, { address, chain: m[3]!.toLowerCase(), token: '' });
+      const truth = await registryRead('ethereum', async ({ client }) => formatUnits(await client.getBalance({ address }), 18));
+      const off = got.value !== null && truth !== null ? bpsApart(got.value, truth) : Infinity;
+      check(`wallet: "${key}" within the intent's ${cmp.tolerance_bps} bps of eth_getBalance read separately`, off <= cmp.tolerance_bps,
+        got.value !== null ? `${got.value} vs ${truth} (${off.toFixed(6)} bps)` : got.why);
+    }
+    const outside = await ask(src, intent, { address: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', chain: 'bsc', token: '' });
+    check('wallet: a chain the descriptor does not offer gives no value', outside.value === null, outside.value === null ? outside.why : outside.value);
+  }
+  console.log('');
+  {
+    const intent = 'ONCHAIN_TX_LOOKUP_GENERAL';
+    const src = load('onchain-tx-lookup-truvian.yaml');
+    checkDescriptor(src, intent);
+    const cmp = await comparator(intent);
+    for (const key of cmp.question_keys) {
+      const m = key.match(/^(0x[0-9a-fA-F]{64}) on (\S+)$/);
+      if (!m) { check(`tx: question key "${key}" is "<hash> on <chain>"`, false); continue; }
+      const hash = m[1] as `0x${string}`;
+      const got = await ask(src, intent, { tx_hash: hash, chain: m[2]!.toLowerCase() });
+      const truth = await registryRead('ethereum', async ({ client }) => (await client.getTransactionReceipt({ hash })).blockNumber.toString());
+      check(`tx: "${key}" equals the receipt's blockNumber read separately`, got.value !== null && got.value === truth,
+        got.value !== null ? `${got.value} vs ${truth}` : got.why);
+    }
+    const missing = await ask(src, intent, { tx_hash: `0x${'0'.repeat(56)}deadbeef`, chain: 'ethereum' });
+    check('tx: a transaction that does not exist gives no value', missing.value === null, missing.value === null ? missing.why : missing.value);
+  }
+}
+
 async function main() {
   await verifyBalanceSource();
   console.log('');
   await verifyTruvianBalanceSource();
+  console.log('');
+  await verifyTruvianStateSources();
   console.log('');
   await verifyGasSource();
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
