@@ -25,7 +25,7 @@ import {
   type PreflightRequest,
 } from '../shield/preflight.js';
 import { canonicalJson, memoDigest, signMemo, verifyMemo } from '../shield/memo.js';
-import type { PaymentReceipt } from '../shield/telegraph.js';
+import { askPinnedIntent, latestRanked, rankMiners, type CatalogMinerEntry, type Leaderboard, type LeaderboardRow, type PaymentReceipt } from '../shield/telegraph.js';
 import type { TokenFacts } from '../shield/tokenFacts.js';
 
 let failures = 0;
@@ -355,6 +355,58 @@ const liquidityWeth = bought('liquidity', 'LIQUIDITY_DEPTH_VERIFY_GENERAL', { li
   const f = summaryFacts(securitySquid.fields!.summary as string);
   check('summary facts parsed from the provider text', f.honeypot === 'unknown' && f.buyTax === 0 && f.sellTax === 0 && f.top10 === 59.1, JSON.stringify(f));
   check('summary facts absent when the provider words it otherwise', summaryFacts('Looks fine.').honeypot === null);
+}
+
+// ---------- unit: the node's ranking and the pinned ask (telegraph.ts) ----------
+
+const WASH = 'WASH_TRADING_DETECTION_GENERAL';
+// GET /leaderboard/miners/epoch/29 -> intents.WASH_TRADING_DETECTION_GENERAL, first rows as read on 2026-11-21
+const washRows29: LeaderboardRow[] = [
+  { miner_slug: 'wash-dex-search', score: 0.8836, rank: 1, activation_status: 'active' },
+  { miner_slug: 'chainsight-oracle', score: 0.4967, rank: 2, activation_status: 'active' },
+  { miner_slug: 'txlens', score: 0, rank: 3, activation_status: 'active' },
+  { miner_slug: 'a1-preflight', score: 0, rank: 4, activation_status: 'active' },
+];
+// GET /api/miners?intent=WASH_TRADING_DETECTION_GENERAL, the fields a pinned ask needs
+const washCatalog: CatalogMinerEntry[] = [
+  { id: '9002', slug: 'txlens', name: 'TxLens', activation_status: 'active', supported_intents: ['ONCHAIN_TX_LOOKUP_GENERAL', WASH], min_price_usdc: 10000 },
+  { id: '80002', slug: 'wash-dex-search', name: 'DexScreener Search', activation_status: 'active', supported_intents: [WASH], min_price_usdc: 10000 },
+  { id: '302', slug: 'chainsight-oracle', name: 'ChainSight — Universal Intelligence & Data Oracle', activation_status: 'active', supported_intents: [WASH], min_price_usdc: 10000 },
+  { id: '20260828', slug: 'a1-preflight', name: 'PREFLIGHT Infrastructure Signals', activation_status: 'active', supported_intents: [WASH], min_price_usdc: 10000 },
+];
+
+{
+  const ranked = rankMiners(WASH, [...washRows29].reverse(), washCatalog);
+  check('ranking: leaderboard slugs joined to catalog ids, best rank first', ranked.map((m) => `${m.rank}:${m.minerId}`).join(',') === '1:80002,2:302,3:9002,4:20260828', ranked.map((m) => `${m.rank}:${m.minerId}`).join(','));
+  check('ranking: the price per call comes from the catalog (10000 micro-USDC = $0.01)', ranked.every((m) => m.priceUsd === 0.01));
+  const dropped = rankMiners(WASH, [...washRows29, { miner_slug: 'gone-miner', score: 1, rank: 0 }], [
+    { ...washCatalog[1]!, supported_intents: ['SOMETHING_ELSE'] },
+    { ...washCatalog[2]!, min_price_usdc: undefined },
+    { ...washCatalog[3]!, activation_status: 'inactive' },
+    washCatalog[0]!,
+  ]);
+  check('ranking: a ranked slug the catalog lacks, or that no longer serves the intent, has no price or is inactive, is left out', dropped.map((m) => m.minerId).join(',') === '9002', dropped.map((m) => m.minerId).join(','));
+
+  const boardsSeen: Array<number | null> = [];
+  const board = (have: Record<number, Record<string, LeaderboardRow[]> | null>) => async (epoch: number | null): Promise<Leaderboard | null> => {
+    boardsSeen.push(epoch);
+    const n = epoch ?? 30;
+    const intents = have[n];
+    return intents === undefined || intents === null ? null : { epoch: n, intents };
+  };
+  const found = await latestRanked(WASH, board({ 30: { SECURITY_REVIEW_GENERAL: [] }, 29: { [WASH]: washRows29 } }), 5);
+  check('ranking: the latest epoch without the intent is skipped for the one before (30 -> 29, as live)', found.epoch === 29 && found.rows.length === 4 && found.searched.join(',') === '30,29');
+  const none = await latestRanked('LIQUIDITY_DEPTH_VERIFY_GENERAL', board({ 30: {}, 29: {}, 28: null }), 5);
+  check('ranking: the search stops at an epoch the node does not have (404)', none.epoch === null && none.searched.join(',') === '30,29');
+  boardsSeen.length = 0;
+  const capped = await latestRanked('LIQUIDITY_DEPTH_VERIFY_GENERAL', board({ 30: {}, 29: {}, 28: {}, 27: {}, 26: {} }), 2);
+  check('ranking: the search goes back at most the epochs allowed', capped.epoch === null && capped.searched.join(',') === '30,29,28' && boardsSeen.length === 3);
+
+  const saved = process.env.TELEGRAPH_API_KEY;
+  delete process.env.TELEGRAPH_API_KEY;
+  const pinned = await askPinnedIntent('80002', WASH, { subject: 'x' });
+  check('pinned ask without an API key: no answer, refused, nothing thrown', !pinned.ok && pinned.refused === true && /TELEGRAPH_API_KEY/.test(pinned.error ?? ''));
+  if (saved !== undefined) process.env.TELEGRAPH_API_KEY = saved;
 }
 
 // ---------- unit: input ----------
