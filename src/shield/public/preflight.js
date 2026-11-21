@@ -90,13 +90,17 @@
       : el('span', { class: 'pending', text: '-' });
     const meta = [
       p.minerName ? `${p.minerId} ${p.minerName}` : (p.minerId || '-'),
+      p.servedRank ? `rank ${p.servedRank}` : null,
       p.reused ? `reused (bought ${new Date(p.boughtAt).toISOString().slice(11, 19)} UTC) · $0` : `$${p.costUsd}`,
       p.reused ? null : `${(p.latencyMs / 1000).toFixed(1)} s`,
     ].filter(Boolean).join(' · ');
+    const receipt = p.receipt
+      ? el('div', { class: 'fields mono', title: `paid ${p.receipt.amountUsd} USDC from ${p.receipt.payer} to miner registration ${p.receipt.miner}, settles in epoch ${p.receipt.epochId} (${p.receipt.rail})`, text: `receipt ${p.receipt.hash.slice(0, 10)}…${p.receipt.hash.slice(-6)} · epoch ${p.receipt.epochId}` })
+      : null;
     return el('tr', { 'data-key': p.key },
       el('td', {}, el('span', { class: 'intent-tag', text: p.intent.replace(/_GENERAL$/, '') })),
       el('td', {}, answerText(p)),
-      el('td', { class: 'detail', text: meta }),
+      el('td', { class: 'detail' }, meta, receipt),
       el('td', {}, signal));
   }
 
