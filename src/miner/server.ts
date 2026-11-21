@@ -10,6 +10,7 @@ import Fastify from 'fastify';
 import { handleGasPrice, validateGasPriceInput } from './gasPrice.js';
 import { handleTxLookup, validateTxLookupInput } from './txLookup.js';
 import { handleBalance, handleSupply, validateBalanceInput, validateSupplyInput } from './holdings.js';
+import { preloadTokenList } from './tokenList.js';
 import { IntentError } from '../types/index.js';
 
 const MINER_ID = process.env.TRUVIAN_MINER_ID ?? 'truvian-miner-01';
@@ -19,6 +20,21 @@ function isIntentRoute(url: string | undefined): boolean {
   if (!url) return false;
   const path = url.split('?')[0] ?? '';
   return path === '/tx' || path === '/gas' || path === '/balance' || path === '/total-supply' || path.startsWith('/intents/');
+}
+
+/**
+ * What a request to the route must identify, for the answer to one that did
+ * not. Unlisted routes look up transactions.
+ */
+const REQUEST_SUBJECTS: Record<string, string> = {
+  '/gas': 'a chain to read the gas price of',
+  '/intents/GAS_PRICE': 'a chain to read the gas price of',
+  '/balance': 'a wallet and a token whose balance can be read',
+  '/total-supply': 'an ERC-20 token whose total supply can be read',
+};
+
+function requestSubject(url: string | undefined): string | undefined {
+  return REQUEST_SUBJECTS[(url ?? '').split('?')[0] ?? ''];
 }
 
 export function buildServer() {
@@ -80,9 +96,10 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
       // (Measured: every miner that degrades to 200+prose scores above zero;
       // every miner that returns an answer-less error scores zero.)
       if (isIntentRoute(req.url) && err.code !== 'UPSTREAM_RPC_ERROR') {
+        const answer = err.answerText(requestSubject(req.url));
         return reply.status(200).send({
-          answer: err.answerText,
-          signal: err.answerText,
+          answer,
+          signal: answer,
           source: 'Truvian onchain lookup over public JSON-RPC',
           confidence: 0,
           ...err.fields,
@@ -111,4 +128,10 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop()
     app.log.error(err);
     process.exit(1);
   });
+  // Most supply questions name Ethereum tokens. Fetch that list now so the
+  // first of them does not wait for the download; startup does not wait for it.
+  preloadTokenList('ethereum').then(
+    (tokens) => app.log.info(`token list for ethereum preloaded: ${tokens} tokens`),
+    (err) => app.log.warn(`token list for ethereum not preloaded: ${err?.message ?? String(err)}`),
+  );
 }

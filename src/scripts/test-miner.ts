@@ -4,20 +4,111 @@
  * fee-math invariant against the raw RPC receipt, then runs GAS_PRICE and
  * checks internal consistency. Exits non-zero on any failure.
  */
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { SUPPORTED_CHAINS, chainMeta, getClient, getRpcClients, type SupportedChain } from '../config/chains.js';
 import { buildServer } from '../miner/server.js';
-import { handleBalance, handleSupply, validateBalanceInput, validateSupplyInput } from '../miner/holdings.js';
-import { KNOWN_TOKENS } from '../config/tokens.js';
-import { formatUnits, parseAbi } from 'viem';
+import {
+  contractAnswered, handleBalance, handleSupply, parseTokenRef, readText, validateBalanceInput, validateSupplyInput,
+} from '../miner/holdings.js';
+import {
+  LIST_BACKOFF_MS, LIST_TTL_MS, TokenListCache, TokenListUnavailable, fetchTokenList, listedTokens, symbolKey,
+} from '../miner/tokenList.js';
+import { nameAgreement, nameWords, type Agreement } from '../miner/tokenNames.js';
+import { KNOWN_TOKENS, KNOWN_TOKEN_NAMES } from '../config/tokens.js';
+import { createPublicClient, encodeAbiParameters, formatUnits, http, parseAbi, stringToHex, type PublicClient } from 'viem';
 import { chainFromText, handleTxLookup, normalizeChain, searchRpcs, validateTxLookupInput } from '../miner/txLookup.js';
 import { handleGasPrice, validateGasPriceInput } from '../miner/gasPrice.js';
 import { IntentError } from '../types/index.js';
 
+let passes = 0;
 let failures = 0;
+let skips = 0;
 function check(name: string, cond: boolean, detail = '') {
   console.log(`${cond ? '✅' : '❌'} ${name}${detail ? ` - ${detail}` : ''}`);
-  if (!cond) failures++;
+  if (cond) passes++;
+  else failures++;
 }
+
+/** A check that could not be run, with why: counted apart from passes and failures. */
+function skip(name: string, reason: string) {
+  console.log(`⏭️  ${name} - skipped: ${reason}`);
+  skips++;
+}
+
+/**
+ * Whether CoinGecko refused this client (HTTP 429 or an HTML page) for a list
+ * the check needs. Such a check is skipped, not failed: the refusal is about
+ * how often the list was asked for, not about the miner.
+ */
+function listRefused(e: unknown): e is TokenListUnavailable {
+  return e instanceof TokenListUnavailable && e.rateLimited;
+}
+
+interface StandInReply { status: number; type: string; body: string; headers?: Record<string, string> }
+type StandInAnswer = StandInReply | 'hang';
+
+/**
+ * A stand-in for tokens.coingecko.com on a local port: each path answers as
+ * `answers` says ('hang' never answers), and every request is counted.
+ */
+async function standInListHost() {
+  const answers = new Map<string, StandInAnswer>();
+  const asked = new Map<string, number>();
+  const server = createServer((req, res) => {
+    const path = req.url ?? '';
+    asked.set(path, (asked.get(path) ?? 0) + 1);
+    const answer = answers.get(path);
+    if (answer === 'hang') return;
+    if (!answer) { res.writeHead(404).end(); return; }
+    res.writeHead(answer.status, { 'content-type': answer.type, ...answer.headers }).end(answer.body);
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    base: `http://127.0.0.1:${port}`,
+    answers,
+    asked: (path: string) => asked.get(path) ?? 0,
+    close: () => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }),
+  };
+}
+
+/** What a stand-in JSON-RPC endpoint answers for eth_call to one contract. */
+type RpcAnswer = { result: `0x${string}` } | { error: { code: number; message: string; data?: string } } | { http: number };
+
+/**
+ * A JSON-RPC endpoint on a local port. Each eth_call is answered as `answers`
+ * says for the contract called (a result, a JSON-RPC error, or an HTTP
+ * status), and calls are counted by contract.
+ */
+async function standInRpc(answers: Record<string, RpcAnswer>) {
+  const calls = new Map<string, number>();
+  const server = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (chunk) => { raw += chunk; });
+    req.on('end', () => {
+      const msg = JSON.parse(raw);
+      const to = String(msg.params?.[0]?.to ?? '').toLowerCase();
+      calls.set(to, (calls.get(to) ?? 0) + 1);
+      const answer = answers[to];
+      if (!answer || 'http' in answer) { res.writeHead(answer ? answer.http : 404).end('unavailable'); return; }
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: msg.id, ...answer }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    client: createPublicClient({ transport: http(`http://127.0.0.1:${port}`, { retryCount: 0 }) }) as unknown as PublicClient,
+    calls: (address: string) => calls.get(address.toLowerCase()) ?? 0,
+    close: () => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }),
+  };
+}
+
+/** How tokens.coingecko.com refused on 2026-11-21: HTTP 429 with an HTML page. */
+const RATE_LIMIT_PAGE: StandInReply = {
+  status: 429, type: 'text/html; charset=UTF-8',
+  body: '<!DOCTYPE html><html><head><title>Too Many Requests</title></head><body>error code: 1015</body></html>',
+};
 
 async function main() {
   const client = getClient('base');
@@ -286,7 +377,7 @@ async function main() {
 
   // --- WALLET_BALANCE_CHECK_GENERAL and TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL ---
   console.log('');
-  const erc20 = parseAbi(['function balanceOf(address) view returns (uint256)', 'function totalSupply() view returns (uint256)', 'function symbol() view returns (string)', 'function decimals() view returns (uint8)']);
+  const erc20 = parseAbi(['function balanceOf(address) view returns (uint256)', 'function totalSupply() view returns (uint256)', 'function symbol() view returns (string)', 'function decimals() view returns (uint8)', 'function name() view returns (string)']);
   // the node's own question keys for both intents
   const deposit = await handleBalance(validateBalanceInput({ address: '0x00000000219ab540356cBB839Cbe05303d7705Fa', chain: 'ethereum' }));
   const eth = getClient('ethereum');
@@ -304,8 +395,39 @@ async function main() {
     && usdcBase.balance_exact === formatUnits(usdcRaw, 6) && usdcBase.token_symbol === 'USDC', `${usdcBase.balance_exact} USDC`);
   const byAddr = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: '8453', token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }));
   check('a token by contract address and chain id reads the same contract', byAddr.token_address === KNOWN_TOKENS.base!.USDC!.address && byAddr.token_symbol === 'USDC' && byAddr.chain === 'base', byAddr.token_symbol);
+  // a word given alone is answered from the verified table or refused, so a list refusal here would itself be a failure
   const unknownToken = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: 'ethereum', token: 'NOTATOKEN' })).then(() => null, (e) => e);
-  check('an unknown token symbol is refused, not guessed', unknownToken instanceof IntentError && unknownToken.code === 'INVALID_INPUT');
+  check('an unknown token symbol is refused, not guessed', unknownToken instanceof IntentError && unknownToken.code === 'INVALID_INPUT'
+    && unknownToken.message.includes('in parentheses'), unknownToken?.message);
+
+  // A native symbol is the native coin only on its own chain. A "POL" balance
+  // on Ethereum was answered in ETH; POL there is an ERC-20, found the way
+  // total supply finds it (a word given alone: the verified table, which has
+  // no POL on Ethereum, so it is refused).
+  const holder = '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A';
+  const balanceOf = (chain: string, token: string) => handleBalance(validateBalanceInput({ address: holder, chain, token }))
+    .then((r) => ({ symbol: r.token_symbol, address: r.token_address, err: null }), (err) => ({ symbol: null, address: null, err }));
+  const [polOnEthereum, polOnPolygon, maticOnPolygon, ethOnPolygon, ethOnBase, bnbOnBsc, bnbOnEthereum] = await Promise.all([
+    balanceOf('ethereum', 'POL'), balanceOf('polygon', 'POL'), balanceOf('polygon', 'MATIC'), balanceOf('polygon', 'ETH'),
+    balanceOf('base', 'ETH'), balanceOf('bsc', 'BNB'), balanceOf('ethereum', 'BNB'),
+  ]);
+  check('a "POL" balance on Ethereum is not read as ETH: POL there is an ERC-20 the verified table lacks, so it is refused',
+    polOnEthereum.err instanceof IntentError && polOnEthereum.err.code === 'INVALID_INPUT' && polOnEthereum.err.message.includes('in parentheses'),
+    polOnEthereum.err?.message ?? `${polOnEthereum.symbol}`);
+  check('"POL" and "MATIC" balances on Polygon are its native coin', polOnPolygon.symbol === 'POL' && polOnPolygon.address === null
+    && maticOnPolygon.symbol === 'POL' && maticOnPolygon.address === null, `${polOnPolygon.symbol} ${maticOnPolygon.symbol}`);
+  check('"ETH" is native on Base and "BNB" on BNB Smart Chain', ethOnBase.symbol === 'ETH' && ethOnBase.address === null
+    && bnbOnBsc.symbol === 'BNB' && bnbOnBsc.address === null, `${ethOnBase.symbol} ${bnbOnBsc.symbol}`);
+  check('"ETH" on Polygon and "BNB" on Ethereum are not read as those chains\' coins',
+    ethOnPolygon.err instanceof IntentError && ethOnPolygon.err.code === 'INVALID_INPUT'
+      && bnbOnEthereum.err instanceof IntentError && bnbOnEthereum.err.code === 'INVALID_INPUT',
+    `${ethOnPolygon.err?.message ?? ethOnPolygon.symbol} | ${bnbOnEthereum.err?.message ?? bnbOnEthereum.symbol}`);
+  const polByName = await handleBalance(validateBalanceInput({ address: holder, chain: 'ethereum', token: 'Polygon Ecosystem Token (POL)' }))
+    .then((r) => r, (e) => e);
+  const polName = 'a "Polygon Ecosystem Token (POL)" balance on Ethereum reads the POL ERC-20, the contract total supply reads';
+  if (listRefused(polByName)) skip(polName, polByName.message);
+  else check(polName, !(polByName instanceof Error) && polByName.token_address === '0x455e53CBB86018Ac2B8092FdCd39d8444aFFC3F6'
+    && polByName.token_symbol === 'POL', polByName?.message ?? polByName?.token_address);
 
   for (const [key, address] of [['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'],
     ['WBTC (0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599) on Ethereum', '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599'],
@@ -324,17 +446,297 @@ async function main() {
   const nativeSupply = await handleSupply(validateSupplyInput({ token: 'ETH on Ethereum' })).then(() => null, (e) => e);
   check('a native coin is refused for total supply (no contract to read)', nativeSupply instanceof IntentError && nativeSupply.code === 'INVALID_INPUT');
 
-  // every known token address still answers with the symbol and decimals in the table
+  // How the node writes a token (nginx access log since registration 6146 went
+  // active): "<name> (<symbol>) on <chain>", "<symbol> (<address>) on <chain>"
+  // or "<address> on <chain>". The chain is the words after the last " on ".
+  // [token, chain, address, symbol, symbol given alone (bare), name]
+  const refCases: Array<[string, SupportedChain, string | null, string | null, boolean, string | null]> = [
+    ['Kelp DAO Restaked ETH (rsETH) on Ethereum', 'ethereum', null, 'rsETH', false, 'Kelp DAO Restaked ETH'],
+    ['Bancor (BNT) on Ethereum', 'ethereum', null, 'BNT', false, 'Bancor'],
+    ['0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6 on Polygon', 'polygon', '0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6', null, false, null],
+    ['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', 'ethereum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'USDC', true, null],
+    ['USD Coin (USDC) (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Arbitrum', 'arbitrum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'USDC', false, 'USD Coin'],
+    ['Arbitrum (ARB) on Ethereum', 'ethereum', null, 'ARB', false, 'Arbitrum'],
+    ['Brett (ETH) (BRETT) on Base', 'base', null, 'BRETT', false, 'Brett (ETH)'],
+    ['What is the current total supply of Bancor (BNT) on Ethereum, in whole tokens?', 'ethereum', null, 'BNT', false, 'Bancor'],
+    ['(rsETH) on Ethereum', 'ethereum', null, 'rsETH', false, null],
+    ['USDC on Arbitrum', 'arbitrum', null, 'USDC', true, null],
+    ['Bitcoin on Ethereum', 'ethereum', null, 'Bitcoin', true, null],
+    ['Kelp DAO Restaked ETH on Ethereum', 'ethereum', null, null, false, 'Kelp DAO Restaked ETH'],
+  ];
+  const refMisses = refCases.filter(([token, chain, address, symbol, bare, name]) => {
+    const got = validateSupplyInput({ token });
+    return got.chain !== chain || got.ref.address !== address || got.ref.symbol !== symbol || got.ref.bare !== bare || got.ref.name !== name;
+  });
+  check('a token reference splits into address, or symbol and name, and the chain after its last " on "',
+    refMisses.length === 0, refMisses.map(([t]) => t).join(' | '));
+
+  // A word given alone is answered only from the verified table, since it may
+  // be a name as well as a symbol: "Bitcoin on Ethereum" was answered for the
+  // meme token whose symbol is BITCOIN (0x72e4f9F8…, supply 1,000,000,000).
+  // Words with no symbol at all are not looked up either.
+  for (const question of ['Bitcoin on Ethereum', 'BNT on Ethereum', 'Kelp DAO Restaked ETH on Ethereum']) {
+    const refused = await handleSupply(validateSupplyInput({ token: question })).then(() => null, (e) => e);
+    check(`"${question}" is refused, asking for the symbol in parentheses or the contract address`,
+      refused instanceof IntentError && refused.code === 'INVALID_INPUT' && refused.message.includes('in parentheses')
+        && refused.message.includes('contract address'), refused?.message);
+  }
+  const listForWords = await listedTokens('ethereum').catch((e) => e);
+  const wordsListed = 'CoinGecko\'s Ethereum list has the symbols BITCOIN and BNT, so those refusals are not for want of a listing';
+  if (listRefused(listForWords)) skip(wordsListed, listForWords.message);
+  else check(wordsListed, Array.isArray(listForWords) && ['BITCOIN', 'BNT'].every((s) => listForWords.some((t) => symbolKey(t.symbol) === s)));
+
+  // A name given beside a symbol must agree with the token the symbol finds
+  // (src/miner/tokenNames.ts): the same words 3, one a run of whole words
+  // within the other 2, the same first word past the/wrapped/bridged 1.
+  const agreementCases: Array<[string, string[], Agreement]> = [
+    ['Kelp DAO Restaked ETH', ['Kelp DAO Restaked ETH'], 3],
+    ['kelp-dao  restaked ETH', ['Kelp DAO Restaked ETH'], 3],
+    ['Bancor', ['Bancor Network'], 2],
+    ['Bridged USDC', ['Arbitrum Bridged USDC (Arbitrum)'], 2],
+    ['(PoS) Wrapped BTC', ['Wrapped BTC'], 2],
+    ['Lido Staked ETH', ['Lido Staked Ether'], 1],
+    ['Tether USDt', ['Tether USD'], 1],
+    ['USD₮0', ['USDT0'], 3],
+    ['Uniswap', ['Bancor Network', 'BNT'], 0],
+    ['Uniswap', ['UNICORN'], 0],
+    ['Uni', ['Uniswap'], 0],
+    ['Wrapped Bitcoin', ['Wrapped Ether', 'WETH'], 0],
+    ['Polygon Ecosystem Token', ['POL (ex-MATIC)', 'POL'], 0],
+  ];
+  const agreementMisses = agreementCases.filter(([given, names, want]) => nameAgreement(given, names) !== want);
+  check('names agree by the stated rule, and contradicting names do not', agreementMisses.length === 0,
+    agreementMisses.map(([given, names, want]) => `${given} vs ${names.join('/')}: ${nameAgreement(given, names)}, wanted ${want}`).join(' | '));
+  // "Uniswap (BNT)" gives Bancor's symbol with Uniswap's name; the verified
+  // table's tokens are held to their names the same way.
+  const contradictions: Array<[string, boolean]> = [
+    ['Uniswap (BNT) on Ethereum', true], ['Uniswap (USDC) on Ethereum', false], ['Wrapped Bitcoin (WETH) on Base', false],
+  ];
+  for (const [question, needsList] of contradictions) {
+    const refused = await handleSupply(validateSupplyInput({ token: question })).then(() => null, (e) => e);
+    const name = `"${question}" is refused: the name contradicts the token its symbol finds`;
+    if (needsList && listRefused(refused)) skip(name, refused.message);
+    else check(name, refused instanceof IntentError && refused.code === 'INVALID_INPUT' && refused.message.includes('does not agree'), refused?.message);
+  }
+  for (const [question, address] of [['USD Coin (USDC) on Base', KNOWN_TOKENS.base!.USDC!.address],
+    ['USDC (USDC) on Base', KNOWN_TOKENS.base!.USDC!.address], ['Tether (USDT) on Arbitrum', KNOWN_TOKENS.arbitrum!.USDT!.address],
+    ['Wrapped Bitcoin (WBTC) on Polygon', KNOWN_TOKENS.polygon!.WBTC!.address]] as const) {
+    const got = await handleSupply(validateSupplyInput({ token: question })).then((r) => r.token_address, (e) => `refused: ${e?.message}`);
+    check(`"${question}" is answered from the verified table, its name agreeing`, got === address, got);
+  }
+  const contradictedBalance = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: 'ethereum', token: 'Uniswap (USDC)' }))
+    .then(() => null, (e) => e);
+  check('a balance of "Uniswap (USDC)" is refused the same way', contradictedBalance instanceof IntentError
+    && contradictedBalance.code === 'INVALID_INPUT' && contradictedBalance.message.includes('does not agree'), contradictedBalance?.message);
+  check('a name in parentheses is not taken for a symbol', parseTokenRef('Polygon Bridged WBTC (Polygon POS)').symbol === null);
+  const solana = (() => { try { validateSupplyInput({ token: 'Wrapped SOL (SOL) on Solana' }); return null; } catch (e) { return e; } })();
+  check('a token on a chain this miner does not serve is refused, not read on Ethereum', solana instanceof IntentError && solana.code === 'CHAIN_UNSUPPORTED');
+
+  // The node's real questions, each read here from the contract at the
+  // answer's block: the figure must be totalSupply() with decimals() applied,
+  // and the scored total_supply within the comparator's 50 bps.
+  const nodeQuestions: Array<[string, SupportedChain, `0x${string}`]> = [
+    ['Kelp DAO Restaked ETH (rsETH) on Ethereum', 'ethereum', '0xA1290d69c65A6Fe4DF752f95823fae25cB99e5A7'],
+    ['Bancor (BNT) on Ethereum', 'ethereum', '0x1F573D6Fb3F13d689FF844B4cE37794d79a7FF1C'],
+    ['0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6 on Polygon', 'polygon', '0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6'],
+    ['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', 'ethereum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'],
+    // 2026-11-21 08:32:40 UTC: Ethereum's USDC address with Arbitrum named,
+    // where that address has no code; the symbol is read from the verified table
+    ['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Arbitrum', 'arbitrum', '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'],
+    // a name chooses between two listed UNI tokens (UNICORN and Uniswap)
+    ['Uniswap (UNI) on Ethereum', 'ethereum', '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984'],
+    // POL is Polygon's coin, but on Ethereum it is an ERC-20
+    ['Polygon Ecosystem Token (POL) on Ethereum', 'ethereum', '0x455e53CBB86018Ac2B8092FdCd39d8444aFFC3F6'],
+    // MKR's symbol() returns bytes32, not a string
+    ['Maker (MKR) on Ethereum', 'ethereum', '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2'],
+    // CoinGecko lists it as USDC.E; the contract's symbol() says USDC
+    ['Bridged USDC (USDC.e) on Arbitrum', 'arbitrum', '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8'],
+  ];
+  for (const [question, chain, address] of nodeQuestions) {
+    try {
+      const got = await handleSupply(validateSupplyInput({ token: question }));
+      const c = getClient(chain);
+      const [raw, dec] = await Promise.all([
+        c.readContract({ address, abi: erc20, functionName: 'totalSupply', blockNumber: BigInt(got.blockNumber) }),
+        c.readContract({ address, abi: erc20, functionName: 'decimals', blockNumber: BigInt(got.blockNumber) }),
+      ]);
+      const whole = Number(formatUnits(raw, dec));
+      check(`"${question}" is totalSupply() of ${address} on ${chain} at the block, decimals applied`,
+        got.chain === chain && got.token_address === address && got.total_supply_raw === raw.toString() && got.decimals === dec
+          && got.total_supply_exact === formatUnits(raw, dec) && Math.abs(got.total_supply - whole) <= whole * 0.005,
+        `${got.total_supply_exact} ${got.token} at block ${got.blockNumber}`);
+    } catch (e: any) {
+      if (listRefused(e)) skip(`"${question}"`, e.message);
+      else check(`"${question}"`, false, e?.message ?? String(e));
+    }
+  }
+
+  // A given address with no code on the named chain is no contract there.
+  // A symbol beside it is then read from the verified table only, and the
+  // answer says so; without a symbol the table holds, the question is refused.
+  const ethUsdcOnArbitrum = await handleSupply(validateSupplyInput({ token: 'USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Arbitrum' }))
+    .then((r) => r.answer, (e) => `refused: ${e?.message}`);
+  check('the answer says the given address is not a contract on Arbitrum, so the symbol was used',
+    ethUsdcOnArbitrum.includes('The given address 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 is not a contract on Arbitrum One, so the symbol USDC was used'),
+    ethUsdcOnArbitrum);
+  const balanceOnArbitrum = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: 'arbitrum', token: 'USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48)' }))
+    .then((r) => r, (e) => e);
+  check('a balance by another chain\'s address reads the verified table\'s contract for the symbol, saying so',
+    !(balanceOnArbitrum instanceof Error) && balanceOnArbitrum.token_address === KNOWN_TOKENS.arbitrum!.USDC!.address
+      && balanceOnArbitrum.answer.includes('is not a contract on Arbitrum One'), balanceOnArbitrum?.answer ?? balanceOnArbitrum?.message);
+  for (const [question, says] of [['0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 on Arbitrum', 'has no code there'],
+    ['BNT (0x1F573D6Fb3F13d689FF844B4cE37794d79a7FF1C) on Arbitrum', 'BNT is not in the verified token table for Arbitrum One'],
+    ['0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D on Ethereum', 'does not answer decimals() and symbol() like an ERC-20']] as const) {
+    const refused = await handleSupply(validateSupplyInput({ token: question })).then(() => null, (e) => e);
+    check(`"${question}" is refused: ${says}`, refused instanceof IntentError && refused.code === 'INVALID_INPUT' && refused.message.includes(says), refused?.message);
+  }
+
+  // A symbol the list gives to several tokens is refused, naming them, when
+  // the name does not tell them apart. The case is taken from the live list,
+  // so it holds while CoinGecko's entries change.
+  const listed = await listedTokens('ethereum').catch((e) => e);
+  if (listRefused(listed)) {
+    skip('a symbol and name shared by two listed tokens is refused, naming each', listed.message);
+  } else if (!Array.isArray(listed)) {
+    check('the Ethereum token list is held', false, listed?.message ?? String(listed));
+  } else {
+    const bySymbol = new Map<string, typeof listed>();
+    for (const t of listed) bySymbol.set(symbolKey(t.symbol), [...(bySymbol.get(symbolKey(t.symbol)) ?? []), t]);
+    const twins = [...bySymbol.entries()].find(([sym, sharing]) => /^[A-Z0-9]{2,10}$/.test(sym)
+      && sym !== chainMeta('ethereum').nativeSymbol && sym !== 'NATIVE' && !KNOWN_TOKENS.ethereum?.[sym]
+      && new Set(sharing.map((t) => t.address.toLowerCase())).size > 1
+      && sharing.every((t) => /^[A-Za-z0-9 .-]+$/.test(t.name) && nameWords(t.name).join(' ') === nameWords(sharing[0]!.name).join(' ')))?.[1];
+    if (!twins) {
+      check('found two listed Ethereum tokens with the same symbol and name', false);
+    } else {
+      const [twin] = twins as [typeof listed[number]];
+      const addresses = [...new Set(twins.map((t) => t.address.toLowerCase()))];
+      const refused = await handleSupply(validateSupplyInput({ token: `${twin.name} (${twin.symbol}) on Ethereum` })).then(() => null, (e) => e);
+      check(`"${twin.name} (${twin.symbol}) on Ethereum", the symbol and name of ${addresses.length} listed tokens, is refused naming each`,
+        refused instanceof IntentError && refused.code === 'INVALID_INPUT'
+          && addresses.every((a) => refused.message.toLowerCase().includes(a)), refused?.message);
+    }
+  }
+  const unlisted = await handleSupply(validateSupplyInput({ token: 'Not A Token (ZZNOTATOKEN9) on Ethereum' })).then(() => null, (e) => e);
+  if (listRefused(unlisted)) skip('a symbol no list holds is refused, not guessed', unlisted.message);
+  else check('a symbol no list holds is refused, not guessed', unlisted instanceof IntentError && unlisted.code === 'INVALID_INPUT', unlisted?.message);
+  const noList = await handleSupply(validateSupplyInput({ token: 'Foo (FOO) on Sepolia' })).then(() => null, (e) => e);
+  check('a symbol on a chain with no token list asks for the address', noList instanceof IntentError && noList.code === 'INVALID_INPUT', noList?.message);
+
+  // Token list downloads that fail, against a local stand-in for the host.
+  const host = await standInListHost();
+  const listBody = (chainId: number) => JSON.stringify({
+    tokens: [{ chainId, address: '0x1f573d6fb3f13d689ff844b4ce37794d79a7ff1c', name: 'Bancor Network', symbol: 'BNT', decimals: 18 }],
+  });
+  const unavailable = (e: unknown): e is TokenListUnavailable => e instanceof TokenListUnavailable && e.code === 'UPSTREAM_RPC_ERROR';
+  const fetchError = (path: string, timeoutMs?: number) => fetchTokenList(`${host.base}${path}`, 1, timeoutMs).then(() => null, (e) => e);
+  host.answers.set('/denied.json', { status: 403, type: 'application/xml', body: '<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code></Error>' });
+  const denied = await fetchError('/denied.json');
+  check('a list answered with HTTP 403 is an upstream error with its reason, and no rate limit', unavailable(denied)
+    && denied.message.includes('HTTP 403') && !denied.rateLimited, denied?.message);
+  host.answers.set('/limited.json', RATE_LIMIT_PAGE);
+  const limited = await fetchError('/limited.json');
+  check('HTTP 429 with an HTML page is a rate limit', unavailable(limited) && limited.rateLimited && limited.message.includes('HTTP 429'), limited?.message);
+  host.answers.set('/challenge.json', { status: 200, type: 'text/html', body: '<html><body>Just a moment...</body></html>' });
+  const challenge = await fetchError('/challenge.json');
+  check('an HTML page answered with 200 is a refusal, not a list', unavailable(challenge) && challenge.rateLimited && challenge.message.includes('HTML page'), challenge?.message);
+  host.answers.set('/text.json', { status: 200, type: 'text/plain', body: 'tokens: none' });
+  const notJson = await fetchError('/text.json');
+  check('a body that is not JSON is a failure, and no rate limit', unavailable(notJson) && !notJson.rateLimited && notJson.message.includes('not JSON'), notJson?.message);
+  host.answers.set('/silent.json', 'hang');
+  const silentStarted = Date.now();
+  const silent = await fetchError('/silent.json', 500);
+  check('a download is abandoned at its timeout', unavailable(silent) && Date.now() - silentStarted < 2_000,
+    `${Date.now() - silentStarted} ms: ${silent?.message}`);
+
+  // The cache, on a clock the test moves: a failed download is not repeated
+  // until its backoff has passed, and a stale copy answers meanwhile.
+  let clock = 1_800_000_000_000;
+  const lists = new TokenListCache(host.base, () => clock);
+  const listError = (chain: SupportedChain) => lists.get(chain).then(() => null, (e) => e);
+  host.answers.set('/ethereum/all.json', RATE_LIMIT_PAGE);
+  const refusedFirst = await listError('ethereum');
+  const refusedStarted = Date.now();
+  const refusedAgain = await listError('ethereum');
+  check('after a 429 the list is not asked for again within the backoff, and the refusal says for how long',
+    unavailable(refusedFirst) && unavailable(refusedAgain) && refusedAgain.rateLimited && host.asked('/ethereum/all.json') === 1
+      && refusedAgain.message.includes(`not asked for again for another ${LIST_BACKOFF_MS / 1000} s`) && Date.now() - refusedStarted < 100,
+    refusedAgain?.message);
+  const otherChain = await listError('base');
+  check('a 429 holds back every chain\'s list, since it refuses this client', unavailable(otherChain) && otherChain.rateLimited
+    && host.asked('/base/all.json') === 0, otherChain?.message);
+  clock += LIST_BACKOFF_MS;
+  host.answers.set('/ethereum/all.json', { status: 200, type: 'application/json', body: listBody(1) });
+  const recovered = await lists.get('ethereum');
+  check('once the backoff has passed the list is asked for again', recovered.tokens.length === 1 && host.asked('/ethereum/all.json') === 2);
+  clock += LIST_TTL_MS;
+  host.answers.set('/ethereum/all.json', RATE_LIMIT_PAGE);
+  const staleFirst = await lists.get('ethereum');
+  await new Promise((resolve) => setTimeout(resolve, 200)); // the refresh it started is refused meanwhile
+  const staleAgain = await lists.get('ethereum');
+  check('a stale copy answers through a refused refresh, which is not repeated within the backoff',
+    staleFirst === recovered && staleAgain === recovered && host.asked('/ethereum/all.json') === 3);
+  host.answers.set('/arbitrum-one/all.json', { ...RATE_LIMIT_PAGE, headers: { 'retry-after': '300' } });
+  const lists2 = new TokenListCache(host.base, () => clock);
+  await lists2.get('arbitrum').catch(() => undefined);
+  clock += LIST_BACKOFF_MS + 1_000;
+  const withinRetryAfter = await lists2.get('arbitrum').then(() => null, (e) => e);
+  clock += 300_000 - LIST_BACKOFF_MS;
+  host.answers.set('/arbitrum-one/all.json', { status: 200, type: 'application/json', body: listBody(42161) });
+  const afterRetryAfter = await lists2.get('arbitrum').then((l) => l.tokens.length, (e) => e);
+  check('a Retry-After longer than the backoff is honoured', unavailable(withinRetryAfter) && afterRetryAfter === 1
+    && host.asked('/arbitrum-one/all.json') === 2, withinRetryAfter?.message);
+  host.answers.set('/polygon-pos/all.json', { status: 403, type: 'application/xml', body: '<Error/>' });
+  host.answers.set('/binance-smart-chain/all.json', { status: 200, type: 'application/json', body: listBody(56) });
+  const lists3 = new TokenListCache(host.base, () => clock);
+  await lists3.get('polygon').catch(() => undefined);
+  const unaffected = await lists3.get('bsc').then((l) => l.tokens.length, (e) => e);
+  check('a failure that is no refusal of this client holds back only its own list', unaffected === 1, String(unaffected));
+  await host.close();
+
+  // symbol() is read again as bytes32 only when its answer did not decode as
+  // a string, and only the contract's own answer counts against the token.
+  const contract = (n: number) => `0x${n.toString(16).padStart(40, '0')}` as `0x${string}`;
+  const rpc = await standInRpc({
+    [contract(1)]: { result: encodeAbiParameters([{ type: 'string' }], ['USDC']) },
+    [contract(2)]: { result: stringToHex('MKR', { size: 32 }) },
+    [contract(3)]: { error: { code: -32000, message: 'header not found' } },
+    [contract(4)]: { http: 503 },
+    [contract(5)]: { error: { code: 3, message: 'execution reverted', data: '0x' } },
+    [contract(6)]: { result: '0x' },
+  });
+  const symbolOf = (n: number) => readText(rpc.client, contract(n), 'symbol', 1n).then((text) => ({ text, err: null }), (err) => ({ text: null, err }));
+  const [asText, asWord, rpcError, httpError, reverted, empty] = await Promise.all([1, 2, 3, 4, 5, 6].map(symbolOf));
+  check('a string symbol() is read in one call', asText!.text === 'USDC' && rpc.calls(contract(1)) === 1, String(asText!.text));
+  check('a bytes32 symbol() is read again as bytes32 after the string fails to decode', asWord!.text === 'MKR' && rpc.calls(contract(2)) === 2,
+    String(asWord!.text ?? asWord!.err?.shortMessage));
+  check('a JSON-RPC error is not retried as bytes32 and says nothing about the contract',
+    rpcError!.err !== null && !contractAnswered(rpcError!.err) && rpc.calls(contract(3)) === 1, rpcError!.err?.shortMessage);
+  check('an HTTP failure is not retried as bytes32 and says nothing about the contract',
+    httpError!.err !== null && !contractAnswered(httpError!.err) && rpc.calls(contract(4)) === 1, httpError!.err?.shortMessage);
+  check('a revert is not retried as bytes32 and is the contract\'s own answer',
+    reverted!.err !== null && contractAnswered(reverted!.err) && rpc.calls(contract(5)) === 1, reverted!.err?.shortMessage);
+  check('an empty answer is not retried as bytes32 and is the contract\'s own answer',
+    empty!.err !== null && contractAnswered(empty!.err) && rpc.calls(contract(6)) === 1, empty!.err?.shortMessage);
+  await rpc.close();
+  const mkrSymbol = await readText(getClient('ethereum'), '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2', 'symbol', await eth.getBlockNumber())
+    .catch((e) => `failed: ${e?.shortMessage ?? e}`);
+  check('MKR\'s bytes32 symbol() reads as MKR on Ethereum', mkrSymbol === 'MKR', mkrSymbol);
+
+  // every known token address still answers with the symbol and decimals in
+  // the table, and with a name() that agrees with the table's names for it
   let tokenMismatches: string[] = [];
   for (const [chain, tokens] of Object.entries(KNOWN_TOKENS)) {
     for (const [sym, t] of Object.entries(tokens!)) {
       const c = getClient(chain as SupportedChain);
-      const [onSym, onDec] = await Promise.all([
+      const [onSym, onDec, onName] = await Promise.all([
         c.readContract({ address: t.address, abi: erc20, functionName: 'symbol' }),
         c.readContract({ address: t.address, abi: erc20, functionName: 'decimals' }),
-      ]).catch(() => ['?', -1] as const);
+        c.readContract({ address: t.address, abi: erc20, functionName: 'name' }),
+      ]).catch(() => ['?', -1, '?'] as const);
       const symOk = onSym === sym || (sym === 'USDT' && /^USD(₮|T)0$/.test(String(onSym)));
-      if (!symOk || Number(onDec) !== t.decimals) tokenMismatches.push(`${chain} ${sym}: ${onSym}/${onDec}`);
+      const nameOk = nameAgreement(String(onName), KNOWN_TOKEN_NAMES[sym] ?? []) > 0;
+      if (!symOk || !nameOk || Number(onDec) !== t.decimals) tokenMismatches.push(`${chain} ${sym}: ${onSym}/${onDec}/${onName}`);
     }
   }
   check('the known-token table matches every contract on-chain', tokenMismatches.length === 0, tokenMismatches.join(', '));
@@ -355,9 +757,45 @@ async function main() {
   const gasBody = gasHttp.json();
   check('GET /gas returns the V2 fields at top level', gasHttp.statusCode === 200 && gasBody.chain === 'ethereum'
     && typeof gasBody.gas_price_gwei === 'number' && typeof gasBody.as_of === 'string');
+  // The routes share this process's lists: when CoinGecko refuses the
+  // Ethereum list, the two requests that need it are skipped.
+  const ethListForHttp = await listedTokens('ethereum').then(() => null, (e) => e);
+  // the node's own request, encoded as it sent it
+  const kelpName = 'GET /total-supply answers the node\'s rsETH question with total_supply as a JSON number';
+  if (listRefused(ethListForHttp)) {
+    skip(kelpName, ethListForHttp.message);
+  } else {
+    const kelpHttp = await app.inject({ method: 'GET', url: '/total-supply?token=Kelp+DAO+Restaked+ETH+%28rsETH%29+on+Ethereum' });
+    const kelpBody = kelpHttp.json();
+    check(kelpName, kelpHttp.statusCode === 200 && kelpBody.token_address === '0xA1290d69c65A6Fe4DF752f95823fae25cB99e5A7'
+      && typeof kelpBody.total_supply === 'number' && kelpBody.total_supply > 0, `${kelpBody.total_supply} ${kelpBody.token}`);
+  }
+  // a refusal says what the route needed, in the route's own terms
+  const supplyRefusalName = 'a refused total-supply request is worded about a token, not a transaction';
+  if (listRefused(ethListForHttp)) {
+    skip(supplyRefusalName, ethListForHttp.message);
+  } else {
+    const supplyRefusal = (await app.inject({ method: 'GET', url: '/total-supply?token=Not+A+Token+%28ZZNOTATOKEN9%29+on+Ethereum' })).json();
+    check(supplyRefusalName, supplyRefusal.error === 'INVALID_INPUT'
+      && supplyRefusal.answer.startsWith('The request did not identify an ERC-20 token whose total supply can be read.')
+      && !/transaction/i.test(supplyRefusal.answer), supplyRefusal.answer);
+  }
+  const bitcoinHttp = await app.inject({ method: 'GET', url: '/total-supply?token=Bitcoin+on+Ethereum' });
+  const bitcoinBody = bitcoinHttp.json();
+  check('GET /total-supply for "Bitcoin on Ethereum" answers 200 with a refusal that asks for the symbol in parentheses',
+    bitcoinHttp.statusCode === 200 && bitcoinBody.resolved === false && bitcoinBody.error === 'INVALID_INPUT'
+      && bitcoinBody.total_supply === undefined && bitcoinBody.answer.includes('in parentheses'), bitcoinBody.answer);
+  const balanceRefusal = (await app.inject({ method: 'GET', url: '/balance?address=0x123&chain=ethereum' })).json();
+  check('a refused balance request is worded about a wallet balance, not a transaction', balanceRefusal.error === 'INVALID_INPUT'
+    && balanceRefusal.answer.startsWith('The request did not identify a wallet and a token whose balance can be read.')
+    && !/transaction/i.test(balanceRefusal.answer), balanceRefusal.answer);
+  const txRefusal = (await app.inject({ method: 'GET', url: '/tx?tx_hash=0x123' })).json();
+  check('a refused transaction lookup keeps its own wording', txRefusal.error === 'INVALID_INPUT'
+    && txRefusal.answer.startsWith('The request did not identify a transaction to look up.'), txRefusal.answer);
   await app.close();
 
-  console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
+  const tally = `${passes} passed, ${failures} failed, ${skips} skipped`;
+  console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} (${tally})`);
   process.exit(failures === 0 ? 0 : 1);
 }
 
