@@ -35,8 +35,9 @@ archive RPC reads.
 
 ## Why one source is our own
 
-`ONCHAIN_METRIC_VERIFY_GENERAL` also asks about Polygon and Arbitrum, and no
-free keyless API was found that returns a decimal balance at a block there:
+`ONCHAIN_METRIC_VERIFY_GENERAL`'s request schema also accepts Polygon and
+Arbitrum (its `chain` enum), and no free keyless API was found that returns a
+decimal balance at a block there:
 Routescan does not index them, their Blockscout explorers sit behind a
 browser challenge an automated caller cannot pass, Etherscan-family APIs need
 a key, and JSON-RPC returns hex, which the mapping cannot convert.
@@ -48,6 +49,16 @@ by different providers and returns a value only when they agree exactly.
 Disagreement (502), fewer than two answers (503) or a block beyond the tip
 (422) are HTTP errors, which the node treats as "no value" and leaves out of
 the median. Truvian does not mine `ONCHAIN_METRIC_VERIFY`.
+
+What is and is not shown, as of 2026-11-21: all three sources are `eligible`
+in the evaluation pool. Eligible is not the same as used. The node's scoring
+questions for `ONCHAIN_METRIC_VERIFY_GENERAL` are all on Ethereum (block
+23000000), so the Polygon and Arbitrum coverage serves apps that ask, not
+scoring. The server log for `truth.truvian.xyz` shows no request from the
+node yet. `GAS_PRICE_GENERAL` has not been ranked for any miner since epoch 13
+(18 Nov), so the gas source has fed no reference since then. The node
+publishes no record of which source built which reference, so use of the
+Routescan source cannot be confirmed either way.
 
 `npm run test:truth` checks those rules with stand-in endpoints and, live,
 that the answer for an address at blocks 2 days, 60 days and a year old on
