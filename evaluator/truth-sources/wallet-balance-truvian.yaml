@@ -1,0 +1,90 @@
+version: '1'
+kind: miner
+id: 8453091
+slug: truth-truvian-wallet-balance
+protocol: generic
+name: Truvian truth API, wallet balance now (Ethereum, Base, Arbitrum, OP Mainnet, Polygon)
+description: >-
+  Free, public, no-key API run by Truvian (source:
+  github.com/mrnetwork0001/Truvian/tree/main/src/truth). Returns the balance
+  of one address in whole units of the chain's native coin or of an ERC-20
+  token, decimals applied, as an exact decimal string. The balance is read at
+  one block about a minute below the chain tip from two JSON-RPC endpoints run
+  by different providers, which must agree exactly, block hash included; the
+  block is returned with the value. A token is a contract address, or a symbol
+  from a short verified table (USDC, USDT, DAI, WETH, WBTC) whose contract must
+  report that symbol. When the endpoints disagree, fewer than two answer, the
+  chain is not served, or the token is not certain, it answers an HTTP error
+  instead of a value.
+base_url: https://truth.truvian.xyz
+auth:
+  type: none
+rate_limit_per_sec: 2
+cache_ttl_sec: 0
+errors:
+  message_path: error.message
+  code_path: error.code
+endpoints:
+- path: /wallet-balance
+  external_path: /wallet-balance
+  method: GET
+  description: >-
+    Current balance of one address on ethereum, base, arbitrum, optimism or
+    polygon, in whole units of the native coin (ETH, or POL on Polygon) or of
+    an ERC-20 token. USE THIS for a wallet's current balance.
+  intents:
+  - WALLET_BALANCE_CHECK_GENERAL
+  params:
+    query:
+      required:
+      - name: address
+        type: string
+        intents: ['*']
+        description: The wallet, 0x followed by 40 hexadecimal characters, or an ENS name ending in .eth.
+      - name: chain
+        type: string
+        intents: ['*']
+        description: 'Chain to read: ethereum, base, arbitrum, optimism or polygon.'
+      optional:
+      - name: token
+        type: string
+        intents: ['*']
+        description: >-
+          Empty, or the chain's native symbol (ETH; POL on Polygon), for the
+          native coin. Otherwise the ERC-20 contract address, or one of the
+          symbols USDC, USDT, DAI, WETH, WBTC.
+# The node checks a built request against this schema before sending it.
+input_schema:
+  type: object
+  required: [address, chain]
+  properties:
+    address:
+      type: string
+      pattern: '^(0x[0-9a-fA-F]{40}|[^\s]+\.eth)$'
+    chain:
+      type: string
+      enum: [ethereum, base, arbitrum, optimism, polygon]
+    token:
+      type: string
+intent_mapping:
+  WALLET_BALANCE_CHECK_GENERAL:
+    endpoint: /wallet-balance
+    input:
+      address:
+        from: address
+        how: Copy the complete 0x-prefixed address, or the ENS name, exactly.
+      chain:
+        from: chain
+        how: The chain as one lower-case word, ethereum, base, arbitrum, optimism or polygon (Ethereum mainnet is ethereum).
+      token:
+        from: token
+        how: >-
+          Leave empty for the chain's native coin (ETH, or POL on Polygon).
+          Otherwise the token's contract address if given, else its symbol.
+    output:
+      balance:
+        path: balance
+        unit: whole token units
+semantics:
+  supported_intents:
+  - WALLET_BALANCE_CHECK_GENERAL

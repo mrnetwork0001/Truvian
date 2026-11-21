@@ -1,0 +1,71 @@
+version: '1'
+kind: miner
+id: 8453090
+slug: truth-truvian-total-supply
+protocol: generic
+name: Truvian truth API, ERC-20 total supply now (Ethereum, Base, Arbitrum, OP Mainnet, Polygon)
+description: >-
+  Free, public, no-key API run by Truvian (source:
+  github.com/mrnetwork0001/Truvian/tree/main/src/truth). Returns the total
+  supply of one ERC-20 token in whole tokens, decimals applied, as an exact
+  decimal string. totalSupply(), decimals(), symbol() and name() are read at
+  one block about a minute below the chain tip from two JSON-RPC endpoints
+  run by different providers, which must agree exactly, block hash included;
+  the block is returned with the value. The token is the contract address
+  written in the question, or a symbol from a short verified table (USDC,
+  USDT, DAI, WETH, WBTC), and its contract must report the symbol and agree
+  with the name the question writes. When the endpoints disagree, fewer than
+  two answer, no chain or an unserved chain is named, or the token is not
+  certain, it answers an HTTP error instead of a value.
+base_url: https://truth.truvian.xyz
+auth:
+  type: none
+rate_limit_per_sec: 2
+cache_ttl_sec: 0
+errors:
+  message_path: error.message
+  code_path: error.code
+endpoints:
+- path: /total-supply
+  external_path: /total-supply
+  method: GET
+  description: >-
+    Current total supply of one ERC-20 token in whole tokens, on ethereum,
+    base, arbitrum, optimism or polygon. USE THIS for the total supply of a
+    token named with its chain.
+  intents:
+  - TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL
+  params:
+    query:
+      required:
+      - name: token
+        type: string
+        intents: ['*']
+        description: >-
+          The token and its chain exactly as the question writes them, for
+          example "USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on
+          Ethereum". The chain after "on" is required.
+# The node checks a built request against this schema before sending it.
+input_schema:
+  type: object
+  required: [token]
+  properties:
+    token:
+      type: string
+      pattern: ' on '
+intent_mapping:
+  TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL:
+    endpoint: /total-supply
+    input:
+      token:
+        from: token
+        how: >-
+          Copy the token reference exactly as given, including any contract
+          address in parentheses and the words "on <chain>".
+    output:
+      total_supply:
+        path: total_supply
+        unit: whole tokens
+semantics:
+  supported_intents:
+  - TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL

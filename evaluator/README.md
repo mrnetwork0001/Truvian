@@ -14,6 +14,9 @@ wrong, so each one here is checked against the chain before it is uploaded.
 | `truth-sources/onchain-metric-routescan.yaml` | `ONCHAIN_METRIC_VERIFY_GENERAL` | Routescan `balancehistory` | Native balance of an address at a block, Ethereum |
 | `truth-sources/gas-price-metamask.yaml` | `GAS_PRICE_GENERAL` | MetaMask gas API | Estimated base fee, Ethereum, Arbitrum One, Avalanche C-Chain |
 | `truth-sources/onchain-metric-truvian.yaml` | `ONCHAIN_METRIC_VERIFY_GENERAL` | Truvian truth API (ours, `src/truth`) | Native balance of an address at a block, Ethereum, Polygon PoS, Arbitrum One |
+| `truth-sources/token-total-supply-truvian.yaml` | `TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL` | Truvian truth API, `/total-supply` | ERC-20 total supply in whole tokens, now; Ethereum, Base, Arbitrum One, OP Mainnet, Polygon PoS |
+| `truth-sources/wallet-balance-truvian.yaml` | `WALLET_BALANCE_CHECK_GENERAL` | Truvian truth API, `/wallet-balance` | Native or ERC-20 balance in whole units, now; same five chains |
+| `truth-sources/onchain-tx-lookup-truvian.yaml` | `ONCHAIN_TX_LOOKUP_GENERAL` | Truvian truth API, `/tx` | Block a transaction was included in; same five chains |
 
 Bounties: `telegraphprotocol/bounties` #87 and #179.
 
@@ -64,7 +67,50 @@ Routescan source cannot be confirmed either way.
 that the answer for an address at blocks 2 days, 60 days and a year old on
 each chain equals every archive endpoint's own read.
 
+## Total supply, wallet balance and transaction block (ours)
+
+Three more sources point at the same API (`src/truth/state.ts`,
+`src/truth/tx.ts`), under the same rule: two endpoints from different
+providers (`src/truth/endpoints.ts`, probed 2026-11-21) must read exactly the
+same thing, or the answer is an HTTP error. Truvian mines all three intents,
+so these sources score our own miner too. They share none of its code paths
+or endpoint choices, and they answer less than the miner does: where the
+miner tries to work out which token a question means, the truth API refuses.
+
+- **Total supply and wallet balance** are read at one block about a minute
+  below the tip, and the two endpoints must also agree on that block's hash.
+  The block is returned with the value. Amounts are exact decimal strings
+  with decimals applied (`total_supply`, `balance`). A token is the contract
+  address in the question, or a symbol in the verified table (USDC, USDT, DAI,
+  WETH, WBTC); its `symbol()` must match and a name written beside it must
+  agree. A symbol outside the table ("Kelp DAO Restaked ETH (rsETH)"), an
+  address with no code on the chain ("USDC (0xA0b8…) on Arbitrum") and a total
+  supply with no chain named are refused, not guessed.
+- **Transaction block** reads the receipt and transaction from two receipt
+  archives that served three-year-old receipts. Both lacking the
+  transaction is 404; it is never answered as a value. The node's question key
+  is Ethereum's first transaction (block 46147): before Byzantium a receipt has
+  no status, eth.drpc.org reports one anyway and rpc.mevblocker.io does not,
+  so the (unscored) status is read as null there.
+
+`npm run verify:truth` sends each of the node's own question keys through
+these descriptors to the live API: supply and balance are within the intent's
+tolerance (50 and 100 bps) of a separate read, measured at under 0.001 bps,
+and the block number is exact. `npm run test:truth` checks the agreement
+rules with stand-in endpoints, and live, that every answer equals each
+endpoint's own read at the answer's block on all five chains, and that
+transactions 2 days, 1 year and 3 years old come back in the block they were
+taken from.
+
 ## Known limits
+
+- The three newer sources are ours as well, so for those intents too they are
+  one contributor's source, and the node's question keys for them are all on
+  Ethereum (as of 2026-11-21); the other four chains serve apps that ask.
+- Their endpoints are free public tiers. A burst of test reads rate-limited
+  optimism.drpc.org; OP Mainnet then falls back to 10.rpc.thirdweb.com, which
+  answers in about 2 s. Blast API, an Arbitrum archive here, has already shut
+  down on OP Mainnet and Polygon.
 
 - The Routescan source covers Ethereum only; Polygon and Arbitrum are
   covered by our own API (above), which is one contributor's source, not an
@@ -114,6 +160,9 @@ next epoch.
 npm run verify:truth
 evaluator/upload-truth-source.sh ONCHAIN_METRIC_VERIFY_GENERAL evaluator/truth-sources/onchain-metric-routescan.yaml <address>
 evaluator/upload-truth-source.sh GAS_PRICE_GENERAL evaluator/truth-sources/gas-price-metamask.yaml <address>
+evaluator/upload-truth-source.sh TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL evaluator/truth-sources/token-total-supply-truvian.yaml <address>
+evaluator/upload-truth-source.sh WALLET_BALANCE_CHECK_GENERAL evaluator/truth-sources/wallet-balance-truvian.yaml <address>
+evaluator/upload-truth-source.sh ONCHAIN_TX_LOOKUP_GENERAL evaluator/truth-sources/onchain-tx-lookup-truvian.yaml <address>
 ```
 
 The script asks for the private key with hidden input, checks that the

@@ -1,0 +1,72 @@
+version: '1'
+kind: miner
+id: 8453092
+slug: truth-truvian-tx-block
+protocol: generic
+name: Truvian truth API, block a transaction was included in (Ethereum, Base, Arbitrum, OP Mainnet, Polygon)
+description: >-
+  Free, public, no-key API run by Truvian (source:
+  github.com/mrnetwork0001/Truvian/tree/main/src/truth). Returns the block
+  number a transaction was included in, with its status, sender, recipient
+  and value, read with eth_getTransactionReceipt and eth_getTransactionByHash
+  from two full-history JSON-RPC endpoints run by different providers, which
+  must agree exactly, block hash included. A transaction both endpoints lack
+  answers 404; one not yet included, or included less than about a minute
+  ago, answers 422; disagreement or fewer than two answers is an HTTP error
+  too, never a value.
+base_url: https://truth.truvian.xyz
+auth:
+  type: none
+rate_limit_per_sec: 2
+cache_ttl_sec: 0
+errors:
+  message_path: error.message
+  code_path: error.code
+endpoints:
+- path: /tx
+  external_path: /tx
+  method: GET
+  description: >-
+    The block one transaction was included in, on ethereum, base, arbitrum,
+    optimism or polygon. USE THIS for the block number of a transaction.
+  intents:
+  - ONCHAIN_TX_LOOKUP_GENERAL
+  params:
+    query:
+      required:
+      - name: tx_hash
+        type: string
+        intents: ['*']
+        description: The transaction hash, 0x followed by 64 hexadecimal characters.
+      - name: chain
+        type: string
+        intents: ['*']
+        description: 'Chain of the transaction: ethereum, base, arbitrum, optimism or polygon.'
+# The node checks a built request against this schema before sending it.
+input_schema:
+  type: object
+  required: [tx_hash, chain]
+  properties:
+    tx_hash:
+      type: string
+      pattern: '^0x[0-9a-fA-F]{64}$'
+    chain:
+      type: string
+      enum: [ethereum, base, arbitrum, optimism, polygon]
+intent_mapping:
+  ONCHAIN_TX_LOOKUP_GENERAL:
+    endpoint: /tx
+    input:
+      tx_hash:
+        from: tx_hash
+        how: Copy the complete 0x-prefixed 64-hex-character transaction hash exactly.
+      chain:
+        from: chain
+        how: The chain as one lower-case word, ethereum, base, arbitrum, optimism or polygon (Ethereum mainnet is ethereum).
+    output:
+      block_number:
+        path: block_number
+        unit: block height
+semantics:
+  supported_intents:
+  - ONCHAIN_TX_LOOKUP_GENERAL
