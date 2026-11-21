@@ -2,16 +2,19 @@
  * Shield preflight and listing-review tests.
  *
  * Unit section: the decision rules (preflight.ts evaluate) over answers
- * copied verbatim from LIVE routed Telegraph requests made on 2026-11-20
- * (signal hashes kept so each can be resolved on the node), plus memo
- * hashing, signing and tamper detection.
+ * copied verbatim from LIVE routed Telegraph requests made on 2026-11-20 and
+ * 2026-11-21 (memos FKLfi2qT, WOYbyG3x, B4k2AxbY; signal hashes kept so each
+ * can be resolved on the node), the node's ranking and the pinned ask over
+ * recorded replies, second opinions with stubbed answers, plus memo hashing,
+ * signing and tamper detection.
  *
  * Live section (PREFLIGHT_LIVE=1): runs real preflights through Telegraph,
- * paid from TELEGRAPH_API_KEY's escrow (about $0.04 each): the legitimate
- * fixture, the not-a-contract fixture (which must buy nothing) and a listing
- * review against a sanctioned issuer.
+ * paid from TELEGRAPH_API_KEY's escrow (about $0.04-0.08 each, second
+ * opinions included): the legitimate fixture, the not-a-contract fixture
+ * (which must buy nothing) and a listing review against a sanctioned issuer.
  */
 import 'dotenv/config';
+import { writeFileSync } from 'node:fs';
 import { generatePrivateKey } from 'viem/accounts';
 import {
   evaluate,
@@ -618,10 +621,26 @@ if (process.env.PREFLIGHT_LIVE === '1') {
   console.log('\n-- live (paid from TELEGRAPH_API_KEY escrow) --');
   // WETH: no owner, no proxy, no mint key. (USDC is a fair REVIEW: one admin key can freeze, upgrade and mint.)
   const legitInput = { mode: 'trade', chain: 'ethereum', token: WETH, pool: USDC_WETH_POOL, tradeUsd: 1000 };
+  const show = (memo: Awaited<ReturnType<typeof runPreflight>>) => {
+    for (const p of memo.purchases) {
+      console.log(`  ${p.key.padEnd(9)} ${p.ok ? 'ok ' : 'ERR'} ${p.minerId ?? '-'} ${p.minerName ?? ''}${p.servedRank ? ` (rank ${p.servedRank})` : ''} $${p.costUsd} ${p.signalHash ?? p.error ?? ''}${p.receipt ? ` receipt ${p.receipt.hash} -> registration ${p.receipt.miner}` : ''}`);
+      const so = p.secondOpinion;
+      if (!so) continue;
+      console.log(`      first:  ${so.first.minerId ?? '-'} ${so.first.minerName ?? ''} $${so.first.costUsd} ${so.first.signalHash ?? so.first.error ?? ''}${so.first.receipt ? ` receipt ${so.first.receipt.hash}` : ''}`);
+      console.log(`      why:    [${so.reasonRule}] ${so.reason}`);
+      console.log(`      pinned: ${so.miner ? `${so.miner.id} ${so.miner.slug} rank ${so.miner.rank} score ${so.miner.score} epoch ${so.miner.epoch} $${so.miner.priceUsd}` : '-'}`);
+      if (so.second) console.log(`      second: ${so.second.ok ? 'ok ' : 'ERR'} ${so.second.minerId ?? '-'} $${so.second.costUsd} ${so.second.signalHash ?? ''}${so.second.receipt ? ` receipt ${so.second.receipt.hash} -> registration ${so.second.receipt.miner}` : ''}${so.second.ok ? ` fields ${JSON.stringify(so.second.fields).slice(0, 400)}` : ` ${so.second.error ?? ''}`}`);
+      console.log(`      ${so.outcome}`);
+    }
+    for (const f of memo.findings) console.log(`  [${f.severity}] ${f.rule}: ${f.title}`);
+  };
+  const opinionsBounded = (memo: Awaited<ReturnType<typeof runPreflight>>) => memo.purchases.every((p) => !p.secondOpinion || p.secondOpinion.miner === null || (p.secondOpinion.miner.id !== p.secondOpinion.first.minerId));
+
   const legit = await runPreflight(normalizePreflightRequest(legitInput));
-  console.log(`WETH trade: ${legit.decision} (${legit.decisionRule}); $${legit.cost.telegraphUsd} over ${legit.cost.paidRequests} paid, ${legit.cost.reusedRequests} reused, ${legit.cost.failedRequests} failed; ${legit.latencyMs} ms`);
-  for (const p of legit.purchases) console.log(`  ${p.key.padEnd(9)} ${p.ok ? 'ok ' : 'ERR'} ${p.minerId ?? '-'} ${p.minerName ?? ''} $${p.costUsd} ${p.signalHash ?? p.error ?? ''}`);
-  for (const f of legit.findings) console.log(`  [${f.severity}] ${f.rule}: ${f.title}`);
+  console.log(`WETH trade: ${legit.decision} (${legit.decisionRule}); $${legit.cost.telegraphUsd} over ${legit.cost.paidRequests} paid, ${legit.cost.reusedRequests} reused, ${legit.cost.failedRequests} failed, ${legit.cost.secondOpinions} second opinion(s); ${legit.latencyMs} ms`);
+  show(legit);
+  check('live: a second opinion is never pinned to the miner that answered first', opinionsBounded(legit));
+  check('live: the trade preflight stays within its budget', legit.cost.telegraphUsd <= legit.cost.budgetUsd + 1e-9, `$${legit.cost.telegraphUsd}`);
   check('live: every purchase on the legitimate fixture answered', legit.purchases.every((p) => p.ok), legit.purchases.filter((p) => !p.ok).map((p) => `${p.key}: ${p.error}`).join('; '));
   check('live: legitimate fixture is not rejected', legit.decision !== 'REJECT', legit.decision);
   check('live: every finding that holds the token back rests on a paid answer or the chain',
@@ -636,9 +655,14 @@ if (process.env.PREFLIGHT_LIVE === '1') {
   check('live: not-a-contract fixture is REJECT and buys nothing', eoa.decision === 'REJECT' && eoa.purchases.length === 0 && eoa.cost.telegraphUsd === 0);
 
   const sanctioned = await runPreflight(normalizePreflightRequest({ mode: 'listing', chain: 'ethereum', token: USDC, issuer: 'Garantex Europe OU' }));
-  console.log(`Garantex listing: ${sanctioned.decision}; $${sanctioned.cost.telegraphUsd}`);
+  console.log(`Garantex listing: ${sanctioned.decision}; $${sanctioned.cost.telegraphUsd} over ${sanctioned.cost.paidRequests} paid, ${sanctioned.cost.failedRequests} failed, ${sanctioned.cost.secondOpinions} second opinion(s); ${sanctioned.latencyMs} ms`);
+  show(sanctioned);
+  check('live: listing second opinions are never pinned to the miner that answered first', opinionsBounded(sanctioned));
+  check('live: the listing stays within its budget', sanctioned.cost.telegraphUsd <= sanctioned.cost.budgetUsd + 1e-9, `$${sanctioned.cost.telegraphUsd}`);
   check('live: sanctioned issuer listing is REJECT', sanctioned.decision === 'REJECT' && sanctioned.findings.some((f) => f.rule === 'sanctions.match'),
     sanctioned.findings.filter((f) => f.evidence.includes('sanctions')).map((f) => `${f.rule}: ${f.detail}`).join('; '));
+  // Keep the run's memos, to read them afterwards without buying anything again.
+  if (process.env.PREFLIGHT_LIVE_OUT) writeFileSync(process.env.PREFLIGHT_LIVE_OUT, JSON.stringify({ legit, again, eoa, sanctioned }, null, 2));
 }
 
 console.log(failures === 0 ? '\nall preflight tests passed' : `\n${failures} preflight test(s) FAILED`);
