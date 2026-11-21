@@ -102,6 +102,10 @@ endpoint's own read at the answer's block on all five chains, and that
 transactions 2 days, 1 year and 3 years old come back in the block they were
 taken from.
 
+All three were uploaded on 2026-11-21 and were `eligible` in the evaluation
+pool by 15:50 UTC the same day. As with the first three, eligible is not the
+same as used.
+
 ## Known limits
 
 - The three newer sources are ours as well, so for those intents too they are
