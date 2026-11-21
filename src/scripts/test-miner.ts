@@ -18,10 +18,28 @@ import { chainFromText, handleTxLookup, normalizeChain, searchRpcs, validateTxLo
 import { handleGasPrice, validateGasPriceInput } from '../miner/gasPrice.js';
 import { IntentError } from '../types/index.js';
 
+let passes = 0;
 let failures = 0;
+let skips = 0;
 function check(name: string, cond: boolean, detail = '') {
   console.log(`${cond ? '✅' : '❌'} ${name}${detail ? ` - ${detail}` : ''}`);
-  if (!cond) failures++;
+  if (cond) passes++;
+  else failures++;
+}
+
+/** A check that could not be run, with why: counted apart from passes and failures. */
+function skip(name: string, reason: string) {
+  console.log(`⏭️  ${name} - skipped: ${reason}`);
+  skips++;
+}
+
+/**
+ * Whether CoinGecko refused this client (HTTP 429 or an HTML page) for a list
+ * the check needs. Such a check is skipped, not failed: the refusal is about
+ * how often the list was asked for, not about the miner.
+ */
+function listRefused(e: unknown): e is TokenListUnavailable {
+  return e instanceof TokenListUnavailable && e.rateLimited;
 }
 
 interface StandInReply { status: number; type: string; body: string; headers?: Record<string, string> }
@@ -344,7 +362,8 @@ async function main() {
   const byAddr = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: '8453', token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' }));
   check('a token by contract address and chain id reads the same contract', byAddr.token_address === KNOWN_TOKENS.base!.USDC!.address && byAddr.token_symbol === 'USDC' && byAddr.chain === 'base', byAddr.token_symbol);
   const unknownToken = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: 'ethereum', token: 'NOTATOKEN' })).then(() => null, (e) => e);
-  check('an unknown token symbol is refused, not guessed', unknownToken instanceof IntentError && unknownToken.code === 'INVALID_INPUT');
+  if (listRefused(unknownToken)) skip('an unknown token symbol is refused, not guessed', unknownToken.message);
+  else check('an unknown token symbol is refused, not guessed', unknownToken instanceof IntentError && unknownToken.code === 'INVALID_INPUT');
 
   for (const [key, address] of [['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'],
     ['WBTC (0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599) on Ethereum', '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599'],
@@ -417,32 +436,40 @@ async function main() {
           && got.total_supply_exact === formatUnits(raw, dec) && Math.abs(got.total_supply - whole) <= whole * 0.005,
         `${got.total_supply_exact} ${got.token} at block ${got.blockNumber}`);
     } catch (e: any) {
-      check(`"${question}"`, false, e?.message ?? String(e));
+      if (listRefused(e)) skip(`"${question}"`, e.message);
+      else check(`"${question}"`, false, e?.message ?? String(e));
     }
   }
 
   // A symbol the list gives to several tokens is refused, naming them, when
   // the name does not tell them apart. The case is taken from the live list,
   // so it holds while CoinGecko's entries change.
-  const listed = await listedTokens('ethereum');
-  const bySymbol = new Map<string, typeof listed>();
-  for (const t of listed) bySymbol.set(symbolKey(t.symbol), [...(bySymbol.get(symbolKey(t.symbol)) ?? []), t]);
-  const twins = [...bySymbol.entries()].find(([sym, sharing]) => /^[A-Z0-9]{2,10}$/.test(sym)
-    && !NATIVE_SYMBOLS.has(sym) && !KNOWN_TOKENS.ethereum?.[sym]
-    && new Set(sharing.map((t) => t.address.toLowerCase())).size > 1
-    && sharing.every((t) => /^[A-Za-z0-9 .-]+$/.test(t.name) && nameKey(t.name) === nameKey(sharing[0]!.name)))?.[1];
-  if (!twins) {
-    check('found two listed Ethereum tokens with the same symbol and name', false);
+  const listed = await listedTokens('ethereum').catch((e) => e);
+  if (listRefused(listed)) {
+    skip('a symbol and name shared by two listed tokens is refused, naming each', listed.message);
+  } else if (!Array.isArray(listed)) {
+    check('the Ethereum token list is held', false, listed?.message ?? String(listed));
   } else {
-    const [twin] = twins as [typeof listed[number]];
-    const addresses = [...new Set(twins.map((t) => t.address.toLowerCase()))];
-    const refused = await handleSupply(validateSupplyInput({ token: `${twin.name} (${twin.symbol}) on Ethereum` })).then(() => null, (e) => e);
-    check(`"${twin.name} (${twin.symbol}) on Ethereum", the symbol and name of ${addresses.length} listed tokens, is refused naming each`,
-      refused instanceof IntentError && refused.code === 'INVALID_INPUT'
-        && addresses.every((a) => refused.message.toLowerCase().includes(a)), refused?.message);
+    const bySymbol = new Map<string, typeof listed>();
+    for (const t of listed) bySymbol.set(symbolKey(t.symbol), [...(bySymbol.get(symbolKey(t.symbol)) ?? []), t]);
+    const twins = [...bySymbol.entries()].find(([sym, sharing]) => /^[A-Z0-9]{2,10}$/.test(sym)
+      && !NATIVE_SYMBOLS.has(sym) && !KNOWN_TOKENS.ethereum?.[sym]
+      && new Set(sharing.map((t) => t.address.toLowerCase())).size > 1
+      && sharing.every((t) => /^[A-Za-z0-9 .-]+$/.test(t.name) && nameKey(t.name) === nameKey(sharing[0]!.name)))?.[1];
+    if (!twins) {
+      check('found two listed Ethereum tokens with the same symbol and name', false);
+    } else {
+      const [twin] = twins as [typeof listed[number]];
+      const addresses = [...new Set(twins.map((t) => t.address.toLowerCase()))];
+      const refused = await handleSupply(validateSupplyInput({ token: `${twin.name} (${twin.symbol}) on Ethereum` })).then(() => null, (e) => e);
+      check(`"${twin.name} (${twin.symbol}) on Ethereum", the symbol and name of ${addresses.length} listed tokens, is refused naming each`,
+        refused instanceof IntentError && refused.code === 'INVALID_INPUT'
+          && addresses.every((a) => refused.message.toLowerCase().includes(a)), refused?.message);
+    }
   }
   const unlisted = await handleSupply(validateSupplyInput({ token: 'Not A Token (ZZNOTATOKEN9) on Ethereum' })).then(() => null, (e) => e);
-  check('a symbol no list holds is refused, not guessed', unlisted instanceof IntentError && unlisted.code === 'INVALID_INPUT', unlisted?.message);
+  if (listRefused(unlisted)) skip('a symbol no list holds is refused, not guessed', unlisted.message);
+  else check('a symbol no list holds is refused, not guessed', unlisted instanceof IntentError && unlisted.code === 'INVALID_INPUT', unlisted?.message);
   const noList = await handleSupply(validateSupplyInput({ token: 'Foo (FOO) on Sepolia' })).then(() => null, (e) => e);
   check('a symbol on a chain with no token list asks for the address', noList instanceof IntentError && noList.code === 'INVALID_INPUT', noList?.message);
 
@@ -548,17 +575,29 @@ async function main() {
   const gasBody = gasHttp.json();
   check('GET /gas returns the V2 fields at top level', gasHttp.statusCode === 200 && gasBody.chain === 'ethereum'
     && typeof gasBody.gas_price_gwei === 'number' && typeof gasBody.as_of === 'string');
+  // The routes share this process's lists: when CoinGecko refuses the
+  // Ethereum list, the two requests that need it are skipped.
+  const ethListForHttp = await listedTokens('ethereum').then(() => null, (e) => e);
   // the node's own request, encoded as it sent it
-  const kelpHttp = await app.inject({ method: 'GET', url: '/total-supply?token=Kelp+DAO+Restaked+ETH+%28rsETH%29+on+Ethereum' });
-  const kelpBody = kelpHttp.json();
-  check('GET /total-supply answers the node\'s rsETH question with total_supply as a JSON number', kelpHttp.statusCode === 200
-    && kelpBody.token_address === '0xA1290d69c65A6Fe4DF752f95823fae25cB99e5A7' && typeof kelpBody.total_supply === 'number' && kelpBody.total_supply > 0,
-  `${kelpBody.total_supply} ${kelpBody.token}`);
+  const kelpName = 'GET /total-supply answers the node\'s rsETH question with total_supply as a JSON number';
+  if (listRefused(ethListForHttp)) {
+    skip(kelpName, ethListForHttp.message);
+  } else {
+    const kelpHttp = await app.inject({ method: 'GET', url: '/total-supply?token=Kelp+DAO+Restaked+ETH+%28rsETH%29+on+Ethereum' });
+    const kelpBody = kelpHttp.json();
+    check(kelpName, kelpHttp.statusCode === 200 && kelpBody.token_address === '0xA1290d69c65A6Fe4DF752f95823fae25cB99e5A7'
+      && typeof kelpBody.total_supply === 'number' && kelpBody.total_supply > 0, `${kelpBody.total_supply} ${kelpBody.token}`);
+  }
   // a refusal says what the route needed, in the route's own terms
-  const supplyRefusal = (await app.inject({ method: 'GET', url: '/total-supply?token=Not+A+Token+%28ZZNOTATOKEN9%29+on+Ethereum' })).json();
-  check('a refused total-supply request is worded about a token, not a transaction', supplyRefusal.error === 'INVALID_INPUT'
-    && supplyRefusal.answer.startsWith('The request did not identify an ERC-20 token whose total supply can be read.')
-    && !/transaction/i.test(supplyRefusal.answer), supplyRefusal.answer);
+  const supplyRefusalName = 'a refused total-supply request is worded about a token, not a transaction';
+  if (listRefused(ethListForHttp)) {
+    skip(supplyRefusalName, ethListForHttp.message);
+  } else {
+    const supplyRefusal = (await app.inject({ method: 'GET', url: '/total-supply?token=Not+A+Token+%28ZZNOTATOKEN9%29+on+Ethereum' })).json();
+    check(supplyRefusalName, supplyRefusal.error === 'INVALID_INPUT'
+      && supplyRefusal.answer.startsWith('The request did not identify an ERC-20 token whose total supply can be read.')
+      && !/transaction/i.test(supplyRefusal.answer), supplyRefusal.answer);
+  }
   const balanceRefusal = (await app.inject({ method: 'GET', url: '/balance?address=0x123&chain=ethereum' })).json();
   check('a refused balance request is worded about a wallet balance, not a transaction', balanceRefusal.error === 'INVALID_INPUT'
     && balanceRefusal.answer.startsWith('The request did not identify a wallet and a token whose balance can be read.')
@@ -568,7 +607,8 @@ async function main() {
     && txRefusal.answer.startsWith('The request did not identify a transaction to look up.'), txRefusal.answer);
   await app.close();
 
-  console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
+  const tally = `${passes} passed, ${failures} failed, ${skips} skipped`;
+  console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`} (${tally})`);
   process.exit(failures === 0 ? 0 : 1);
 }
 
