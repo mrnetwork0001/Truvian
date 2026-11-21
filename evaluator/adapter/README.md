@@ -7,7 +7,9 @@ the node's minimum of 3, so with no incumbent an adapter needs to rank at
 least 70% of 30 hidden pairs correctly to take the seat.
 
 **Status, 2026-11-21 21:10 UTC: v1 was registered (id 175) and rejected; v2
-is packaged and served, and its registration follows.** v1 ordered 10 of the
+was registered at 21:16 UTC as id 182 (tx
+`0xf548bd976429d872a8e1e3ebd1dc20069612826f31a6ac3a2909f10b201e0d4a`,
+package URL pinned to commit `d8f8958`) and awaits the node's check.** v1 ordered 10 of the
 node's 15 public pairs (66.7%, the floor is 70%). v2 ([below](#version-2))
 is trained on production-style contracts and audit-finding answers. The
 executor now serves v2, so the v1 notes below describe v1's package and
