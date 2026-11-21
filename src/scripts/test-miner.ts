@@ -17,8 +17,9 @@ import {
 import { nameAgreement, nameWords, type Agreement } from '../miner/tokenNames.js';
 import { KNOWN_TOKENS, KNOWN_TOKEN_NAMES } from '../config/tokens.js';
 import { createPublicClient, encodeAbiParameters, formatUnits, http, parseAbi, stringToHex, type PublicClient } from 'viem';
-import { chainFromText, handleTxLookup, normalizeChain, searchRpcs, validateTxLookupInput } from '../miner/txLookup.js';
+import { chainFromText, executionOf, handleTxLookup, normalizeChain, searchRpcs, validateTxLookupInput } from '../miner/txLookup.js';
 import { handleGasPrice, validateGasPriceInput } from '../miner/gasPrice.js';
+import { parseTxStatus } from '../shield/verdict.js';
 import { IntentError } from '../types/index.js';
 
 let passes = 0;
@@ -200,6 +201,35 @@ async function main() {
     'TX_NOT_FOUND carries V2 status not_found and the hash',
     missing instanceof IntentError && missing.fields.status === 'not_found' && missing.fields.tx_hash === `0x${'ab'.repeat(32)}`,
   );
+
+  // Before Byzantium (Ethereum block 4,370,000) receipts had no status field.
+  // The first Ethereum transaction (block 46147) used to be reported reverted.
+  const firstTx = '0x5c504ed432cb51138bcf09aa5e8a410dd4a1e204ef84bfed1be16dfba1b22060';
+  const preByzantium = await handleTxLookup(validateTxLookupInput({ chain: 'ethereum', tx_hash: firstTx }));
+  check('pre-Byzantium tx is confirmed with no recorded execution result, not reverted',
+    preByzantium.status === 'confirmed' && preByzantium.block_number === 46147 && preByzantium.execution_status === 'not_recorded',
+    `${preByzantium.status} ${preByzantium.status !== 'pending' ? preByzantium.execution_status : ''}`);
+  check('pre-Byzantium answer says the receipt records no execution result, and Shield reads it as confirmed',
+    /records no execution result/.test(preByzantium.answer) && !/revert|fail|transferred/i.test(preByzantium.answer)
+    && parseTxStatus(preByzantium.answer) === 'success', preByzantium.answer);
+  // Endpoints disagree about that receipt: geth-style ones return `root` and no
+  // `status`, others fill a status in from re-execution. Neither may change the answer.
+  const statuses: string[] = [];
+  for (const { url, client: c } of getRpcClients('ethereum')) {
+    const r = await c.getTransactionReceipt({ hash: firstTx }).catch(() => null);
+    if (r) statuses.push(`${new URL(url).host}: ${String(r.status)}`);
+  }
+  console.log(`   the block-46147 receipt's status per endpoint: ${statuses.join('; ') || 'none answered'}`);
+  check('a receipt with no status is not recorded, on any chain, and never reads as a revert',
+    executionOf('ethereum', { status: null, blockNumber: 46147n }) === 'not_recorded'
+    && executionOf('base', { status: null, blockNumber: 30_000_000n }) === 'not_recorded');
+  check('a status an endpoint fills in for a pre-Byzantium block is not taken as recorded',
+    executionOf('ethereum', { status: 'success', blockNumber: 4_369_999n }) === 'not_recorded'
+    && executionOf('ethereum', { status: 'reverted', blockNumber: 46147n }) === 'not_recorded');
+  check('from Byzantium on, the receipt status is the outcome',
+    executionOf('ethereum', { status: 'reverted', blockNumber: 4_370_000n }) === 'reverted'
+    && executionOf('ethereum', { status: 'success', blockNumber: 26_000_000n }) === 'success'
+    && executionOf('base', { status: 'reverted', blockNumber: 1_000n }) === 'reverted');
 
   // chain names: aliases, EIP-155 ids, CAIP-2, free text
   const aliasCases: Array<[string, string]> = [

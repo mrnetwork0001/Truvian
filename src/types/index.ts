@@ -41,6 +41,14 @@ export interface DecodedTransfer {
  */
 export type TxStatus = 'confirmed' | 'reverted' | 'pending';
 
+/**
+ * A mined transaction's execution outcome, as its receipt records it.
+ * `not_recorded`: the receipt has no status field. Ethereum receipts from
+ * before the Byzantium upgrade (block 4,370,000) carry a post-transaction
+ * state root instead, so no success or revert flag exists for them.
+ */
+export type ExecutionStatus = 'success' | 'reverted' | 'not_recorded';
+
 /** Fields every found transaction carries, mined or not. */
 interface TxLookupBase {
   /**
@@ -93,7 +101,7 @@ export interface TxLookupResult extends TxLookupBase {
   status: 'confirmed' | 'reverted';
   block_number: number;
   /** Receipt execution outcome, in the receipt's own words */
-  execution_status: 'success' | 'reverted';
+  execution_status: ExecutionStatus;
   blockNumber: string;
   blockHash: string;
   transactionIndex: number;

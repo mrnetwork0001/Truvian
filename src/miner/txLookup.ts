@@ -15,6 +15,7 @@ import {
 import {
   IntentError,
   type DecodedTransfer,
+  type ExecutionStatus,
   type TxLookupInput,
   type TxLookupResult,
   type TxPendingResult,
@@ -250,6 +251,36 @@ function upstream(what: string, err?: any): IntentError {
   return new IntentError('UPSTREAM_RPC_ERROR', detail ? `${what}: ${detail}` : what);
 }
 
+type RpcReceipt = Awaited<ReturnType<RpcClient['client']['getTransactionReceipt']>>;
+
+/** Ethereum mainnet block at which Byzantium (EIP-658: a status code in every receipt) activated. */
+const BYZANTIUM_BLOCK = 4_370_000n;
+
+/**
+ * A mined transaction's execution outcome, from its receipt.
+ *
+ * Ethereum receipts from before Byzantium hold a post-transaction state root
+ * instead of a status code. Endpoints differ in how they show that: geth-style
+ * nodes return `root` and no `status` (rpc.mevblocker.io, checked 2026-11-21),
+ * which viem reads as a null status, while eth.drpc.org fills a status in
+ * from its own re-execution. That status is not part of the receipt, and
+ * taking it would make the answer depend on which endpoint replied, so for
+ * those blocks no execution result is reported. A missing status on any
+ * chain reads the same way; it never reads as a revert, which is what a null
+ * status was taken for until now (the first Ethereum transaction, block
+ * 46147, was reported reverted). Every other chain served here started
+ * after Byzantium.
+ */
+export function executionOf(
+  chain: SupportedChain,
+  receipt: { status: RpcReceipt['status'] | null; blockNumber: bigint },
+): ExecutionStatus {
+  // viem types the status as always present; a receipt without one gives null
+  const status = receipt.status as RpcReceipt['status'] | null;
+  if (status === null || (chain === 'ethereum' && receipt.blockNumber < BYZANTIUM_BLOCK)) return 'not_recorded';
+  return status === 'success' ? 'success' : 'reverted';
+}
+
 async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Promise<TxLookupResult | TxPendingResult> {
   const meta = chainMeta(chain);
   const endpoints = getRpcClients(chain);
@@ -345,8 +376,8 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
   const l1Fee = BigInt((receipt as any).l1Fee ?? 0);
   const totalFee = receipt.gasUsed * receipt.effectiveGasPrice + l1Fee;
 
-  const succeeded = receipt.status === 'success';
-  const statusWord = succeeded ? 'succeeded' : 'reverted';
+  const execution = executionOf(chain, receipt);
+  const statusWord = execution === 'success' ? 'succeeded' : execution === 'reverted' ? 'reverted' : 'was confirmed';
   const to = receipt.to ? getAddress(receipt.to) : null;
   const created = receipt.contractAddress ? getAddress(receipt.contractAddress) : null;
   const selector = tx.input && tx.input.length >= 10 ? tx.input.slice(0, 10) : null;
@@ -356,9 +387,12 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
   // precision under the live scorer. Full detail stays in structured fields.
   const answerParts = [
     `Transaction ${hash} on ${chainLabel} (chain id ${meta.chainId}) ${statusWord} in block ${receipt.blockNumber}.`,
-    to
-      ? `It transferred ${valueText} from ${from} to the recipient ${to}${selector && selector !== '0x' ? `, invoking function selector ${selector}` : ''}.`
-      : `It was sent from ${from} and created contract ${created} with a value of ${valueText}.`,
+    execution === 'not_recorded'
+      // no recorded result, so nothing is said to have been transferred or created
+      ? `It was sent from ${from} ${to ? `to the recipient ${to}` : 'to create a contract'} with a value of ${valueText}. Its receipt predates Byzantium (block 4,370,000), so it records no execution result.`
+      : to
+        ? `It transferred ${valueText} from ${from} to the recipient ${to}${selector && selector !== '0x' ? `, invoking function selector ${selector}` : ''}.`
+        : `It was sent from ${from} and created contract ${created} with a value of ${valueText}.`,
   ];
   const answer = answerParts.join(' ');
 
@@ -374,7 +408,7 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
     tx_hash: hash,
     // The intent's vocabulary: a mined transaction is `confirmed` unless its
     // execution reverted. The receipt's own word is in execution_status.
-    status: succeeded ? 'confirmed' : 'reverted',
+    status: execution === 'reverted' ? 'reverted' : 'confirmed',
     from,
     to,
     // Block heights are far below 2^53, so the number is exact
@@ -386,7 +420,7 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
     valueWei: tx.value.toString(),
     nonce: tx.nonce,
     inputData: tx.input,
-    execution_status: succeeded ? 'success' : 'reverted',
+    execution_status: execution,
     blockNumber: receipt.blockNumber.toString(),
     blockHash: receipt.blockHash.toLowerCase(),
     transactionIndex: receipt.transactionIndex,
