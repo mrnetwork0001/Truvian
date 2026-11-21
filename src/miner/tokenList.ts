@@ -33,6 +33,7 @@
 import { getAddress } from 'viem';
 import { chainMeta, type SupportedChain } from '../config/chains.js';
 import { IntentError } from '../types/index.js';
+import { nameAgreement } from './tokenNames.js';
 
 /** CoinGecko asset-platform id of each served chain that has a list. */
 const PLATFORMS: Partial<Record<SupportedChain, string>> = {
@@ -86,11 +87,6 @@ export class TokenListUnavailable extends IntentError {
  */
 export function symbolKey(symbol: string): string {
   return symbol.normalize('NFKC').trim().toUpperCase().replace(/₮/g, 'T');
-}
-
-/** Names compared as their words: "Kelp DAO Restaked ETH" and "kelp-dao restaked eth" are one name. */
-export function nameKey(name: string): string {
-  return name.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 }
 
 /** Retry-After in milliseconds, given as seconds or as an HTTP date; null when absent or unreadable. */
@@ -299,17 +295,15 @@ export interface ListMatch {
   list: string;
 }
 
-/** Candidates whose name is the one given: exactly, else word for word one within the other. */
+/**
+ * The candidates whose names agree best with the name given
+ * (src/miner/tokenNames.ts): "Uniswap" chooses Uniswap's UNI, not UNICORN's.
+ * Only the names count here, since every candidate has the symbol.
+ */
 function namedAs(candidates: ListedToken[], name: string): ListedToken[] {
-  const want = nameKey(name);
-  if (!want) return [];
-  const exact = candidates.filter((t) => nameKey(t.name) === want);
-  if (exact.length > 0) return exact;
-  const wanted = want.split(' ');
-  return candidates.filter((t) => {
-    const words = nameKey(t.name).split(' ').filter(Boolean);
-    return words.length > 0 && (wanted.every((w) => words.includes(w)) || words.every((w) => wanted.includes(w)));
-  });
+  const ranked = candidates.map((t) => ({ t, agreement: nameAgreement(name, [t.name]) }));
+  const best = Math.max(...ranked.map((r) => r.agreement));
+  return best === 0 ? [] : ranked.filter((r) => r.agreement === best).map((r) => r.t);
 }
 
 function describe(candidates: ListedToken[]): string {
@@ -322,7 +316,9 @@ function describe(candidates: ListedToken[]): string {
  * parentheses, using the name before it to choose when several tokens share
  * the symbol. Refuses, naming the candidates, rather than choose between
  * tokens the name does not separate. A list is never searched by name: a
- * name alone, or a word that may be a name, is no symbol to look up.
+ * name alone, or a word that may be a name, is no symbol to look up. When
+ * one token has the symbol it is returned whatever the name; the caller
+ * holds it to the name (src/miner/holdings.ts), with its name() to hand.
  */
 export async function findListedToken(
   chain: SupportedChain, symbol: string, name: string | null, lists: TokenListCache = coingeckoLists,

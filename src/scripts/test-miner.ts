@@ -12,9 +12,10 @@ import {
   contractAnswered, handleBalance, handleSupply, parseTokenRef, readText, validateBalanceInput, validateSupplyInput,
 } from '../miner/holdings.js';
 import {
-  LIST_BACKOFF_MS, LIST_TTL_MS, TokenListCache, TokenListUnavailable, fetchTokenList, listedTokens, nameKey, symbolKey,
+  LIST_BACKOFF_MS, LIST_TTL_MS, TokenListCache, TokenListUnavailable, fetchTokenList, listedTokens, symbolKey,
 } from '../miner/tokenList.js';
-import { KNOWN_TOKENS, NATIVE_SYMBOLS } from '../config/tokens.js';
+import { nameAgreement, nameWords, type Agreement } from '../miner/tokenNames.js';
+import { KNOWN_TOKENS, KNOWN_TOKEN_NAMES, NATIVE_SYMBOLS } from '../config/tokens.js';
 import { createPublicClient, encodeAbiParameters, formatUnits, http, parseAbi, stringToHex, type PublicClient } from 'viem';
 import { chainFromText, handleTxLookup, normalizeChain, searchRpcs, validateTxLookupInput } from '../miner/txLookup.js';
 import { handleGasPrice, validateGasPriceInput } from '../miner/gasPrice.js';
@@ -376,7 +377,7 @@ async function main() {
 
   // --- WALLET_BALANCE_CHECK_GENERAL and TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL ---
   console.log('');
-  const erc20 = parseAbi(['function balanceOf(address) view returns (uint256)', 'function totalSupply() view returns (uint256)', 'function symbol() view returns (string)', 'function decimals() view returns (uint8)']);
+  const erc20 = parseAbi(['function balanceOf(address) view returns (uint256)', 'function totalSupply() view returns (uint256)', 'function symbol() view returns (string)', 'function decimals() view returns (uint8)', 'function name() view returns (string)']);
   // the node's own question keys for both intents
   const deposit = await handleBalance(validateBalanceInput({ address: '0x00000000219ab540356cBB839Cbe05303d7705Fa', chain: 'ethereum' }));
   const eth = getClient('ethereum');
@@ -454,6 +455,49 @@ async function main() {
   const wordsListed = 'CoinGecko\'s Ethereum list has the symbols BITCOIN and BNT, so those refusals are not for want of a listing';
   if (listRefused(listForWords)) skip(wordsListed, listForWords.message);
   else check(wordsListed, Array.isArray(listForWords) && ['BITCOIN', 'BNT'].every((s) => listForWords.some((t) => symbolKey(t.symbol) === s)));
+
+  // A name given beside a symbol must agree with the token the symbol finds
+  // (src/miner/tokenNames.ts): the same words 3, one a run of whole words
+  // within the other 2, the same first word past the/wrapped/bridged 1.
+  const agreementCases: Array<[string, string[], Agreement]> = [
+    ['Kelp DAO Restaked ETH', ['Kelp DAO Restaked ETH'], 3],
+    ['kelp-dao  restaked ETH', ['Kelp DAO Restaked ETH'], 3],
+    ['Bancor', ['Bancor Network'], 2],
+    ['Bridged USDC', ['Arbitrum Bridged USDC (Arbitrum)'], 2],
+    ['(PoS) Wrapped BTC', ['Wrapped BTC'], 2],
+    ['Lido Staked ETH', ['Lido Staked Ether'], 1],
+    ['Tether USDt', ['Tether USD'], 1],
+    ['USD₮0', ['USDT0'], 3],
+    ['Uniswap', ['Bancor Network', 'BNT'], 0],
+    ['Uniswap', ['UNICORN'], 0],
+    ['Uni', ['Uniswap'], 0],
+    ['Wrapped Bitcoin', ['Wrapped Ether', 'WETH'], 0],
+    ['Polygon Ecosystem Token', ['POL (ex-MATIC)', 'POL'], 0],
+  ];
+  const agreementMisses = agreementCases.filter(([given, names, want]) => nameAgreement(given, names) !== want);
+  check('names agree by the stated rule, and contradicting names do not', agreementMisses.length === 0,
+    agreementMisses.map(([given, names, want]) => `${given} vs ${names.join('/')}: ${nameAgreement(given, names)}, wanted ${want}`).join(' | '));
+  // "Uniswap (BNT)" gives Bancor's symbol with Uniswap's name; the verified
+  // table's tokens are held to their names the same way.
+  const contradictions: Array<[string, boolean]> = [
+    ['Uniswap (BNT) on Ethereum', true], ['Uniswap (USDC) on Ethereum', false], ['Wrapped Bitcoin (WETH) on Base', false],
+  ];
+  for (const [question, needsList] of contradictions) {
+    const refused = await handleSupply(validateSupplyInput({ token: question })).then(() => null, (e) => e);
+    const name = `"${question}" is refused: the name contradicts the token its symbol finds`;
+    if (needsList && listRefused(refused)) skip(name, refused.message);
+    else check(name, refused instanceof IntentError && refused.code === 'INVALID_INPUT' && refused.message.includes('does not agree'), refused?.message);
+  }
+  for (const [question, address] of [['USD Coin (USDC) on Base', KNOWN_TOKENS.base!.USDC!.address],
+    ['USDC (USDC) on Base', KNOWN_TOKENS.base!.USDC!.address], ['Tether (USDT) on Arbitrum', KNOWN_TOKENS.arbitrum!.USDT!.address],
+    ['Wrapped Bitcoin (WBTC) on Polygon', KNOWN_TOKENS.polygon!.WBTC!.address]] as const) {
+    const got = await handleSupply(validateSupplyInput({ token: question })).then((r) => r.token_address, (e) => `refused: ${e?.message}`);
+    check(`"${question}" is answered from the verified table, its name agreeing`, got === address, got);
+  }
+  const contradictedBalance = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: 'ethereum', token: 'Uniswap (USDC)' }))
+    .then(() => null, (e) => e);
+  check('a balance of "Uniswap (USDC)" is refused the same way', contradictedBalance instanceof IntentError
+    && contradictedBalance.code === 'INVALID_INPUT' && contradictedBalance.message.includes('does not agree'), contradictedBalance?.message);
   check('a name in parentheses is not taken for a symbol', parseTokenRef('Polygon Bridged WBTC (Polygon POS)').symbol === null);
   const solana = (() => { try { validateSupplyInput({ token: 'Wrapped SOL (SOL) on Solana' }); return null; } catch (e) { return e; } })();
   check('a token on a chain this miner does not serve is refused, not read on Ethereum', solana instanceof IntentError && solana.code === 'CHAIN_UNSUPPORTED');
@@ -508,7 +552,7 @@ async function main() {
     const twins = [...bySymbol.entries()].find(([sym, sharing]) => /^[A-Z0-9]{2,10}$/.test(sym)
       && !NATIVE_SYMBOLS.has(sym) && !KNOWN_TOKENS.ethereum?.[sym]
       && new Set(sharing.map((t) => t.address.toLowerCase())).size > 1
-      && sharing.every((t) => /^[A-Za-z0-9 .-]+$/.test(t.name) && nameKey(t.name) === nameKey(sharing[0]!.name)))?.[1];
+      && sharing.every((t) => /^[A-Za-z0-9 .-]+$/.test(t.name) && nameWords(t.name).join(' ') === nameWords(sharing[0]!.name).join(' ')))?.[1];
     if (!twins) {
       check('found two listed Ethereum tokens with the same symbol and name', false);
     } else {
@@ -626,17 +670,20 @@ async function main() {
     .catch((e) => `failed: ${e?.shortMessage ?? e}`);
   check('MKR\'s bytes32 symbol() reads as MKR on Ethereum', mkrSymbol === 'MKR', mkrSymbol);
 
-  // every known token address still answers with the symbol and decimals in the table
+  // every known token address still answers with the symbol and decimals in
+  // the table, and with a name() that agrees with the table's names for it
   let tokenMismatches: string[] = [];
   for (const [chain, tokens] of Object.entries(KNOWN_TOKENS)) {
     for (const [sym, t] of Object.entries(tokens!)) {
       const c = getClient(chain as SupportedChain);
-      const [onSym, onDec] = await Promise.all([
+      const [onSym, onDec, onName] = await Promise.all([
         c.readContract({ address: t.address, abi: erc20, functionName: 'symbol' }),
         c.readContract({ address: t.address, abi: erc20, functionName: 'decimals' }),
-      ]).catch(() => ['?', -1] as const);
+        c.readContract({ address: t.address, abi: erc20, functionName: 'name' }),
+      ]).catch(() => ['?', -1, '?'] as const);
       const symOk = onSym === sym || (sym === 'USDT' && /^USD(₮|T)0$/.test(String(onSym)));
-      if (!symOk || Number(onDec) !== t.decimals) tokenMismatches.push(`${chain} ${sym}: ${onSym}/${onDec}`);
+      const nameOk = nameAgreement(String(onName), KNOWN_TOKEN_NAMES[sym] ?? []) > 0;
+      if (!symOk || !nameOk || Number(onDec) !== t.decimals) tokenMismatches.push(`${chain} ${sym}: ${onSym}/${onDec}/${onName}`);
     }
   }
   check('the known-token table matches every contract on-chain', tokenMismatches.length === 0, tokenMismatches.join(', '));

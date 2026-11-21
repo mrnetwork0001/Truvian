@@ -60,5 +60,21 @@ export const KNOWN_TOKENS: Partial<Record<SupportedChain, Record<string, KnownTo
   },
 };
 
+/**
+ * What the table's tokens are called, by symbol, for checking a name given
+ * beside the symbol ("Tether (USDT) on Arbitrum"; src/miner/tokenNames.ts).
+ * Each list holds the name() of the symbol's contracts in the table, as read
+ * on 2026-11-21 ("USD₮0" on Arbitrum, "USDT0" on Polygon; Polygon's
+ * "(PoS) Wrapped BTC" agrees with "Wrapped BTC"), and the name CoinGecko
+ * gives the token. test:miner checks every contract's name() against it.
+ */
+export const KNOWN_TOKEN_NAMES: Record<string, readonly string[]> = {
+  USDC: ['USD Coin', 'USDC'],
+  USDT: ['Tether USD', 'Tether', 'USDT0', 'USD₮0'],
+  DAI: ['Dai Stablecoin', 'Dai'],
+  WETH: ['Wrapped Ether', 'WETH'],
+  WBTC: ['Wrapped BTC', 'Wrapped Bitcoin'],
+};
+
 /** Symbols that mean "the chain's native coin" rather than an ERC-20. */
 export const NATIVE_SYMBOLS = new Set(['ETH', 'POL', 'MATIC', 'BNB', 'AVAX', 'XDAI', 'OKB', 'NATIVE']);

@@ -14,9 +14,10 @@ import {
 } from 'viem';
 import { normalize } from 'viem/ens';
 import { SUPPORTED_CHAINS, chainMeta, getClient, type SupportedChain } from '../config/chains.js';
-import { KNOWN_TOKENS, NATIVE_SYMBOLS } from '../config/tokens.js';
+import { KNOWN_TOKENS, KNOWN_TOKEN_NAMES, NATIVE_SYMBOLS } from '../config/tokens.js';
 import { IntentError } from '../types/index.js';
 import { findListedToken, symbolKey } from './tokenList.js';
+import { namesAgree } from './tokenNames.js';
 import { chainFromText, requireChain } from './txLookup.js';
 
 const ERC20 = parseAbi([
@@ -160,10 +161,18 @@ export function parseTokenRef(text: string): TokenRef {
     : { address: null, symbol: t, bare: true, name: null };
 }
 
-/** Where a token's contract is, and the symbol its symbol() must report (null for a given address). */
+/** Where a token's contract is, and what the question said that the contract must bear out. */
 interface Located {
   address: `0x${string}`;
+  /** The symbol its symbol() must report; null when the question gave the address */
   expectedSymbol: string | null;
+  /** The name the question gave beside the symbol, which must agree with the token's names; null for none */
+  givenName: string | null;
+  /** What the token is called where it was found: its list entry's name, or the verified table's names */
+  names: readonly string[];
+  /** Where it was found, for a refusal: "CoinGecko's Ethereum token list", "the verified token table" */
+  where: string;
+  /** How the contract was found, for the answer's source; null for the verified table or a given address */
   foundIn: string | null;
 }
 
@@ -175,15 +184,21 @@ interface Located {
  * all: each would be a guess at what the question meant.
  */
 async function locateToken(chain: SupportedChain, ref: TokenRef): Promise<Located> {
-  if (ref.address) return { address: ref.address, expectedSymbol: null, foundIn: null };
+  if (ref.address) return { address: ref.address, expectedSymbol: null, givenName: null, names: [], where: 'the question', foundIn: null };
   const label = chainMeta(chain).label;
   if (ref.symbol === null) {
     throw new IntentError('INVALID_INPUT', ref.name === null
       ? 'no token symbol, name or contract address was given'
       : `"${ref.name}" gives no symbol and no contract address; give the symbol in parentheses after the name, as in "${ref.name} (SYMBOL)", or the contract address`);
   }
-  const known = KNOWN_TOKENS[chain]?.[symbolKey(ref.symbol)];
-  if (known) return { address: known.address, expectedSymbol: ref.symbol, foundIn: null };
+  const key = symbolKey(ref.symbol);
+  const known = KNOWN_TOKENS[chain]?.[key];
+  if (known) {
+    return {
+      address: known.address, expectedSymbol: ref.symbol, givenName: ref.name, names: KNOWN_TOKEN_NAMES[key] ?? [],
+      where: 'the verified token table', foundIn: null,
+    };
+  }
   if (ref.bare) {
     const table = Object.keys(KNOWN_TOKENS[chain] ?? {});
     throw new IntentError('INVALID_INPUT', `"${ref.symbol}" is not a symbol in the verified token table for ${label}`
@@ -191,17 +206,48 @@ async function locateToken(chain: SupportedChain, ref: TokenRef): Promise<Locate
       + ' give the symbol in parentheses, as in "Bancor (BNT)", or the contract address');
   }
   const match = await findListedToken(chain, ref.symbol, ref.name);
-  return { address: match.token.address, expectedSymbol: ref.symbol, foundIn: `found in ${match.list} as "${match.token.name}"` };
+  return {
+    address: match.token.address, expectedSymbol: ref.symbol, givenName: ref.name, names: [match.token.name],
+    where: match.list, foundIn: `found in ${match.list} as "${match.token.name}"`,
+  };
 }
 
-/** Read the located contract at the block, and hold it to the symbol asked for. */
+function quoted(names: readonly string[]): string {
+  return names.map((n) => `"${n}"`).join(' or ');
+}
+
+/**
+ * Read the located contract at the block, and hold it to what the question
+ * said: its symbol() must be the symbol asked for, and a name given beside
+ * the symbol must agree with the token (src/miner/tokenNames.ts). The name
+ * is compared with the names the token was found under and its symbol, and
+ * when those disagree, with the contract's own name() at the block: CoinGecko
+ * calls POL "POL (ex-MATIC)", its contract "Polygon Ecosystem Token".
+ */
 async function confirmToken(chain: SupportedChain, located: Located, blockNumber: bigint): Promise<Erc20> {
-  const { decimals, symbol } = await readErc20(chain, located.address, blockNumber);
-  const expected = located.expectedSymbol;
-  if (expected !== null && !sameSymbol(expected, symbol)) {
-    throw new IntentError('INVALID_INPUT', `${located.address}, ${located.foundIn ?? 'listed in the verified token table'} for ${expected} on ${chain}, reports symbol() "${symbol}" at block ${blockNumber}, so it is not taken to be ${expected}`);
+  const { address, expectedSymbol, givenName } = located;
+  const nameUnsettled = givenName !== null
+    && !namesAgree(givenName, expectedSymbol === null ? located.names : [...located.names, expectedSymbol]);
+  const [erc20, ownName] = await Promise.allSettled([
+    readErc20(chain, address, blockNumber),
+    nameUnsettled ? readText(getClient(chain), address, 'name', blockNumber) : Promise.resolve(null),
+  ]);
+  if (erc20.status === 'rejected') throw erc20.reason;
+  const { decimals, symbol } = erc20.value;
+  if (expectedSymbol !== null && !sameSymbol(expectedSymbol, symbol)) {
+    throw new IntentError('INVALID_INPUT', `${address}, ${located.foundIn ?? `in ${located.where}`} for ${expectedSymbol} on ${chain}, reports symbol() "${symbol}" at block ${blockNumber}, so it is not taken to be ${expectedSymbol}`);
   }
-  return { address: located.address, decimals, symbol, foundIn: located.foundIn };
+  if (nameUnsettled) {
+    if (ownName.status === 'rejected' && !contractAnswered(ownName.reason)) {
+      throw new IntentError('UPSTREAM_RPC_ERROR', `${chain} did not answer name() for ${address}: ${rpcFailure(ownName.reason)}`);
+    }
+    const contractName = ownName.status === 'fulfilled' ? ownName.value : null;
+    if (contractName === null || !namesAgree(givenName!, [contractName])) {
+      throw new IntentError('INVALID_INPUT', `the name "${givenName}" does not agree with the token found for ${expectedSymbol}: ${address} is ${quoted(located.names)} in ${located.where}`
+        + ` and ${contractName === null ? 'answers no name()' : `"${contractName}" by its name()`} at block ${blockNumber}; give the name and symbol of one token, or its contract address`);
+    }
+  }
+  return { address, decimals, symbol, foundIn: located.foundIn };
 }
 
 /** Resolve a balance's token: empty or a native symbol for the chain's coin, else an ERC-20. */
