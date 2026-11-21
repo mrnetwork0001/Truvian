@@ -62,7 +62,7 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
 <div class="badge">Telegraph miner · truvian-onchain-truth</div>
 <p>Exact onchain answers read live from public JSON-RPC on Base, Ethereum, Arbitrum One, OP Mainnet, Polygon, BNB Smart Chain, Avalanche, Scroll, Linea, Gnosis, ZKsync Era, X Layer, Ethereum Sepolia and Base Sepolia. Serves the Telegraph intents <code>ONCHAIN_TX_LOOKUP_GENERAL</code>, <code>GAS_PRICE_GENERAL</code>, <code>WALLET_BALANCE_CHECK_GENERAL</code> and <code>TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL</code>.</p>
 <ul>
-<li><code>GET /tx?tx_hash=0x…&amp;chain=base</code> - status, inclusion block, sender, recipient and value of a transaction, plus the exact total fee incl. the L1 data fee on rollups that bill it</li>
+<li><code>GET /tx?tx_hash=0x…&amp;chain=base</code> - status, inclusion block, sender, recipient and value of a transaction, its gas and exact total fee incl. the L1 data fee on rollups that bill it, and the public endpoints and methods it was read from; add <code>&amp;detail=full</code> for the calldata, decoded ERC-20 transfers and every fee part</li>
 <li><code>GET /gas?chain=base</code> - block-anchored gas price in gwei with EIP-1559 percentiles</li>
 <li><code>GET /balance?address=0x…&amp;chain=base&amp;token=USDC</code> - native or ERC-20 balance of an address or ENS name, decimals applied</li>
 <li><code>GET /total-supply?token=USDC%20on%20Ethereum</code> - an ERC-20's total supply, decimals applied</li>
@@ -75,6 +75,7 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
   // Primary Telegraph-facing endpoints (GET + query params). The response
   // body IS the payload: `answer` leads for nodes that read the whole answer
   // with a parser model; the intent's own fields follow for nodes that read by path.
+  // /tx answers concisely unless asked for ?detail=full (see txLookup.ts).
   app.get('/tx', async (req) => handleTxLookup(validateTxLookupInput(req.query)));
   app.get('/gas', async (req) => handleGasPrice(validateGasPriceInput(req.query ?? {})));
   app.get('/balance', async (req) => handleBalance(validateBalanceInput(req.query ?? {})));
@@ -92,9 +93,11 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
     if (err instanceof IntentError) {
       // Intent routes must ALWAYS return a scoreable `answer` string. Validators
       // score the answer text; a bare error body carries none and scores exactly
-      // 0 - strictly worse than stating plainly that the record was not found.
+      // 0 - strictly worse than stating plainly what could not be answered.
       // (Measured: every miner that degrades to 200+prose scores above zero;
-      // every miner that returns an answer-less error scores zero.)
+      // every miner that returns an answer-less error scores zero.) A
+      // transaction that does not exist is not an error: /tx answers it as
+      // status not_found.
       if (isIntentRoute(req.url) && err.code !== 'UPSTREAM_RPC_ERROR') {
         const answer = err.answerText(requestSubject(req.url));
         return reply.status(200).send({
@@ -102,7 +105,6 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
           signal: answer,
           source: 'Truvian onchain lookup over public JSON-RPC',
           confidence: 0,
-          ...err.fields,
           resolved: false,
           error: err.code,
           message: err.message,

@@ -55,7 +55,8 @@ const TX_SUCCESS =
 const TX_REVERTED =
   'Transaction 0x9d3f7f2065f2f85353b46bebbb1b171c3d7e2ce71695c9a6d111c4f25af00b66a on Base (chain id 8453) reverted in block 50812345. It transferred 0.05 ETH (50000000000000000 wei) from 0x1f6791653247bf9C8C09598E6B1A1AeC3aaec957 to the recipient 0x41f4F4197718e083b54FE89D28A7d4f41F498BF6, invoking function selector 0xa9059cbb.';
 
-// our miner's IntentError.answerText for TX_NOT_FOUND (src/types/index.ts)
+// our miner's not-found text until 2026-11-21 (the old IntentError.answerText
+// for TX_NOT_FOUND); test:miner checks that Shield reads the current one too
 const NOT_FOUND_HASH = `0x${'ab'.repeat(32)}`;
 const TX_NOT_FOUND =
   `Transaction ${NOT_FOUND_HASH} not found on base. The transaction hash is well formed but no matching transaction exists on the chains searched, so it was never mined there or belongs to a chain this miner does not serve.`;
