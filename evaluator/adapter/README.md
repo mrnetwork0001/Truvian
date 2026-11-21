@@ -8,7 +8,9 @@ least 70% of 30 hidden pairs correctly to take the seat.
 
 **Status, 2026-11-21: trained, packaged and checked on the node's engine; not
 registered.** The package is [`package/SMART_CONTRACT_AUDIT.safetensors`](package/)
-(keccak256 `0xca1e61ec…afdf7`).
+(keccak256 `0xca1e61ec…afdf7`), its executor answers at
+`https://scorer.truvian.xyz/runnable`, and [Registering](#registering) has the
+exact transactions to send.
 
 An adapter is a small LoRA delta and reward head on Telegraph's shared
 Foundation Model (ModernBERT-base). The node renders each pair as
@@ -194,8 +196,135 @@ they are `/opt/truvian-scorer/SMART_CONTRACT_AUDIT.safetensors` and its copy
 `/opt/truvian-scorer/current.safetensors`, and a backup with SHA256SUMS is
 kept off the server.
 
+## The executor
+
+A registration names a runnable URL. A validator scores 15 public pairs
+there before downloading anything, then scores the same texts itself and
+rejects the registration unless every score matches bit for bit.
+
+- URL to register: `https://scorer.truvian.xyz/runnable`. The executor
+  answers a POST at any path; nginx answers `/health` itself.
+- Runs on the scorer server as the systemd unit `truvian-scorer`, enabled and
+  started on 2026-11-21: the kit's reference executor (`cmd/adapterexec`, the
+  unmodified build of kit commit 1ed063e), the released foundation
+  (`foundation_lora_fp32.onnx`, sha256 `0a49b325…`) and engine
+  (`foundation_engine.wasm`, `77643d6e…`), and
+  `/opt/truvian-scorer/current.safetensors`. It listens on 127.0.0.1:8080
+  only, behind nginx with TLS and 1,900-second proxy timeouts. The unit
+  limits it to 5 GB of memory (it uses about 2.8 GB) and restarts it if it
+  stops.
+- It needs no tokenizer and keeps no state: the node sends token ids, and the
+  reply carries one score (f32 bits) per text and the identity it scored with.
+
+Checked from outside the server on 2026-11-21, after the unit started:
+
+| Check | Result |
+|---|---|
+| DNS and TLS | one A record, 38.9.97.25; Let's Encrypt certificate valid to 2027-02-18; no redirect |
+| `GET` | 405 `POST a batch request`, from the executor |
+| Empty batch with the identity | 200, the three hashes echoed |
+| Pair 0 of the seed-11 sample (2 texts) | bits 1091328269 and 1083301922, the same as both local runs, in 30 s |
+| The examples repository's `evaluator-adapter/check-executor.ts` (telegraph-examples ee9b96e) | passed: 3 short texts in 2.4 s, identity and `input_root` echoed, the same bits for the same text |
+
+The checker's first text is the kit's default verification input, and the
+executor gave it `0xbf909d3f`, the bits `adapterbuild` recorded in the
+manifest.
+
+See it answer (an empty batch scores nothing and returns the identity):
+
+```bash
+curl -s https://scorer.truvian.xyz/runnable -H 'Content-Type: application/json' -d '{"batch": [],
+  "foundation_hash": "0a49b325304bb4cf292e683929689d0457966be264f60bfc94d0072b614bf8e6",
+  "adapter_hash": "ca1e61ec8376def41ac1208e8dc941b34b03d3e50338ed3650d6d1787b6afdf7",
+  "tokenizer_hash": "67bc76f8b9386efba1a761c1c8e5ad439fd0eaf1c2826e9dd1a205c7af4dc456"}'
+```
+
+`/health` returning `ok` only shows that nginx is up.
+
+On the server: `journalctl -u truvian-scorer -f` shows each scored text with
+its bits; `systemctl stop truvian-scorer` stops it (it is enabled, so it
+starts again at boot); `systemctl disable --now truvian-scorer` stops it for
+good. Keep it running until the registration leaves `pending`. Serving a
+different package means a new registration with that package's hash.
+
+## Registering
+
+Not done yet. It is one transaction from the wallet that will own the
+registration, after minting and approving the $5 bond in test USDC (the
+Diamond's `entityBonds()`: 5,000,000 base units; returned in full on
+deregistration). The Diamond address changes without notice: confirm it on
+<https://anjoman.ai/docs/protocol/addresses-and-params> first.
+
+`<COMMIT>` is the full hash of a commit on GitHub that contains the
+package: the commit that adds it, if the branch is merged with a merge
+commit (a squash or rebase gives it a new hash), or any later commit of
+`main`. A commit-pinned raw URL cannot change after registration.
+
+```bash
+export DIAMOND=0x72a70e949362670Bf8bceAd24eFC5b8f950aa08b   # since 2026-11-17
+export RPC=https://ethereum-sepolia-rpc.publicnode.com
+export USDC=0xcc194e1a843B658526D0D5C431f670028582Ae17      # test USDC, the Diamond's usdcToken()
+export AUTHOR=0xcd0a2370f2dc12c1802707b7d9ab3fec891e3c02    # owns the registration (the miner wallet)
+export FEE_ADDRESS=$AUTHOR                                 # where the adapter's rewards go; can be a cold wallet
+export WASM_HASH=0xca1e61ec8376def41ac1208e8dc941b34b03d3e50338ed3650d6d1787b6afdf7
+export WASM_URL=https://raw.githubusercontent.com/mrnetwork0001/Truvian/<COMMIT>/evaluator/adapter/package/SMART_CONTRACT_AUDIT.safetensors
+export WASM_RUNNABLE_URL=https://scorer.truvian.xyz/runnable
+
+# 1. The URL serves the registered bytes, without a redirect (the node re-hashes what it downloads).
+curl -fsS "$WASM_URL" | cast keccak           # must print $WASM_HASH
+# 2. The executor is up and runs this package: the empty-batch request above
+#    must echo adapter_hash ca1e61ec…
+
+# 3. The bond: third value of entityBonds() is the adapter bond in test USDC base units.
+cast call $DIAMOND "entityBonds()(uint64,uint64,uint256,uint256)" --rpc-url $RPC
+cast send $USDC "mint(address,uint256)" $AUTHOR 5000000 --rpc-url $RPC --private-key $AUTHOR_PRIVATE_KEY
+cast send $USDC "approve(address,uint256)" $DIAMOND 5000000 --rpc-url $RPC --private-key $AUTHOR_PRIVATE_KEY
+
+# 4. Dry run (free): prints the registration id you would get, or the revert reason.
+cast call $DIAMOND "registerWasm(bytes32,string,string,address,string)(uint256)" \
+  $WASM_HASH "$WASM_URL" SMART_CONTRACT_AUDIT $FEE_ADDRESS "$WASM_RUNNABLE_URL" \
+  --from $AUTHOR --rpc-url $RPC
+
+# 5. Register.
+cast send $DIAMOND "registerWasm(bytes32,string,string,address,string)" \
+  $WASM_HASH "$WASM_URL" SMART_CONTRACT_AUDIT $FEE_ADDRESS "$WASM_RUNNABLE_URL" \
+  --rpc-url $RPC --private-key $AUTHOR_PRIVATE_KEY
+```
+
+What was checked on 2026-11-21 (block 12180874), without sending anything:
+
+- The intent argument is the family prefix `SMART_CONTRACT_AUDIT`, which is
+  in the Diamond's `getPrefixes()`. `SMART_CONTRACT_AUDIT_GENERAL` reverts
+  with `IntentRegistryFacet: not a registered prefix`.
+- Step 4 as the wallet stood (0.70 test USDC, no allowance) reverts with
+  `ERC20: insufficient allowance`. With the token's balance and allowance
+  overridden in the call to what step 3 leaves (5.70 USDC, 5.00 approved),
+  it returned registration id 175 and was estimated at about 2.4 million
+  gas. The id you get will be whatever is next when you send.
+- The wallet held 0.0102 Sepolia ETH, and the base fee was a few wei, so
+  gas is not a constraint unless fees rise sharply.
+
+Send the three transactions one at a time (`cast send` waits for each
+receipt). If one seems to vanish, read the wallet's nonce from a second RPC
+before resending.
+
+After sending, the node sees the transaction in 10 to 15 minutes, waits for
+the next confirmed epoch (1 hour on the testnet), then sends the 30-text
+batch to the executor (about 6 minutes), downloads the package, scores the
+same texts itself, and runs the hidden round of 30 pairs. Follow it with:
+
+```bash
+curl -s https://devnode.telegraphprotocol.com/engine/validator/v1/addresses/$AUTHOR/wasm
+curl -s "https://devnode.telegraphprotocol.com/api/wasm?intent=SMART_CONTRACT_AUDIT"
+```
+
 ## Limits
 
+- Nothing asks this intent anything yet. On 2026-11-21 the node listed no
+  miners for `SMART_CONTRACT_AUDIT` and said it is not callable on-chain
+  ("the intent has no response format"), and its child
+  `SMART_CONTRACT_AUDIT_GENERAL` is scored by the node's `GENERIC` fallback.
+  A canonical adapter would score the child's miners once there are any.
 - The pool's hidden pairs are written by other contributors about real
   production contracts, and ours are generated. How well the adapter carries
   over is only known from the node's own check. The public descriptions of
