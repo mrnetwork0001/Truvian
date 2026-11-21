@@ -6,8 +6,15 @@ Its evaluation pool then held 378 eligible rows from 4 contributors, above
 the node's minimum of 3, so with no incumbent an adapter needs to rank at
 least 70% of 30 hidden pairs correctly to take the seat.
 
-**Status, 2026-11-21: trained, packaged and checked on the node's engine; not
-registered.** The package is [`package/SMART_CONTRACT_AUDIT.safetensors`](package/)
+**Status, 2026-11-21 21:10 UTC: v1 was registered (id 175) and rejected; v2
+is packaged and served, and its registration follows.** v1 ordered 10 of the
+node's 15 public pairs (66.7%, the floor is 70%). v2 ([below](#version-2))
+is trained on production-style contracts and audit-finding answers. The
+executor now serves v2, so the v1 notes below describe v1's package and
+checks, kept as they were.
+
+The rest of this section and the v1 sections below are as written before v1
+was registered: **v1: trained, packaged and checked on the node's engine.** The package is [`package/SMART_CONTRACT_AUDIT.safetensors`](package/)
 (keccak256 `0xca1e61ec…afdf7`), its executor answers at
 `https://scorer.truvian.xyz/runnable`, and [Registering](#registering) has the
 exact transactions to send.
@@ -268,14 +275,14 @@ export RPC=https://ethereum-sepolia-rpc.publicnode.com
 export USDC=0xcc194e1a843B658526D0D5C431f670028582Ae17      # test USDC, the Diamond's usdcToken()
 export AUTHOR=0xcd0a2370f2dc12c1802707b7d9ab3fec891e3c02    # owns the registration (the miner wallet)
 export FEE_ADDRESS=$AUTHOR                                 # where the adapter's rewards go; can be a cold wallet
-export WASM_HASH=0xca1e61ec8376def41ac1208e8dc941b34b03d3e50338ed3650d6d1787b6afdf7
-export WASM_URL=https://raw.githubusercontent.com/mrnetwork0001/Truvian/<COMMIT>/evaluator/adapter/package/SMART_CONTRACT_AUDIT.safetensors
+export WASM_HASH=0xa39d6e4e7ff5d05e8d542130ad355611d0ff2e4fb77dce2b63622b98f61aa19e   # v2 (v1 was 0xca1e61ec…afdf7)
+export WASM_URL=https://raw.githubusercontent.com/mrnetwork0001/Truvian/<COMMIT>/evaluator/adapter/package-v2/SMART_CONTRACT_AUDIT.safetensors
 export WASM_RUNNABLE_URL=https://scorer.truvian.xyz/runnable
 
 # 1. The URL serves the registered bytes, without a redirect (the node re-hashes what it downloads).
 curl -fsS "$WASM_URL" | cast keccak           # must print $WASM_HASH
 # 2. The executor is up and runs this package: the empty-batch request above
-#    must echo adapter_hash ca1e61ec…
+#    must echo adapter_hash a39d6e4e… (v2)
 
 # 3. The bond: third value of entityBonds() is the adapter bond in test USDC base units.
 cast call $DIAMOND "entityBonds()(uint64,uint64,uint256,uint256)" --rpc-url $RPC
@@ -319,6 +326,90 @@ same texts itself, and runs the hidden round of 30 pairs. Follow it with:
 curl -s https://devnode.telegraphprotocol.com/engine/validator/v1/addresses/$AUTHOR/wasm
 curl -s "https://devnode.telegraphprotocol.com/api/wasm?intent=SMART_CONTRACT_AUDIT"
 ```
+
+## Version 2
+
+### Why
+
+Registration 175 (v1) was rejected on 2026-11-21 at 11:12 UTC: "at its
+runnable URL the adapter ordered 10 of 15 public pairs correctly (66.7%),
+below the 70% floor". v1 ordered 91% of its own held-out pairs, so it had
+learned our generator, not the pool. The pool's rows are never shown back
+(the endpoints return counts and states only), and the 15 public pairs are
+drawn by a seed after registration, so they cannot be tested in advance. The
+executor's log shows only their lengths: 76 to 512 tokens, median about 305,
+with one pair whose two texts were both cut at 512 and scored the same (a
+pair no adapter can order). That is close to v1's own lengths (median 338),
+so length does not explain the miss; the likelier cause is content. v1's
+contracts were small and built from a few known parts, and its answers
+followed fixed templates.
+
+### Training data: `generate_pairs_v2.py`
+
+The script's docstring has the full design. In short:
+
+- **The contracts** are production-style: SPDX header, OpenZeppelin imports,
+  Ownable, AccessControl and UUPS bases, events, custom errors, NatSpec. They
+  are 100 to 512 tokens long, measured with the pinned tokenizer as the node
+  renders them.
+- **The questions** are weighted toward access control: missing modifiers,
+  unprotected initializers, an empty `_authorizeUpgrade`, tx.origin. The other
+  common findings are covered too.
+- **The answers** are written as audit findings or as a "no finding" verdict.
+- **The worse answer** is a false finding about the same code.
+- **A separate `--style test` set** (240 pairs) uses different wordings,
+  formats, names and layout. It measures the task rather than our phrasing.
+
+The kit's dataset gate on 2,500 pairs (seed 21) passed:
+
+| Check | Value |
+|---|---|
+| Unique worse answers | 99.6% |
+| "Pick the longer answer" | 52.5% |
+| Bag-of-words probe | 59.3% |
+| Held-out leak | 0.8% |
+
+### Training (run v2)
+
+The run used the same settings as v1. The kit held out 375 pairs for
+validation and trained on 2,125. It ran from 2026-11-21 11:41 to 20:45 UTC on
+the server's CPU.
+
+| Epoch | Validation accuracy (375) | Validation loss |
+|---|---|---|
+| 1 | 0.6160 | 0.6438 |
+| 2 | 0.7120 | 0.5348 |
+| 3 | 0.7440 | 0.4834 |
+
+On the 240-pair test-style set, the gate split, v2 ordered **68.75%**
+correctly, against 58.13% for "pick the longer answer". Verdict `PASS`
+(`package-v2/train-result.json`). This sits near the node's 70% floor, and
+it is the only estimate available before the node's own check.
+
+### The v2 package
+
+| | |
+|---|---|
+| File | `package-v2/SMART_CONTRACT_AUDIT.safetensors`, 6,776,916 bytes |
+| sha256 | `e78307d05218c36d652776b3288cb62d0e34f6d66006826f744894f0131032a9` |
+| keccak256 (registered) | `0xa39d6e4e7ff5d05e8d542130ad355611d0ff2e4fb77dce2b63622b98f61aa19e` |
+| Default-input score | `0xbe1a2693` |
+
+The package was exported once. Its sha256 and keccak were checked after the
+copy to this repository.
+
+- **Packaging check.** `adapterbuild lora`, run from the patched scratch kit,
+  accepted it: class judgment, rank 8, 178 tensors. It scored the default
+  input twice, `0xbe1a2693` both times
+  (`package-v2/...manifest.json`).
+- **Production executor.** The executor (the unmodified build) was switched
+  to v2 at 21:04 UTC; v1's files are kept in `/opt/truvian-scorer/backup-v1/`.
+  From outside, it echoed adapter hash `a39d6e4e…` and gave the default
+  input 3189384851, which is `0xbe1a2693`.
+
+nginx on the scorer server now logs the body of every request to the runnable
+URL in `/var/log/nginx/scorer-body.log`. The node's next public-pair batch can
+then be replayed against later versions.
 
 ## Limits
 
