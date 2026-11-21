@@ -14,15 +14,19 @@
  *  1. Free direct chain reads at one block (tokenFacts.ts). An address with no
  *     contract code is rejected here and nothing is bought.
  *  2. One routed Telegraph request per fact, answered by the node's ranked
- *     miner and paid from escrow. A fact bought in the last few minutes is
- *     reused instead of bought again.
+ *     miner and paid from escrow. When that answer is no evidence (it did
+ *     not answer, carried no figure, examined nothing, or is not about this
+ *     token), one more ask goes to the next-best miner on the node's
+ *     leaderboard, pinned by id, and its answer is used only if it is
+ *     evidence: at most one extra answer per fact, within the budget. A fact
+ *     bought in the last few minutes is reused instead of bought again.
  *  3. Fixed rules over the scored fields (`evaluate`, a pure function). Any
  *     blocking finding rejects; any finding that needs a person makes it
  *     REVIEW; only a clean run clears. A check that did not answer can never
  *     clear a token: it is a REVIEW finding, not a pass.
  */
 import type { SupportedChain } from '../config/chains.js';
-import { apiKeyBalanceUsd, askTypedIntent, type PaymentReceipt, type TypedAnswer } from './telegraph.js';
+import { apiKeyBalanceUsd, askPinnedIntent, askTypedIntent, intentRanking, type IntentRanking, type PaymentReceipt, type RankedMiner, type TypedAnswer } from './telegraph.js';
 import { parseAddress, parseChain, readBalanceGwei, readTokenFacts, TokenFactsError, type TokenFacts } from './tokenFacts.js';
 
 export type PreflightMode = 'trade' | 'listing';
@@ -44,7 +48,11 @@ export interface PreflightRequest {
   treasury?: `0x${string}`;
 }
 
-/** One Telegraph request and its answer, kept as evidence. */
+/**
+ * One fact asked of Telegraph and the answer the decision rests on, kept as
+ * evidence. When a second opinion was taken, the answer fields here are the
+ * one used, and `secondOpinion` keeps both answers.
+ */
 export interface Purchase {
   key: PurchaseKey;
   intent: string;
@@ -54,19 +62,47 @@ export interface Purchase {
   fieldStatus: Record<string, string>;
   minerId?: string;
   minerName?: string;
-  /** Billed for this memo: 0 when the answer was reused */
+  /** Billed for this fact in this memo, a second opinion included: 0 when the answer was reused */
   costUsd: number;
   signalHash?: string;
   /** The escrow payment for this answer (engine route); on a reused answer, the original payment */
   receipt?: PaymentReceipt;
-  /** Ranked position of the miner that answered, when the node reports it */
+  /** Ranked position of the miner that answered, when the node reports it (a routed answer only) */
   servedRank?: number;
+  /** Time spent on this fact, a second opinion included */
   latencyMs: number;
   error?: string;
+  /** Set when the first answer was no evidence and one more answer was asked for */
+  secondOpinion?: SecondOpinion;
   /** True when a fresh earlier answer to the same request was reused instead of bought again */
   reused: boolean;
   /** When the reused answer was bought */
   boughtAt: string;
+}
+
+/** One ask's answer, as it was returned and billed. */
+export type Answer = Pick<Purchase, 'ok' | 'fields' | 'fieldStatus' | 'minerId' | 'minerName' | 'costUsd' | 'signalHash' | 'receipt' | 'servedRank' | 'latencyMs' | 'error'>;
+
+/**
+ * The record of a second opinion: why the routed answer was no evidence, the
+ * next-best ranked miner the one extra ask was pinned to, and both answers
+ * with their signal hashes and receipts.
+ */
+export interface SecondOpinion {
+  /** Why the first answer was no evidence: the finding it gives */
+  reason: string;
+  /** That finding's rule, e.g. wash.not_examined */
+  reasonRule: string;
+  /** The miner asked, and where it stands on the node's leaderboard; null when none could be asked */
+  miner: { id: string; slug: string; name: string; rank: number; score: number; epoch: number; priceUsd: number } | null;
+  /** True when the decision rests on the second answer */
+  used: boolean;
+  /** What happened, in words */
+  outcome: string;
+  /** The routed answer */
+  first: Answer;
+  /** The pinned answer; null when it was not asked */
+  second: Answer | null;
 }
 
 export interface Finding {
@@ -138,9 +174,14 @@ export interface PreflightMemo {
   action: { simulated: true; description: string; executed: boolean } | null;
   cost: {
     telegraphUsd: number;
+    /** Asks answered with response fields, second opinions included */
     paidRequests: number;
+    /** Facts whose earlier answer was reused at $0 */
     reusedRequests: number;
+    /** Asks that returned no response fields (a raw answer may still have been billed: see telegraphUsd) */
     failedRequests: number;
+    /** Second opinions asked: one extra pinned ask each, at most one per fact */
+    secondOpinions: number;
     budgetUsd: number;
     escrowBeforeUsd: number | null;
   };
@@ -473,6 +514,64 @@ function chainFindings(facts: TokenFacts): Finding[] {
   return out;
 }
 
+/** What the findings for one fact need besides its answer. */
+export interface FactContext {
+  req: PreflightRequest;
+  facts: TokenFacts;
+  treasuryRead: PreflightMemo['treasuryRead'];
+}
+
+/** The findings one answer gives for its own fact. */
+function factFindings(p: Purchase, ctx: FactContext): Finding[] {
+  switch (p.key) {
+    case 'security': return securityFindings(p, ctx.facts);
+    case 'supply': return supplyFindings(p, ctx.facts);
+    case 'wash': return washFindings(p);
+    case 'liquidity': return liquidityFindings(p, ctx.req);
+    case 'sanctions': return sanctionsFindings(p, ctx.req.issuer ?? '');
+    case 'treasury': return treasuryFindings(p, ctx.treasuryRead, ctx.req.treasury !== undefined);
+  }
+}
+
+/** Findings that say an answer is no evidence about its fact: not answered, no figure, nothing examined, not about this token. */
+const NO_EVIDENCE: ReadonlySet<string> = new Set([
+  'security.unavailable', 'security.not_examined', 'security.not_about_token', 'security.no_verdict',
+  'supply.unavailable', 'supply.missing',
+  'wash.unavailable', 'wash.missing', 'wash.not_examined',
+  'liquidity.unavailable', 'liquidity.missing',
+  'sanctions.unavailable', 'sanctions.uncertain',
+  'treasury.unavailable', 'treasury.missing',
+]);
+
+/**
+ * The finding that makes an answer no evidence about its fact, or null when
+ * it is evidence. An answer is no evidence only when all it gives is of that
+ * kind. One that also holds the token back in its own right (a honeypot, a
+ * blocking issue, a tax) is evidence, so it is never set aside for another.
+ */
+export function noEvidence(p: Purchase, ctx: FactContext): Finding | null {
+  const own = factFindings(p, ctx);
+  if (own.some((f) => f.severity !== 'info' && !NO_EVIDENCE.has(f.rule))) return null;
+  return own.find((f) => NO_EVIDENCE.has(f.rule)) ?? null;
+}
+
+/** An info finding per second opinion: from whom, why, and what came of it. Never changes the decision. */
+function secondOpinionFindings(p: Purchase | undefined): Finding[] {
+  const so = p?.secondOpinion;
+  if (!p || !so) return [];
+  const first = so.first.minerId ? `miner ${so.first.minerId}${so.first.minerName ? ` (${so.first.minerName})` : ''}` : 'the routed ask';
+  const pinned = so.miner ? ` from the next-best ranked miner, ${so.miner.id} (${so.miner.name}), ranked ${so.miner.rank} with score ${so.miner.score} in epoch ${so.miner.epoch}` : '';
+  const hashes = [so.first.signalHash ? `first ${so.first.signalHash}` : null, so.second?.signalHash ? `second ${so.second.signalHash}` : null].filter(Boolean).join(', ');
+  return [{
+    rule: `${p.key}.second_opinion`,
+    severity: 'info',
+    title: so.used ? `Second opinion used: ${so.miner?.name ?? '-'}` : so.second ? `Second opinion not used: ${so.miner?.name ?? '-'}` : 'No second opinion could be asked',
+    detail: `The first answer, from ${first}, was no evidence. ${so.reason} Second opinion${pinned}: ${so.outcome}.${hashes ? ` Signals: ${hashes}.` : ''}`,
+    source: 'telegraph',
+    evidence: [p.key],
+  }];
+}
+
 /**
  * The decision from the evidence. Pure: the same facts and answers always
  * give the same findings and decision, so a memo can be re-derived.
@@ -508,6 +607,7 @@ export function evaluate(
     ...liquidityFindings(by('liquidity'), req),
     ...(req.mode === 'listing' ? sanctionsFindings(by('sanctions'), req.issuer ?? '') : []),
     ...(req.mode === 'listing' ? treasuryFindings(by('treasury'), treasuryRead, req.treasury !== undefined) : []),
+    ...purchases.flatMap((p) => secondOpinionFindings(p)),
   ];
   if (findings.some((f) => f.severity === 'block')) return { findings, decision: 'REJECT', decisionRule: 'any blocking finding rejects' };
   if (findings.some((f) => f.severity === 'review')) return { findings, decision: 'REVIEW', decisionRule: 'no blocking finding, but at least one finding needs a person' };
@@ -515,11 +615,14 @@ export function evaluate(
 }
 
 // ---------------------------------------------------------------------------
-// Purchases: one routed request per fact, reused while fresh
+// Purchases: one routed request per fact, a second opinion when it is no
+// evidence, reused while fresh
 // ---------------------------------------------------------------------------
 
 /** Escrow the node holds per routed ask while it runs (it bills about $0.01 of it). */
 const HOLD_PER_ASK_USD = 0.26;
+/** What a routed ask is billed: the one miner call it routes (engine route, 2026-11-21) */
+const ROUTED_ASK_USD = 0.01;
 const REUSE_TTL_MS = Number(process.env.SHIELD_REUSE_TTL_MS) > 0 ? Number(process.env.SHIELD_REUSE_TTL_MS) : 10 * 60_000;
 
 function budgetUsd(): number {
@@ -527,39 +630,169 @@ function budgetUsd(): number {
   return Number.isFinite(n) && n > 0 ? n : 0.1;
 }
 
-const fresh = new Map<string, { at: number; answer: Promise<TypedAnswer> }>();
+/** The decision's budget: what is committed so far, and room for a second opinion. */
+export class Spend {
+  constructor(readonly budgetUsd: number, public committedUsd = 0) {}
+  /** Commit `usd` if it fits in the budget. */
+  take(usd: number): boolean {
+    if (this.committedUsd + usd > this.budgetUsd + 1e-9) return false;
+    this.committedUsd += usd;
+    return true;
+  }
+  /** Correct an estimate by what was really billed. */
+  adjust(deltaUsd: number): void {
+    this.committedUsd += deltaUsd;
+  }
+}
+
+/** What a second opinion is asked through: the live node, or stubs in tests. */
+export interface OpinionDeps {
+  ranking(intent: string): Promise<IntentRanking>;
+  askPinned(minerId: string, intent: string, params: Record<string, unknown>): Promise<TypedAnswer>;
+}
+
+const LIVE_OPINION: OpinionDeps = { ranking: intentRanking, askPinned: askPinnedIntent };
+
+const roundUsd = (n: number): number => Number(n.toFixed(6));
+
+export function answerOf(a: TypedAnswer): Answer {
+  const out: Answer = { ok: a.ok, fields: a.fields, fieldStatus: a.fieldStatus, costUsd: a.costUsd ?? 0, latencyMs: a.latencyMs };
+  if (a.minerId) out.minerId = a.minerId;
+  if (a.minerName) out.minerName = a.minerName;
+  if (a.signalHash) out.signalHash = a.signalHash;
+  if (a.receipt) out.receipt = a.receipt;
+  if (a.servedRank !== undefined) out.servedRank = a.servedRank;
+  if (a.error) out.error = a.error;
+  return out;
+}
+
+/**
+ * The next-best miner for a second opinion: the best-ranked one, other than
+ * the miner that gave the first answer, whose answers scored above 0 in the
+ * epoch. A score of 0 means the node's evaluation found nothing right in its
+ * answers that epoch, which is no better opinion.
+ */
+export function nextBestMiner(ranking: IntentRanking, answeredBy: string | undefined): { miner: RankedMiner } | { miner: null; why: string } {
+  if (ranking.epoch === null) return { miner: null, why: ranking.error ?? `the node ranks no miner for ${ranking.intent}` };
+  const other = ranking.miners.filter((m) => m.minerId !== answeredBy && m.slug !== answeredBy);
+  const best = other.find((m) => m.score > 0);
+  if (!best) return { miner: null, why: `no other active miner scored above 0 for ${ranking.intent} in epoch ${ranking.epoch}` };
+  return { miner: best };
+}
+
+type Planned = { key: PurchaseKey; intent: string; params: Record<string, unknown>; question: string };
+/** A fact as bought, before it is marked reused or not. */
+type Resolved = Omit<Purchase, 'reused' | 'boughtAt'>;
+
+/**
+ * The first answer to a fact, or a second opinion in its place. When the
+ * routed answer is no evidence (it did not answer, carried no figure,
+ * examined nothing, or is not about this token), one more ask goes to the
+ * next-best miner on the node's leaderboard for the intent, pinned so the
+ * node cannot route it back to the same miner. Its answer is used only if it
+ * is evidence. Never more than one extra answer per fact, only within the
+ * decision's budget, and never when the request itself was refused.
+ */
+export async function withSecondOpinion(plan: Omit<Planned, 'question'>, firstAsk: TypedAnswer, ctx: FactContext & { spend: Spend }, deps: OpinionDeps = LIVE_OPINION): Promise<Resolved> {
+  const { key, intent, params } = plan;
+  const first = answerOf(firstAsk);
+  const resolved = (a: Answer, extra?: Pick<Resolved, 'secondOpinion' | 'costUsd' | 'latencyMs'>): Resolved => ({ key, intent, params, ...a, ...extra });
+  const lacking = firstAsk.refused ? null : noEvidence({ ...resolved(first), reused: false, boughtAt: '' }, ctx);
+  if (!lacking) return resolved(first);
+
+  const so: SecondOpinion = { reason: lacking.detail, reasonRule: lacking.rule, miner: null, used: false, outcome: '', first, second: null };
+  const done = (): Resolved => {
+    const second = so.second;
+    const used = so.used && second ? second : first;
+    return resolved(used, { secondOpinion: so, costUsd: roundUsd(first.costUsd + (second?.costUsd ?? 0)), latencyMs: first.latencyMs + (second?.latencyMs ?? 0) });
+  };
+
+  let ranking: IntentRanking;
+  try {
+    ranking = await deps.ranking(intent);
+  } catch (err) {
+    ranking = { intent, epoch: null, miners: [], error: `could not read the ranking: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  const pick = nextBestMiner(ranking, first.minerId);
+  if (!pick.miner) {
+    so.outcome = `not asked: ${pick.why}`;
+    return done();
+  }
+  const m = pick.miner;
+  so.miner = { id: m.minerId, slug: m.slug, name: m.name, rank: m.rank, score: m.score, epoch: ranking.epoch!, priceUsd: m.priceUsd };
+  if (!ctx.spend.take(m.priceUsd)) {
+    so.outcome = `not asked: its price, $${m.priceUsd}, does not fit in what is left of the $${ctx.spend.budgetUsd.toFixed(2)} budget per decision`;
+    return done();
+  }
+  let pinned: TypedAnswer;
+  try {
+    pinned = await deps.askPinned(m.minerId, intent, params);
+  } catch (err) {
+    pinned = { intent, params, ok: false, fields: null, fieldStatus: {}, latencyMs: 0, error: err instanceof Error ? err.message : String(err) };
+  }
+  const second = answerOf(pinned);
+  ctx.spend.adjust(second.costUsd - m.priceUsd);
+  so.second = second;
+  const secondLacking = noEvidence({ ...resolved(second), reused: false, boughtAt: '' }, ctx);
+  so.used = secondLacking === null;
+  if (so.used) {
+    const gives = factFindings({ ...resolved(second), reused: false, boughtAt: '' }, ctx).filter((f) => f.severity !== 'info').map((f) => f.title);
+    so.outcome = `used: it is evidence (${gives.join('; ')})`;
+  } else {
+    so.outcome = `not used: it is no evidence either (${secondLacking!.title}${second.error ? `; ${second.error}` : ''})`;
+  }
+  return done();
+}
+
+const fresh = new Map<string, { at: number; fact: Promise<Resolved> }>();
 
 function cacheKey(intent: string, params: Record<string, unknown>): string {
   return `${intent} ${JSON.stringify(Object.keys(params).sort().map((k) => [k, params[k]]))}`;
 }
 
-/** Ask once; a request already answered (or in flight) in the last REUSE_TTL_MS is reused. */
-async function buy(key: PurchaseKey, intent: string, params: Record<string, unknown>, question: string): Promise<Purchase> {
-  const ck = cacheKey(intent, params);
+/**
+ * Ask once, with a second opinion when the answer is no evidence. A fact
+ * already bought (or in flight) in the last REUSE_TTL_MS is reused whole,
+ * second opinion and all, so a repeat never pays for either again.
+ */
+async function buy(plan: Planned, ctx: FactContext & { spend: Spend }): Promise<Purchase> {
+  const ck = cacheKey(plan.intent, plan.params);
   const now = Date.now();
   const hit = fresh.get(ck);
   const reused = hit !== undefined && now - hit.at < REUSE_TTL_MS;
   let entry = hit;
-  if (!reused) {
-    entry = { at: now, answer: askTypedIntent(intent, params, question) };
+  if (reused) {
+    ctx.spend.adjust(-ROUTED_ASK_USD); // nothing is bought for this fact in this decision
+  } else {
+    entry = {
+      at: now,
+      fact: (async () => {
+        const first = await askTypedIntent(plan.intent, plan.params, plan.question);
+        ctx.spend.adjust((first.costUsd ?? 0) - ROUTED_ASK_USD);
+        return withSecondOpinion(plan, first, ctx);
+      })(),
+    };
     fresh.set(ck, entry);
   }
-  const answer = await entry!.answer;
-  if (!answer.ok && fresh.get(ck) === entry) fresh.delete(ck); // never reuse a failure
-  const out: Purchase = {
-    key, intent, params, ok: answer.ok, fields: answer.fields, fieldStatus: answer.fieldStatus,
-    costUsd: reused ? 0 : answer.costUsd ?? 0,
-    latencyMs: reused ? 0 : answer.latencyMs,
-    reused,
-    boughtAt: new Date(entry!.at).toISOString(),
+  const fact = await entry!.fact;
+  if (!fact.ok && fresh.get(ck) === entry) fresh.delete(ck); // never reuse a failure
+  return { ...fact, costUsd: reused ? 0 : fact.costUsd, latencyMs: reused ? 0 : fact.latencyMs, reused, boughtAt: new Date(entry!.at).toISOString() };
+}
+
+/**
+ * What a decision cost and how many asks it made. A fact with a second
+ * opinion counts both asks; a reused fact counts none.
+ */
+export function memoCost(purchases: Purchase[]): Pick<PreflightMemo['cost'], 'telegraphUsd' | 'paidRequests' | 'reusedRequests' | 'failedRequests' | 'secondOpinions'> {
+  const bought = purchases.filter((p) => !p.reused);
+  const asks: Answer[] = bought.flatMap((p) => (p.secondOpinion ? [p.secondOpinion.first, ...(p.secondOpinion.second ? [p.secondOpinion.second] : [])] : [p]));
+  return {
+    telegraphUsd: roundUsd(purchases.reduce((s, p) => s + p.costUsd, 0)),
+    paidRequests: asks.filter((a) => a.ok).length,
+    reusedRequests: purchases.length - bought.length,
+    failedRequests: asks.filter((a) => !a.ok).length,
+    secondOpinions: bought.filter((p) => p.secondOpinion?.second).length,
   };
-  if (answer.minerId) out.minerId = answer.minerId;
-  if (answer.minerName) out.minerName = answer.minerName;
-  if (answer.signalHash) out.signalHash = answer.signalHash;
-  if (answer.receipt) out.receipt = answer.receipt;
-  if (answer.servedRank !== undefined) out.servedRank = answer.servedRank;
-  if (answer.error) out.error = answer.error;
-  return out;
 }
 
 /** Run tasks with at most `limit` in flight. */
@@ -594,7 +827,6 @@ export async function runPreflight(req: PreflightRequest, events: PreflightEvent
 
   const label = facts.chainLabel;
   const name = facts.symbol ?? 'token';
-  type Planned = { key: PurchaseKey; intent: string; params: Record<string, unknown>; question: string };
   const plan: Planned[] = [];
   let treasuryRead: PreflightMemo['treasuryRead'] = null;
   if (facts.isContract) {
@@ -622,14 +854,16 @@ export async function runPreflight(req: PreflightRequest, events: PreflightEvent
   events.onPlan?.(plan.map(({ key, intent }) => ({ key, intent })), escrow);
   let purchases: Purchase[] = [];
   const policyFindings: Finding[] = [];
-  const expected = plan.length * 0.01;
+  const expected = plan.length * ROUTED_ASK_USD;
   if (plan.length > 0 && expected > budget) {
     policyFindings.push({ rule: 'budget.over', severity: 'review', title: 'Over budget', detail: `This review would cost about $${expected.toFixed(2)}, above the $${budget.toFixed(2)} budget per decision. Nothing was bought.`, source: 'policy', evidence: [] });
   } else if (plan.length > 0 && escrow !== null && escrow < HOLD_PER_ASK_USD) {
     policyFindings.push({ rule: 'budget.escrow_low', severity: 'review', title: 'Escrow too low to buy', detail: `The escrow holds $${escrow.toFixed(2)}, below the $${HOLD_PER_ASK_USD} Telegraph holds for each ask while it runs. Nothing was bought.`, source: 'policy', evidence: [] });
   } else if (plan.length > 0) {
     const parallel = escrow === null ? 1 : Math.max(1, Math.min(3, Math.floor(escrow / HOLD_PER_ASK_USD)));
-    purchases = await pooled(plan.map((p) => () => buy(p.key, p.intent, p.params, p.question)), parallel, (p) => events.onPurchase?.(p));
+    // The routed asks are committed up front; second opinions take what is left of the budget.
+    const ctx = { req, facts, treasuryRead, spend: new Spend(budget, expected) };
+    purchases = await pooled(plan.map((p) => () => buy(p, ctx)), parallel, (p) => events.onPurchase?.(p));
   }
 
   const judged = evaluate(req, facts, purchases, treasuryRead);
@@ -641,7 +875,6 @@ export async function runPreflight(req: PreflightRequest, events: PreflightEvent
     decisionRule = 'the checks could not be bought, so nothing can clear the token';
   }
 
-  const telegraphUsd = Number(purchases.reduce((s, p) => s + p.costUsd, 0).toFixed(6));
   return {
     version: 'truvian-shield-memo/1',
     kind: req.mode === 'trade' ? 'token-preflight' : 'listing-review',
@@ -652,7 +885,7 @@ export async function runPreflight(req: PreflightRequest, events: PreflightEvent
     },
     network: {
       telegraphNode: process.env.TELEGRAPH_NODE_URL ?? 'https://devnode.telegraphprotocol.com',
-      routing: 'one routed ask per fact (POST /engine/ask with intent and params, paid from escrow); the node picks its ranked miner and returns a payment receipt',
+      routing: 'one routed ask per fact (POST /engine/ask with intent and params, paid from escrow); the node picks its ranked miner and returns a payment receipt. When that answer is no evidence, at most one more ask per fact, pinned to the next-best miner on the node leaderboard (POST /engine/ask/{minerId}), within the budget',
       settlement: 'Anjoman escrow, test USDC on Ethereum Sepolia (testnet)',
       note: 'Telegraph Season II runs on testnet settlement; the facts checked are about the mainnet chain named in input.chain.',
     },
@@ -672,10 +905,7 @@ export async function runPreflight(req: PreflightRequest, events: PreflightEvent
       }
       : null,
     cost: {
-      telegraphUsd,
-      paidRequests: purchases.filter((p) => !p.reused && p.ok).length,
-      reusedRequests: purchases.filter((p) => p.reused).length,
-      failedRequests: purchases.filter((p) => !p.ok).length,
+      ...memoCost(purchases),
       budgetUsd: budget,
       escrowBeforeUsd: escrow,
     },

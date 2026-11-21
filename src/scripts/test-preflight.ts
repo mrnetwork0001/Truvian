@@ -15,17 +15,33 @@ import 'dotenv/config';
 import { generatePrivateKey } from 'viem/accounts';
 import {
   evaluate,
+  memoCost,
   normalizePreflightRequest,
+  noEvidence,
   PreflightInputError,
   runPreflight,
   mentionsToken,
   notExamined,
+  Spend,
   summaryFacts,
+  withSecondOpinion,
+  type OpinionDeps,
   type Purchase,
   type PreflightRequest,
 } from '../shield/preflight.js';
 import { canonicalJson, memoDigest, signMemo, verifyMemo } from '../shield/memo.js';
-import { askPinnedIntent, latestRanked, rankMiners, type CatalogMinerEntry, type Leaderboard, type LeaderboardRow, type PaymentReceipt } from '../shield/telegraph.js';
+import {
+  askPinnedIntent,
+  latestRanked,
+  rankMiners,
+  typedAnswerFrom,
+  type CatalogMinerEntry,
+  type IntentRanking,
+  type Leaderboard,
+  type LeaderboardRow,
+  type PaymentReceipt,
+  type TypedAnswer,
+} from '../shield/telegraph.js';
 import type { TokenFacts } from '../shield/tokenFacts.js';
 
 let failures = 0;
@@ -407,6 +423,164 @@ const washCatalog: CatalogMinerEntry[] = [
   const pinned = await askPinnedIntent('80002', WASH, { subject: 'x' });
   check('pinned ask without an API key: no answer, refused, nothing thrown', !pinned.ok && pinned.refused === true && /TELEGRAPH_API_KEY/.test(pinned.error ?? ''));
   if (saved !== undefined) process.env.TELEGRAPH_API_KEY = saved;
+}
+
+// ---------- unit: second opinions (stubbed ranking and pinned answers) ----------
+
+const washParams = { subject: 'WETH pool 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640 on Ethereum' };
+// The one paid pinned call, 2026-11-21 09:11 UTC: POST /engine/ask/80002, as replied (DexScreener's 30 pairs cut to one)
+const pinnedReply80002 = {
+  result: {
+    miner_id: '80002', miner_name: 'DexScreener Search', endpoint: '/query',
+    result: { pairs: [{ chainId: 'ethereum', dexId: 'uniswap', pairAddress: '0x6ceA05f7cb348D48A0BDf86889040f6a5Bae98dd', baseToken: { symbol: 'CRYPTO' }, quoteToken: { symbol: 'WETH' }, volume: { h24: 62.57 }, liquidity: { usd: 19219.09 } }], schemaVersion: '1.0.0' },
+    result_shape: 'raw', shape_error: 'answer_unreadable', format_version: 3, input: washParams, input_schema_version: 3,
+    cost_usd: 0.01, duration_ms: 225, timestamp: '2026-11-21T09:11:26.498911231Z',
+    reasoning: 'Intent: miner wash-dex-search given by the caller\nMiner: The user is asking a question related to wash trading detection, and the DexScreener Search miner has an endpoint that specifically serves the WASH_TRADING_DETECTION intent. The question is directly mapped to the \'q\' query parameter as required by the miner\'s configuration for this intent.',
+    intent: WASH, intent_version: 1, signal_hash: '0xd10e5d14f5fe5bece5048acc90f6dba3b206ba1ddad8d46ce19115efe250cbe7',
+  },
+  receipt: { receipt_hash: '0x04a70698cc964f0a535fc2fef2370c2a6ba664076a3f4081368be9a1673e668b', rail: 'escrow', payer: '0x29476125898638c8634a97fdca8994530e8c9055', miner: '4279', intent: WASH, amount_uusdc: '10000', epoch_id: 30, settlement: 'epoch', chain: 'telegraph', timestamp: 1795252286 },
+};
+const typed = (p: Purchase, params: Record<string, unknown>): TypedAnswer => {
+  const out: TypedAnswer = { intent: p.intent, params, ok: p.ok, fields: p.fields, fieldStatus: p.fieldStatus, costUsd: p.costUsd, latencyMs: p.latencyMs };
+  for (const k of ['minerId', 'minerName', 'signalHash', 'receipt', 'servedRank', 'error'] as const) if (p[k] !== undefined) (out as unknown as Record<string, unknown>)[k] = p[k];
+  return out;
+};
+// A stub for a pinned answer that did examine the pool (not a live answer)
+const washExaminedStub: TypedAnswer = {
+  intent: WASH, params: washParams, ok: true, minerId: '80002', minerName: 'DexScreener Search', costUsd: 0.01, latencyMs: 4_000, signalHash: `0x${'5'.repeat(64)}`,
+  fields: { subject: washParams.subject, verdict: 'organic', wash_volume_pct: 2, signals: ['24h volume $140.13M is 2.1x the pool\'s $67.88M liquidity'], summary: 'The WETH/USDC pool trades 2.1x its liquidity a day, inside a normal turnover; 2% of volume is in excess.' },
+  fieldStatus: { subject: 'ok', verdict: 'ok', wash_volume_pct: 'ok', signals: 'ok', summary: 'ok' },
+  receipt: { hash: `0x${'6'.repeat(64)}`, rail: 'escrow', payer: '0x29476125898638c8634a97fdca8994530e8c9055', miner: '4279', amountUsd: 0.01, epochId: 30, settlement: 'epoch' },
+};
+const washRanking: IntentRanking = { intent: WASH, epoch: 29, miners: rankMiners(WASH, washRows29, washCatalog) };
+const securityRanking: IntentRanking = {
+  intent: 'SECURITY_REVIEW_GENERAL', epoch: 30, miners: [
+    { minerId: '302', slug: 'chainsight-oracle', name: 'ChainSight — Universal Intelligence & Data Oracle', rank: 1, score: 0.9991, priceUsd: 0.01 },
+    { minerId: '9002', slug: 'txlens', name: 'TxLens', rank: 2, score: 0.9979, priceUsd: 0.01 },
+  ],
+};
+function stubDeps(ranking: IntentRanking | Error, pinned: TypedAnswer | ((minerId: string) => TypedAnswer)) {
+  const calls = { ranking: 0, pinned: [] as string[] };
+  const deps: OpinionDeps = {
+    ranking: async () => { calls.ranking++; if (ranking instanceof Error) throw ranking; return ranking; },
+    askPinned: async (minerId) => { calls.pinned.push(minerId); return typeof pinned === 'function' ? pinned(minerId) : pinned; },
+  };
+  return { deps, calls };
+}
+const wethCtx = (budget = 0.1, committed = 0.04) => ({ req: tradeWeth, facts: wethFacts, treasuryRead: null, spend: new Spend(budget, committed) });
+const wethGoPlusScan = bought('security', 'SECURITY_REVIEW_GENERAL', {
+  verdict: null, vulnerability_count: null, issues: [],
+  summary: "Wrapped Ether (WETH) at 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 on Ethereum is low risk. honeypot: no; buy tax 0%, sell tax 0%; mintable: unknown; owner: none reported; top 10 holders own 58.2%, per GoPlus's contract scan.",
+}, { verdict: 'rejected', vulnerability_count: 'missing', issues: 'ok', summary: 'ok' }, { minerId: '20260828', signalHash: '0x0908884b720c7c6aab9fe4f6c0c5ae36f6881adc7c2ba222f599963775d4b4f5' });
+
+{
+  const raw = typedAnswerFrom(WASH, washParams, { body: pinnedReply80002.result, receipt: pinnedReply80002.receipt, latencyMs: 4851 });
+  check('the recorded pinned reply parses: catalog id 80002, receipt to registration 4279, $0.01 billed', raw.minerId === '80002' && raw.receipt?.miner === '4279' && raw.receipt.hash.startsWith('0x04a70698') && raw.costUsd === 0.01 && raw.signalHash?.startsWith('0xd10e5d14') === true);
+  check('...and a raw answer is no answer, saying why', !raw.ok && raw.fields === null && /result_shape raw, shape_error answer_unreadable/.test(raw.error ?? ''), raw.error);
+  check('...and is not marked refused (a second opinion may still be taken for it)', raw.refused === undefined);
+
+  // TxLens's live "Insufficient data" (B4k2AxbY), then a pinned answer that examined the pool
+  const { deps, calls } = stubDeps(washRanking, washExaminedStub);
+  const ctx = wethCtx();
+  const used = await withSecondOpinion({ key: 'wash', intent: WASH, params: washParams }, typed(washWethTxLens, washParams), ctx, deps);
+  const so = used.secondOpinion;
+  check('second opinion: "Insufficient data" asks once more, pinned to the next-best miner (80002, rank 1 in epoch 29)', calls.pinned.join(',') === '80002' && so?.miner?.id === '80002' && so.miner.rank === 1 && so.miner.epoch === 29, calls.pinned.join(','));
+  check('second opinion: the miner that answered (9002) is never the one asked', !calls.pinned.includes('9002'));
+  check('second opinion: why it was asked is recorded (the first answer\'s finding)', so?.reasonRule === 'wash.not_examined' && /Insufficient data/.test(so.reason));
+  check('second opinion: an answer that examined the trades is used', so?.used === true && used.minerId === '80002' && used.fields?.wash_volume_pct === 2 && /^used/.test(so.outcome), so?.outcome);
+  check('second opinion: both answers keep their signal hashes and receipts', so !== undefined && so.first.signalHash === washWethTxLens.signalHash && so.first.receipt?.hash === washWethTxLens.receipt?.hash && so.second?.signalHash === washExaminedStub.signalHash && so.second?.receipt?.hash === washExaminedStub.receipt?.hash);
+  check('second opinion: its cost is counted ($0.01 + $0.01) and the time of both asks', used.costUsd === 0.02 && used.latencyMs === washWethTxLens.latencyMs + 4_000 && Math.abs(ctx.spend.committedUsd - 0.05) < 1e-9, `${used.costUsd} ${used.latencyMs} ${ctx.spend.committedUsd}`);
+  check('second opinion: the pinned answer has no served rank (nothing was routed)', used.servedRank === undefined);
+  const p: Purchase = { ...used, reused: false, boughtAt: '2026-11-21T09:20:00.000Z' };
+  const r = evaluate(tradeWeth, wethFacts, [wethGoPlusScan, supplyWeth, p, liquidityWeth], null);
+  check('second opinion used: WETH can clear on the pinned answer: HOLD', r.decision === 'HOLD' && r.findings.some((f) => f.rule === 'wash.ok'), r.findings.filter((f) => f.severity === 'review').map((f) => f.rule).join(','));
+  const info = r.findings.find((f) => f.rule === 'wash.second_opinion');
+  check('second opinion used: an info finding names both miners and both signal hashes', info?.severity === 'info' && info.detail.includes('9002') && info.detail.includes('80002') && info.detail.includes(washWethTxLens.signalHash!) && info.detail.includes(washExaminedStub.signalHash!), info?.detail);
+  const cost = memoCost([wethGoPlusScan, supplyWeth, p, liquidityWeth]);
+  check('memo cost: both wash asks are paid requests, one second opinion', cost.paidRequests === 5 && cost.failedRequests === 0 && cost.secondOpinions === 1 && cost.telegraphUsd === 0.05, JSON.stringify(cost));
+  check('memo cost: a reused fact counts no ask and costs $0', memoCost([{ ...p, reused: true, costUsd: 0 }]).paidRequests === 0 && memoCost([{ ...p, reused: true, costUsd: 0 }]).reusedRequests === 1);
+}
+
+{
+  // The live pinned answer, raw: no evidence either. The first answer stays; both were billed.
+  const raw = typedAnswerFrom(WASH, washParams, { body: pinnedReply80002.result, receipt: pinnedReply80002.receipt, latencyMs: 4851 });
+  const { deps, calls } = stubDeps(washRanking, raw);
+  const kept = await withSecondOpinion({ key: 'wash', intent: WASH, params: washParams }, typed(washWethTxLens, washParams), wethCtx(), deps);
+  check('second opinion not usable (the live raw reply): not used, the first answer stays', kept.secondOpinion?.used === false && kept.minerId === '9002' && kept.signalHash === washWethTxLens.signalHash && calls.pinned.length === 1, kept.secondOpinion?.outcome);
+  check('...the outcome says why, and both asks are billed', /not used/.test(kept.secondOpinion?.outcome ?? '') && /shape_error answer_unreadable/.test(kept.secondOpinion?.outcome ?? '') && kept.costUsd === 0.02);
+  const p: Purchase = { ...kept, reused: false, boughtAt: '2026-11-21T09:20:00.000Z' };
+  const r = evaluate(tradeWeth, wethFacts, [wethGoPlusScan, supplyWeth, p, liquidityWeth], null);
+  check('...so WETH stays in REVIEW on "Insufficient data"', r.decision === 'REVIEW' && r.findings.some((f) => f.rule === 'wash.not_examined') && r.findings.some((f) => f.rule === 'wash.second_opinion'));
+  const cost = memoCost([p]);
+  check('...memo cost: one paid, one failed ask, one second opinion, $0.02', cost.paidRequests === 1 && cost.failedRequests === 1 && cost.secondOpinions === 1 && cost.telegraphUsd === 0.02, JSON.stringify(cost));
+}
+
+{
+  // Never more than one extra answer: the pinned answer also examined nothing.
+  const { deps, calls } = stubDeps(washRanking, (id) => ({ ...typed(washWethTxLens, washParams), minerId: id, signalHash: `0x${'7'.repeat(64)}` }));
+  const r = await withSecondOpinion({ key: 'wash', intent: WASH, params: washParams }, typed(washWethTxLens, washParams), wethCtx(), deps);
+  check('at most one extra answer per fact, even when it also examined nothing', calls.pinned.length === 1 && r.secondOpinion?.used === false && r.minerId === '9002');
+
+  // The first answer came from the top-ranked miner: the next one down is asked.
+  const fromTop = { ...typed(washWethTxLens, washParams), minerId: '80002' };
+  const top = stubDeps(washRanking, washExaminedStub);
+  await withSecondOpinion({ key: 'wash', intent: WASH, params: washParams }, fromTop, wethCtx(), top.deps);
+  check('the next-best is the best-ranked miner other than the one that answered (80002 answered: 302)', top.calls.pinned.join(',') === '302');
+
+  // Miners whose answers scored 0 are no better opinion.
+  const zero = stubDeps({ ...washRanking, miners: washRanking.miners.map((m) => (m.minerId === '9002' ? m : { ...m, score: 0 })) }, washExaminedStub);
+  const z = await withSecondOpinion({ key: 'wash', intent: WASH, params: washParams }, typed(washWethTxLens, washParams), wethCtx(), zero.deps);
+  check('no miner with a score above 0 besides the one that answered: none asked, and the memo says so', zero.calls.pinned.length === 0 && z.secondOpinion?.miner === null && /scored above 0/.test(z.secondOpinion?.outcome ?? ''), z.secondOpinion?.outcome);
+
+  // Within the decision's budget only.
+  const broke = stubDeps(washRanking, washExaminedStub);
+  const b = await withSecondOpinion({ key: 'wash', intent: WASH, params: washParams }, typed(washWethTxLens, washParams), wethCtx(0.04, 0.04), broke.deps);
+  check('over budget: not asked, nothing spent, the memo says so', broke.calls.pinned.length === 0 && b.costUsd === washWethTxLens.costUsd && b.secondOpinion?.second === null && /budget/.test(b.secondOpinion?.outcome ?? ''), b.secondOpinion?.outcome);
+
+  // No ranking for the intent (LIQUIDITY_DEPTH_VERIFY_GENERAL in epochs 26-30), or the leaderboard unreachable.
+  const liquidityFailed = failed('liquidity', 'LIQUIDITY_DEPTH_VERIFY_GENERAL', 'miner step failed: timeout');
+  const none = stubDeps({ intent: 'LIQUIDITY_DEPTH_VERIFY_GENERAL', epoch: null, miners: [], error: 'the leaderboard ranks no miner for LIQUIDITY_DEPTH_VERIFY_GENERAL in epochs 30, 29, 28, 27, 26' }, washExaminedStub);
+  const n = await withSecondOpinion({ key: 'liquidity', intent: 'LIQUIDITY_DEPTH_VERIFY_GENERAL', params: { pool: USDC_WETH_POOL, chain: 'ethereum' } }, typed(liquidityFailed, {}), wethCtx(), none.deps);
+  check('no ranking for the intent: not asked, and the memo says why', none.calls.pinned.length === 0 && n.secondOpinion?.reasonRule === 'liquidity.unavailable' && /ranks no miner/.test(n.secondOpinion?.outcome ?? ''));
+  const down = stubDeps(new Error('fetch failed'), washExaminedStub);
+  const d = await withSecondOpinion({ key: 'wash', intent: WASH, params: washParams }, typed(washWethTxLens, washParams), wethCtx(), down.deps);
+  check('an unreachable leaderboard is no second opinion, not a crash', down.calls.pinned.length === 0 && /could not read the ranking: fetch failed/.test(d.secondOpinion?.outcome ?? ''));
+}
+
+{
+  // When to take none at all.
+  const refusedAsk: TypedAnswer = { intent: WASH, params: washParams, ok: false, fields: null, fieldStatus: {}, latencyMs: 300, error: 'http 400: {"error":"invalid_params"}', refused: true };
+  const refused = stubDeps(washRanking, washExaminedStub);
+  const r1 = await withSecondOpinion({ key: 'wash', intent: WASH, params: washParams }, refusedAsk, wethCtx(), refused.deps);
+  check('a refused request (4xx, no key) takes no second opinion: another miner would be refused the same way', r1.secondOpinion === undefined && refused.calls.ranking === 0);
+  const evidence = stubDeps(securityRanking, washExaminedStub);
+  const r2 = await withSecondOpinion({ key: 'security', intent: 'SECURITY_REVIEW_GENERAL', params: {} }, typed(wethGoPlusScan, {}), wethCtx(), evidence.deps);
+  check('an answer that is evidence takes no second opinion (and the ranking is not even read)', r2.secondOpinion === undefined && evidence.calls.ranking === 0);
+  const honeypot = bought('security', 'SECURITY_REVIEW_GENERAL', { verdict: null, vulnerability_count: null, issues: [], summary: 'honeypot: yes' }, { verdict: 'rejected' });
+  check('an answer that blocks in its own right is evidence, even with no verdict: it is never set aside', noEvidence(honeypot, wethCtx()) === null);
+  const blockedTimeout = stubDeps(washRanking, washExaminedStub);
+  const timedOut = failed('wash', WASH, 'miner step failed: timeout');
+  const r3 = await withSecondOpinion({ key: 'wash', intent: WASH, params: washParams }, typed(timedOut, washParams), wethCtx(), blockedTimeout.deps);
+  check('a check that did not answer (timeout) takes a second opinion, and uses it', blockedTimeout.calls.pinned.join(',') === '80002' && r3.ok && r3.secondOpinion?.used === true && r3.secondOpinion.reasonRule === 'wash.unavailable');
+  const cost = memoCost([{ ...r3, reused: false, boughtAt: '' }]);
+  check('...memo cost counts the failed ask and the paid one', cost.failedRequests === 1 && cost.paidRequests === 1 && cost.secondOpinions === 1);
+}
+
+{
+  // Security: the WOYbyG3x "Secure" from TxLens, then a pinned review that names the token.
+  const usdcCtx = { req: tradeUsdc, facts: usdcFacts, treasuryRead: null, spend: new Spend(0.1, 0.04) };
+  const named: TypedAnswer = {
+    intent: 'SECURITY_REVIEW_GENERAL', params: {}, ok: true, minerId: '302', minerName: 'ChainSight — Universal Intelligence & Data Oracle', costUsd: 0.01, latencyMs: 9_000, signalHash: `0x${'8'.repeat(64)}`,
+    fields: { verdict: 'Secure', vulnerability_count: 0, issues: [], summary: 'Secure. USDC is a FiatToken proxy run by Circle; no exploitable weakness is reported for it.' },
+    fieldStatus: { verdict: 'ok', vulnerability_count: 'ok', issues: 'ok', summary: 'ok' },
+  };
+  const { deps, calls } = stubDeps(securityRanking, named);
+  const r = await withSecondOpinion({ key: 'security', intent: 'SECURITY_REVIEW_GENERAL', params: {} }, typed(secureQueryOnly, {}), usdcCtx, deps);
+  check('security: a "Secure" that examined nothing gets a second opinion from the top other reviewer (302)', calls.pinned.join(',') === '302' && r.secondOpinion?.reasonRule === 'security.not_examined');
+  check('security: the pinned review names USDC, so it is used', r.secondOpinion?.used === true && r.fields?.summary === named.fields!.summary);
+  const generic = stubDeps(securityRanking, { ...named, fields: { ...named.fields!, summary: 'Secure. There are no injection vectors, authentication, or exposure concerns present. No further issues identified.' } });
+  const g = await withSecondOpinion({ key: 'security', intent: 'SECURITY_REVIEW_GENERAL', params: {} }, typed(secureQueryOnly, {}), usdcCtx, generic.deps);
+  check('security: a pinned "Secure" that names no token is not used either', g.secondOpinion?.used === false && /does not mention this token/.test(g.secondOpinion?.outcome ?? ''), g.secondOpinion?.outcome);
 }
 
 // ---------- unit: input ----------

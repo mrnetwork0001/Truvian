@@ -1307,8 +1307,12 @@ function failedAnswer(intent: string, params: Record<string, unknown>, startedAt
   return out;
 }
 
-/** A TypedAnswer from the engine route's reply: the node envelope and the payment receipt. */
-function typedAnswerFrom(intent: string, params: Record<string, unknown>, done: { body: unknown; latencyMs: number; receipt?: Record<string, unknown> }): TypedAnswer {
+/**
+ * A TypedAnswer from the engine route's reply ({result, receipt}): `body` is
+ * the node envelope in `result`, `receipt` the payment. Routed and pinned asks
+ * reply alike.
+ */
+export function typedAnswerFrom(intent: string, params: Record<string, unknown>, done: { body: unknown; latencyMs: number; receipt?: Record<string, unknown> }): TypedAnswer {
   const record = asRecord(done.body) ?? {};
   const fields = record.result_shape === 'intent' ? asRecord(record.result) : null;
   const status = asRecord(record.field_status) ?? {};
