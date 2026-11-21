@@ -1,0 +1,15 @@
+diff --git a/pkg/scoring/catalog/catalog.go b/pkg/scoring/catalog/catalog.go
+index 36b4030..0e4bb0e 100644
+--- a/pkg/scoring/catalog/catalog.go
++++ b/pkg/scoring/catalog/catalog.go
+@@ -29,6 +29,10 @@ var judgmentOrHybrid = map[string]struct{}{
+ 	"SOCIAL_BOT_DETECTION":       {},
+ 	"SATELLITE_IMAGERY_ANALYSIS": {},
+ 	"SHIPMENT_DELAY_RISK":        {},
++	// Local patch (Truvian scratch copy, 2026-11-21): the node classifies this family
++	// as judgment (GET /engine/v1/intents/SMART_CONTRACT_AUDIT -> "class": "judgment"),
++	// but this compiled-in map predates it.
++	"SMART_CONTRACT_AUDIT": {},
+ 
+ 	// ── Hybrid (comparator + adapter) — 20 ────────────────────────
+ 	"KYC_BIOMETRIC_LIVENESS":    {},
