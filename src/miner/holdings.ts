@@ -9,7 +9,8 @@
  * raw integer as a decimal string.
  */
 import {
-  BaseError, HttpRequestError, LimitExceededRpcError, TimeoutError, formatUnits, getAddress, hexToString, isAddress, parseAbi,
+  BaseError, CallExecutionError, ContractFunctionExecutionError, ContractFunctionRevertedError, ContractFunctionZeroDataError,
+  ExecutionRevertedError, formatUnits, getAddress, hexToString, isAddress, parseAbi, type PublicClient,
 } from 'viem';
 import { normalize } from 'viem/ens';
 import { SUPPORTED_CHAINS, chainMeta, getClient, type SupportedChain } from '../config/chains.js';
@@ -23,9 +24,10 @@ const ERC20 = parseAbi([
   'function totalSupply() view returns (uint256)',
   'function decimals() view returns (uint8)',
   'function symbol() view returns (string)',
+  'function name() view returns (string)',
 ]);
-/** symbol() as tokens older than the ERC-20 text form return it (MKR, SAI) */
-const ERC20_BYTES32_SYMBOL = parseAbi(['function symbol() view returns (bytes32)']);
+/** symbol() and name() as tokens older than the ERC-20 text form return them (MKR, SAI) */
+const ERC20_BYTES32 = parseAbi(['function symbol() view returns (bytes32)', 'function name() view returns (bytes32)']);
 
 /** A token resolved to its contract, or the chain's native coin (address null). */
 interface Asset {
@@ -41,41 +43,70 @@ interface Erc20 extends Asset {
   address: `0x${string}`;
 }
 
-/** True when no RPC endpoint answered, as opposed to a contract answering in a way that is not ERC-20. */
-function unanswered(err: unknown): boolean {
+/**
+ * The call reached the contract and its answer did not decode as the ABI
+ * says: what a bytes32 symbol() looks like when read as a string (MKR's
+ * fails as IntegerOutOfRangeError). A revert, an empty answer or a failed
+ * request is not this.
+ */
+function undecodable(err: unknown): boolean {
+  return err instanceof ContractFunctionExecutionError
+    && err.walk((e) => e instanceof CallExecutionError || e instanceof ContractFunctionZeroDataError
+      || e instanceof ContractFunctionRevertedError) === null;
+}
+
+/**
+ * Whether a failed read is the contract's own answer: it reverted, returned
+ * no data, or returned bytes that do not decode. Only such a failure says
+ * anything about the contract. Everything else (no endpoint answered, a rate
+ * limit, a JSON-RPC error such as an endpoint that lacks the block) is the
+ * chain not answering, and is reported as an upstream error.
+ */
+export function contractAnswered(err: unknown): boolean {
   return err instanceof BaseError
-    && err.walk((e) => e instanceof HttpRequestError || e instanceof TimeoutError || e instanceof LimitExceededRpcError) !== null;
+    && (err.walk((e) => e instanceof ExecutionRevertedError || e instanceof ContractFunctionZeroDataError) !== null || undecodable(err));
 }
 
 function rpcFailure(err: any): string {
   return err?.shortMessage ?? err?.message ?? 'rpc failure';
 }
 
-/** symbol() as text, or as bytes32 from tokens that predate the text form. */
-async function readSymbol(chain: SupportedChain, address: `0x${string}`, blockNumber: bigint): Promise<string> {
-  const client = getClient(chain);
+/**
+ * symbol() or name() as text, or as the bytes32 word that tokens older than
+ * the text form return (MKR, SAI). The bytes32 read is tried only when the
+ * text did not decode; a revert, an empty answer or a failed request would
+ * fail the same way again, and is passed on as it is.
+ */
+export async function readText(
+  client: PublicClient, address: `0x${string}`, functionName: 'symbol' | 'name', blockNumber: bigint,
+): Promise<string> {
   try {
-    return await client.readContract({ address, abi: ERC20, functionName: 'symbol', blockNumber });
+    return await client.readContract({ address, abi: ERC20, functionName, blockNumber });
   } catch (err) {
-    if (unanswered(err)) throw err;
-    const raw = await client.readContract({ address, abi: ERC20_BYTES32_SYMBOL, functionName: 'symbol', blockNumber });
-    return hexToString(raw, { size: 32 });
+    if (!undecodable(err)) throw err;
+    const word = await client.readContract({ address, abi: ERC20_BYTES32, functionName, blockNumber });
+    return hexToString(word, { size: 32 });
   }
 }
 
-/** ERC-20 metadata read from the contract itself, at the anchoring block. */
+/**
+ * ERC-20 metadata read from the contract itself, at the anchoring block. A
+ * contract that answered either read wrongly is no ERC-20, whatever happened
+ * to the other read; when no read was answered by the contract, the chain
+ * did not answer, which says nothing about the token.
+ */
 async function readErc20(chain: SupportedChain, address: `0x${string}`, blockNumber: bigint): Promise<{ decimals: number; symbol: string }> {
-  try {
-    const [decimals, symbol] = await Promise.all([
-      getClient(chain).readContract({ address, abi: ERC20, functionName: 'decimals', blockNumber }),
-      readSymbol(chain, address, blockNumber),
-    ]);
-    return { decimals: Number(decimals), symbol };
-  } catch (err) {
-    // A timeout is not evidence about the contract: say the chain did not answer.
-    if (unanswered(err)) throw new IntentError('UPSTREAM_RPC_ERROR', `${chain} did not answer for ${address}: ${rpcFailure(err)}`);
+  const client = getClient(chain);
+  const [decimals, symbol] = await Promise.allSettled([
+    client.readContract({ address, abi: ERC20, functionName: 'decimals', blockNumber }),
+    readText(client, address, 'symbol', blockNumber),
+  ]);
+  if (decimals.status === 'fulfilled' && symbol.status === 'fulfilled') return { decimals: Number(decimals.value), symbol: symbol.value };
+  const failed = [decimals, symbol].flatMap((read) => (read.status === 'rejected' ? [read.reason as unknown] : []));
+  if (failed.some(contractAnswered)) {
     throw new IntentError('INVALID_INPUT', `${address} on ${chain} does not answer decimals() and symbol() like an ERC-20 token`);
   }
+  throw new IntentError('UPSTREAM_RPC_ERROR', `${chain} did not answer for ${address}: ${rpcFailure(failed[0])}`);
 }
 
 /**
@@ -361,9 +392,9 @@ export async function handleSupply(input: SupplyInput) {
   // no figure unless the contract was confirmed as the token asked for
   if (described.status === 'rejected') throw described.reason;
   if (supply.status === 'rejected') {
-    throw unanswered(supply.reason)
-      ? new IntentError('UPSTREAM_RPC_ERROR', rpcFailure(supply.reason))
-      : new IntentError('INVALID_INPUT', `${located.value.address} on ${input.chain} does not answer totalSupply()`);
+    throw contractAnswered(supply.reason)
+      ? new IntentError('INVALID_INPUT', `${located.value.address} on ${input.chain} does not answer totalSupply()`)
+      : new IntentError('UPSTREAM_RPC_ERROR', rpcFailure(supply.reason));
   }
   const asset = described.value;
   const raw = supply.value;

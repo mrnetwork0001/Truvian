@@ -8,12 +8,14 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { SUPPORTED_CHAINS, chainMeta, getClient, getRpcClients, type SupportedChain } from '../config/chains.js';
 import { buildServer } from '../miner/server.js';
-import { handleBalance, handleSupply, parseTokenRef, validateBalanceInput, validateSupplyInput } from '../miner/holdings.js';
+import {
+  contractAnswered, handleBalance, handleSupply, parseTokenRef, readText, validateBalanceInput, validateSupplyInput,
+} from '../miner/holdings.js';
 import {
   LIST_BACKOFF_MS, LIST_TTL_MS, TokenListCache, TokenListUnavailable, fetchTokenList, listedTokens, nameKey, symbolKey,
 } from '../miner/tokenList.js';
 import { KNOWN_TOKENS, NATIVE_SYMBOLS } from '../config/tokens.js';
-import { formatUnits, parseAbi } from 'viem';
+import { createPublicClient, encodeAbiParameters, formatUnits, http, parseAbi, stringToHex, type PublicClient } from 'viem';
 import { chainFromText, handleTxLookup, normalizeChain, searchRpcs, validateTxLookupInput } from '../miner/txLookup.js';
 import { handleGasPrice, validateGasPriceInput } from '../miner/gasPrice.js';
 import { IntentError } from '../types/index.js';
@@ -66,6 +68,37 @@ async function standInListHost() {
     base: `http://127.0.0.1:${port}`,
     answers,
     asked: (path: string) => asked.get(path) ?? 0,
+    close: () => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }),
+  };
+}
+
+/** What a stand-in JSON-RPC endpoint answers for eth_call to one contract. */
+type RpcAnswer = { result: `0x${string}` } | { error: { code: number; message: string; data?: string } } | { http: number };
+
+/**
+ * A JSON-RPC endpoint on a local port. Each eth_call is answered as `answers`
+ * says for the contract called (a result, a JSON-RPC error, or an HTTP
+ * status), and calls are counted by contract.
+ */
+async function standInRpc(answers: Record<string, RpcAnswer>) {
+  const calls = new Map<string, number>();
+  const server = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (chunk) => { raw += chunk; });
+    req.on('end', () => {
+      const msg = JSON.parse(raw);
+      const to = String(msg.params?.[0]?.to ?? '').toLowerCase();
+      calls.set(to, (calls.get(to) ?? 0) + 1);
+      const answer = answers[to];
+      if (!answer || 'http' in answer) { res.writeHead(answer ? answer.http : 404).end('unavailable'); return; }
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: msg.id, ...answer }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    client: createPublicClient({ transport: http(`http://127.0.0.1:${port}`, { retryCount: 0 }) }) as unknown as PublicClient,
+    calls: (address: string) => calls.get(address.toLowerCase()) ?? 0,
     close: () => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }),
   };
 }
@@ -563,6 +596,35 @@ async function main() {
   const unaffected = await lists3.get('bsc').then((l) => l.tokens.length, (e) => e);
   check('a failure that is no refusal of this client holds back only its own list', unaffected === 1, String(unaffected));
   await host.close();
+
+  // symbol() is read again as bytes32 only when its answer did not decode as
+  // a string, and only the contract's own answer counts against the token.
+  const contract = (n: number) => `0x${n.toString(16).padStart(40, '0')}` as `0x${string}`;
+  const rpc = await standInRpc({
+    [contract(1)]: { result: encodeAbiParameters([{ type: 'string' }], ['USDC']) },
+    [contract(2)]: { result: stringToHex('MKR', { size: 32 }) },
+    [contract(3)]: { error: { code: -32000, message: 'header not found' } },
+    [contract(4)]: { http: 503 },
+    [contract(5)]: { error: { code: 3, message: 'execution reverted', data: '0x' } },
+    [contract(6)]: { result: '0x' },
+  });
+  const symbolOf = (n: number) => readText(rpc.client, contract(n), 'symbol', 1n).then((text) => ({ text, err: null }), (err) => ({ text: null, err }));
+  const [asText, asWord, rpcError, httpError, reverted, empty] = await Promise.all([1, 2, 3, 4, 5, 6].map(symbolOf));
+  check('a string symbol() is read in one call', asText!.text === 'USDC' && rpc.calls(contract(1)) === 1, String(asText!.text));
+  check('a bytes32 symbol() is read again as bytes32 after the string fails to decode', asWord!.text === 'MKR' && rpc.calls(contract(2)) === 2,
+    String(asWord!.text ?? asWord!.err?.shortMessage));
+  check('a JSON-RPC error is not retried as bytes32 and says nothing about the contract',
+    rpcError!.err !== null && !contractAnswered(rpcError!.err) && rpc.calls(contract(3)) === 1, rpcError!.err?.shortMessage);
+  check('an HTTP failure is not retried as bytes32 and says nothing about the contract',
+    httpError!.err !== null && !contractAnswered(httpError!.err) && rpc.calls(contract(4)) === 1, httpError!.err?.shortMessage);
+  check('a revert is not retried as bytes32 and is the contract\'s own answer',
+    reverted!.err !== null && contractAnswered(reverted!.err) && rpc.calls(contract(5)) === 1, reverted!.err?.shortMessage);
+  check('an empty answer is not retried as bytes32 and is the contract\'s own answer',
+    empty!.err !== null && contractAnswered(empty!.err) && rpc.calls(contract(6)) === 1, empty!.err?.shortMessage);
+  await rpc.close();
+  const mkrSymbol = await readText(getClient('ethereum'), '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2', 'symbol', await eth.getBlockNumber())
+    .catch((e) => `failed: ${e?.shortMessage ?? e}`);
+  check('MKR\'s bytes32 symbol() reads as MKR on Ethereum', mkrSymbol === 'MKR', mkrSymbol);
 
   // every known token address still answers with the symbol and decimals in the table
   let tokenMismatches: string[] = [];
