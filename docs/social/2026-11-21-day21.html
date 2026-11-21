@@ -1,0 +1,53 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  :root { --bg:#0a0a0a; --panel:#131313; --line:#262626; --text:#ededed; --dim:#8f8f8f; --gold:#d4a53a; --gold-soft:#f0cf7a; --ok:#6fcf97; --bad:#e07a7a; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { width:1600px; height:900px; background:var(--bg); color:var(--text); font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif; overflow:hidden; }
+  .mono { font-family:"SF Mono",Menlo,Monaco,monospace; }
+  .page { position:relative; width:1600px; height:900px; padding:52px 76px 0; background:
+     radial-gradient(900px 520px at 88% -8%, rgba(212,165,58,.16), transparent 62%),
+     radial-gradient(700px 480px at -6% 108%, rgba(212,165,58,.08), transparent 60%), var(--bg); }
+  .grid { position:absolute; inset:0; background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px); background-size:80px 80px; opacity:.22; mask-image:linear-gradient(180deg,rgba(0,0,0,.9),transparent 78%); }
+  .top { position:relative; display:flex; align-items:center; justify-content:space-between; }
+  .logo { height:84px; width:auto; display:block; margin-left:-6px; }
+  .tag { font-size:17px; letter-spacing:.2em; color:var(--gold); border:1px solid rgba(212,165,58,.45); padding:10px 18px; border-radius:999px; text-transform:uppercase; }
+  .cols { position:relative; display:grid; grid-template-columns:1fr 1fr; gap:56px; margin-top:58px; }
+  h1 { font-size:58px; line-height:1.06; font-weight:700; letter-spacing:-.022em; }
+  h1 span { color:var(--gold); }
+  .lede { margin-top:24px; font-size:23px; line-height:1.45; color:#bdbdbd; max-width:660px; }
+  .lede b { color:var(--text); font-weight:600; }
+  .quote { margin-top:30px; padding:22px 26px; border-left:3px solid var(--bad); background:rgba(224,122,122,.06); border-radius:6px; font-size:21px; line-height:1.45; color:#d9d9d9; }
+  .quote .q { color:var(--bad); font-weight:600; }
+  .quote .r { display:block; margin-top:10px; color:var(--ok); font-weight:600; }
+  .cards { display:flex; flex-direction:column; gap:18px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px 24px; }
+  .card .k { font-size:14px; letter-spacing:.16em; text-transform:uppercase; color:var(--gold); }
+  .card .v { margin-top:8px; font-size:22px; line-height:1.4; }
+  .card .v b { color:var(--gold-soft); }
+  .foot { position:absolute; left:76px; right:76px; bottom:36px; display:flex; justify-content:space-between; align-items:flex-end; font-size:18px; color:var(--dim); }
+  .foot .url { font-size:26px; color:var(--text); font-weight:600; }
+  .foot .url span { color:var(--gold); }
+</style></head>
+<body><div class="page"><div class="grid"></div>
+  <div class="top">
+    <img class="logo" src="../../src/shield/public/brand/truvian-header.png" alt="Truvian">
+    <div class="tag">Telegraph Season II · Day 21</div>
+  </div>
+  <div class="cols">
+    <div>
+      <h1>No token is cleared on <span>an answer nobody checked.</span></h1>
+      <p class="lede">Truvian Shield buys every fact through Telegraph, checks it against the chain, and signs the decision: <b>HOLD, REVIEW or REJECT</b>.</p>
+      <div class="quote"><span class="q">"Secure."</span> A ranked reviewer's verdict on a known rug pull, from a reviewer that admitted it never saw the code.<span class="r">Shield: no evidence. Not cleared.</span></div>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="k">Paid, with receipts</div><div class="v">Every fact bought through Telegraph's routed ask: <b>exactly $0.01</b> per answer, with the payment receipt in the signed memo.</div></div>
+      <div class="card"><div class="k">Miner</div><div class="v">Now answers the node's real total-supply questions, like <b>"Kelp DAO Restaked ETH (rsETH) on Ethereum"</b>.</div></div>
+      <div class="card"><div class="k">Reported</div><div class="v">Several deterministic intents are graded by a style model, not checked against the truth. <b>bounties #227</b></div></div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="url">truvian.xyz<span>/preflight</span></div>
+    <div>Built for the Telegraph Season II hackathon, where we're competing for a prize.</div>
+  </div>
+</div></body></html>
