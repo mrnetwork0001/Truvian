@@ -183,6 +183,8 @@ interface Located {
   names: readonly string[];
   /** Where it was found, for a refusal: "CoinGecko's Ethereum token list", "the verified token table" */
   where: string;
+  /** A symbol the question wrote beside a given address; the contract's symbol() must agree with it */
+  besideSymbol?: string | null;
   /** How the contract was found, for the answer's source; null for the verified table or a given address */
   foundIn: string | null;
   /** Said in the answer after the figure; null for none */
@@ -217,6 +219,7 @@ async function locateToken(chain: SupportedChain, ref: TokenRef): Promise<Locate
   if (ref.address) {
     return {
       address: ref.address, expectedSymbol: null, givenName: null, names: [], where: 'the question', foundIn: null, note: null,
+      besideSymbol: ref.symbol,
       ifNoCode: ref.symbol === null ? null : { symbol: ref.symbol, known: inVerifiedTable(chain, ref.symbol, ref.name) },
     };
   }
@@ -301,6 +304,9 @@ async function confirmToken(
     throw erc20.reason;
   }
   const { decimals, symbol } = erc20.value;
+  if (located.besideSymbol && !sameSymbol(located.besideSymbol, symbol)) {
+    throw new IntentError('INVALID_INPUT', `${address} on ${chain} reports symbol() "${symbol}" at block ${blockNumber}, not ${located.besideSymbol} as the question says; give the contract address of ${located.besideSymbol} on ${chain}`);
+  }
   if (expectedSymbol !== null && !sameSymbol(expectedSymbol, symbol)) {
     throw new IntentError('INVALID_INPUT', `${address}, ${located.foundIn ?? `in ${located.where}`} for ${expectedSymbol} on ${chain}, reports symbol() "${symbol}" at block ${blockNumber}, so it is not taken to be ${expectedSymbol}`);
   }
@@ -484,7 +490,9 @@ export function validateSupplyInput(raw: unknown): SupplyInput {
   if (chainRaw !== undefined && String(chainRaw).trim() !== '') {
     chain = requireChain(chainRaw);
   } else if (onChain) {
-    const named = chainFromText(onChain[2]!);
+    // "Base Mainnet", "BNB Smart Chain network": drop the generic words so they cannot outvote the chain's name
+    const chainWords = onChain[2]!.replace(/\bop[\s-]+mainnet\b/i, 'optimism').replace(/\b(main[\s-]?net|network|chain)\b/gi, ' ').trim();
+    const named = chainFromText(chainWords || onChain[2]!);
     if (!named) {
       throw new IntentError('CHAIN_UNSUPPORTED', `the token is named on ${onChain[2]}, which is not a chain this miner serves (${SUPPORTED_CHAINS.join(', ')})`);
     }
