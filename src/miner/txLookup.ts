@@ -185,14 +185,16 @@ function isNotFound(err: any): boolean {
 
 /** What a chain's endpoints, asked in order, had to say about one record. */
 export type RpcSearch<T> =
-  | { found: T }
+  /** `answeredBy`: the endpoint whose answer is the record. */
+  | { found: T; answeredBy: string[] }
   /**
    * `provenAbsent`: a full-history endpoint answered that the record does not
-   * exist and no endpoint contradicted it. False means no endpoint able to
-   * prove absence answered (they errored, or only pruned endpoints replied),
-   * and `error` is the last failure.
+   * exist and no endpoint contradicted it; `answeredBy` lists the endpoints
+   * whose "not found" answers prove it. False means no endpoint able to
+   * prove absence answered (they errored, or only pruned endpoints replied):
+   * `answeredBy` is empty and `error` is the last failure.
    */
-  | { found: null; provenAbsent: boolean; error: unknown };
+  | { found: null; provenAbsent: boolean; error: unknown; answeredBy: string[] };
 
 /**
  * Ask each endpoint in turn for a record and return the first one found.
@@ -210,35 +212,38 @@ export type RpcSearch<T> =
  * - an error is remembered and moves on
  */
 export async function searchRpcs<T>(
-  endpoints: Pick<RpcClient, 'fullHistory' | 'client'>[],
+  endpoints: Pick<RpcClient, 'url' | 'fullHistory' | 'client'>[],
   read: (client: RpcClient['client']) => Promise<T>,
 ): Promise<RpcSearch<T>> {
   let error: unknown = null;
-  let notFoundAnswers = 0;
+  const saidAbsent: string[] = [];
   let fullHistorySaidAbsent = false;
-  for (const { client, fullHistory } of endpoints) {
+  for (const { url, client, fullHistory } of endpoints) {
     try {
-      return { found: await read(client) };
+      return { found: await read(client), answeredBy: [url] };
     } catch (err) {
       if (!isNotFound(err)) { error = err; continue; }
-      notFoundAnswers++;
+      saidAbsent.push(url);
       if (fullHistory) fullHistorySaidAbsent = true;
-      if (fullHistorySaidAbsent && notFoundAnswers >= 2) return { found: null, provenAbsent: true, error: null };
+      if (fullHistorySaidAbsent && saidAbsent.length >= 2) {
+        return { found: null, provenAbsent: true, error: null, answeredBy: saidAbsent };
+      }
     }
   }
-  if (fullHistorySaidAbsent) return { found: null, provenAbsent: true, error: null };
-  return { found: null, provenAbsent: false, error };
+  if (fullHistorySaidAbsent) return { found: null, provenAbsent: true, error: null, answeredBy: saidAbsent };
+  return { found: null, provenAbsent: false, error, answeredBy: [] };
 }
 
 /**
- * The chain tip, from the first endpoint that answers; null when none does.
- * It is only used for the informational `confirmations` count, so an
- * unreadable tip is reported as an unknown count, not as a failed lookup.
+ * The chain tip and the endpoint that gave it, from the first endpoint that
+ * answers; null when none does. It is only used for the informational
+ * `confirmations` count, so an unreadable tip is reported as an unknown
+ * count, not as a failed lookup.
  */
-async function latestBlockNumber(endpoints: Pick<RpcClient, 'client'>[]): Promise<bigint | null> {
-  for (const { client } of endpoints) {
+async function chainTip(endpoints: Pick<RpcClient, 'url' | 'client'>[]): Promise<{ number: bigint; url: string } | null> {
+  for (const { url, client } of endpoints) {
     try {
-      return await client.getBlockNumber();
+      return { number: await client.getBlockNumber(), url };
     } catch {
       // this endpoint could not answer; the next one is asked
     }
@@ -287,14 +292,15 @@ async function lookupOnChain(chain: SupportedChain, txHash: `0x${string}`): Prom
 
   // The transaction and its receipt are separate records and are searched
   // separately: an endpoint can hold one and have pruned the other.
-  const [txSearch, receiptSearch, latestBlock] = await Promise.all([
+  const [txSearch, receiptSearch, tip] = await Promise.all([
     searchRpcs(endpoints, (c) => c.getTransaction({ hash: txHash })),
     searchRpcs(endpoints, (c) => c.getTransactionReceipt({ hash: txHash })),
     // Through the same short-timeout endpoints as the searches. The shared
     // fallback client used to be asked here, and one throttled endpoint
     // behind it stalled whole lookups for up to a minute.
-    latestBlockNumber(endpoints),
+    chainTip(endpoints),
   ]);
+  const latestBlock = tip?.number ?? null;
 
   if (!txSearch.found) {
     if (receiptSearch.found) {

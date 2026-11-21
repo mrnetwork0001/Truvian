@@ -285,25 +285,29 @@ async function main() {
   // searchRpcs rules, with stand-in endpoints (a pruned node answers "not found" for records it dropped)
   const notFound = () => Promise.reject(Object.assign(new Error('nf'), { name: 'TransactionNotFoundError' }));
   const broken = () => Promise.reject(new Error('rate limited'));
-  const ep = (fullHistory: boolean, read: () => Promise<string>) => ({ fullHistory, client: { read } as any });
+  const ep = (url: string, fullHistory: boolean, read: () => Promise<string>) => ({ url, fullHistory, client: { read } as any });
   const ask = (c: any) => c.read() as Promise<string>;
-  const prunedThenFull = await searchRpcs([ep(false, notFound), ep(true, async () => 'record')], ask);
-  check('a pruned endpoint\'s "not found" falls through to the next endpoint', prunedThenFull.found === 'record');
-  const laggingFull = await searchRpcs([ep(true, notFound), ep(false, async () => 'record')], ask);
+  const same = (a: string[], b: string[]) => JSON.stringify(a) === JSON.stringify(b);
+  const prunedThenFull = await searchRpcs([ep('a', false, notFound), ep('b', true, async () => 'record')], ask);
+  check('a pruned endpoint\'s "not found" falls through to the next endpoint, which is named as the source',
+    prunedThenFull.found === 'record' && same(prunedThenFull.answeredBy, ['b']));
+  const laggingFull = await searchRpcs([ep('a', true, notFound), ep('b', false, async () => 'record')], ask);
   check('a record found by a later endpoint overrides a full-history "not found" (a lagging node)', laggingFull.found === 'record');
-  const twoAgree = await searchRpcs([ep(true, notFound), ep(false, notFound), ep(true, async () => 'never asked')], ask);
-  check('two "not found" answers, one from full history, prove absence', twoAgree.found === null && twoAgree.provenAbsent);
-  const prunedFirstThenFull = await searchRpcs([ep(false, notFound), ep(true, notFound)], ask);
+  const twoAgree = await searchRpcs([ep('a', true, notFound), ep('b', false, notFound), ep('c', true, async () => 'never asked')], ask);
+  check('two "not found" answers, one from full history, prove absence, and both are named',
+    twoAgree.found === null && twoAgree.provenAbsent && same(twoAgree.answeredBy, ['a', 'b']));
+  const prunedFirstThenFull = await searchRpcs([ep('a', false, notFound), ep('b', true, notFound)], ask);
   check('the order of the two agreeing answers does not matter', prunedFirstThenFull.found === null && prunedFirstThenFull.provenAbsent);
-  const fullAloneOthersDown = await searchRpcs([ep(true, notFound), ep(true, broken)], ask);
+  const fullAloneOthersDown = await searchRpcs([ep('a', true, notFound), ep('b', true, broken)], ask);
   check('a single full-history "not found" stands when no other endpoint answers',
-    fullAloneOthersDown.found === null && fullAloneOthersDown.provenAbsent);
-  const onlyPrunedAnswered = await searchRpcs([ep(true, broken), ep(false, notFound)], ask);
+    fullAloneOthersDown.found === null && fullAloneOthersDown.provenAbsent && same(fullAloneOthersDown.answeredBy, ['a']));
+  const onlyPrunedAnswered = await searchRpcs([ep('a', true, broken), ep('b', false, notFound)], ask);
   check(
-    'absence is not claimed when only a pruned endpoint answered',
-    onlyPrunedAnswered.found === null && !onlyPrunedAnswered.provenAbsent && onlyPrunedAnswered.error instanceof Error,
+    'absence is not claimed when only a pruned endpoint answered, and no endpoint is named for it',
+    onlyPrunedAnswered.found === null && !onlyPrunedAnswered.provenAbsent && onlyPrunedAnswered.error instanceof Error
+      && onlyPrunedAnswered.answeredBy.length === 0,
   );
-  const errorThenFound = await searchRpcs([ep(true, broken), ep(true, async () => 'record')], ask);
+  const errorThenFound = await searchRpcs([ep('a', true, broken), ep('b', true, async () => 'record')], ask);
   check('an endpoint error falls through to the next endpoint', errorThenFound.found === 'record');
 
   // The transaction that exposed the bug: confirmed in Ethereum block 26398402,
