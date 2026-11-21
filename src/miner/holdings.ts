@@ -16,8 +16,8 @@ import { normalize } from 'viem/ens';
 import { SUPPORTED_CHAINS, chainMeta, getClient, type SupportedChain } from '../config/chains.js';
 import { KNOWN_TOKENS, KNOWN_TOKEN_NAMES } from '../config/tokens.js';
 import { IntentError } from '../types/index.js';
-import { findListedToken, symbolKey } from './tokenList.js';
-import { namesAgree } from './tokenNames.js';
+import { findListedToken, symbolKey, type NameReader } from './tokenList.js';
+import { nameAgreement, namesAgree } from './tokenNames.js';
 import { chainFromText, requireChain } from './txLookup.js';
 
 const ERC20 = parseAbi([
@@ -179,8 +179,15 @@ interface Located {
   expectedSymbol: string | null;
   /** The name the question gave beside the symbol, which must agree with the token's names; null for none */
   givenName: string | null;
-  /** What the token is called where it was found: its list entry's name, or the verified table's names */
+  /** What the token is called where it was found: its list entry's name (and its name(), when that chose it), or the verified table's names */
   names: readonly string[];
+  /**
+   * True for the verified table: the name given must be exactly one of its
+   * names, its symbol, or the contract's own name(), not merely agree. The
+   * table holds one contract per symbol, and bridged twins carry its names
+   * with words added ("USD Coin (Wormhole)", "Bridged USDC").
+   */
+  exactName: boolean;
   /** Where it was found, for a refusal: "CoinGecko's Ethereum token list", "the verified token table" */
   where: string;
   /** A symbol the question wrote beside a given address; the contract's symbol() must agree with it */
@@ -203,8 +210,26 @@ function inVerifiedTable(chain: SupportedChain, symbol: string, name: string | n
   const known = KNOWN_TOKENS[chain]?.[key];
   if (!known) return null;
   return {
-    address: known.address, expectedSymbol: symbol, givenName: name, names: KNOWN_TOKEN_NAMES[key] ?? [],
+    address: known.address, expectedSymbol: symbol, givenName: name, names: KNOWN_TOKEN_NAMES[key] ?? [], exactName: true,
     where: 'the verified token table', foundIn: null, note: null, ifNoCode: null,
+  };
+}
+
+/**
+ * name() of each contract at the anchoring block, for choosing between
+ * listed tokens that share a symbol (findListedToken): null when the
+ * contract answers no name(); an upstream error when the chain does not
+ * answer, since the choice must not depend on which endpoint replied.
+ */
+function nameReader(chain: SupportedChain, atBlock: () => Promise<bigint>): NameReader {
+  return async (address) => {
+    const blockNumber = await atBlock();
+    try {
+      return await readText(getClient(chain), address, 'name', blockNumber);
+    } catch (err) {
+      if (contractAnswered(err)) return null;
+      throw new IntentError('UPSTREAM_RPC_ERROR', `${chain} did not answer name() for ${address}: ${rpcFailure(err)}`);
+    }
   };
 }
 
@@ -213,12 +238,14 @@ function inVerifiedTable(chain: SupportedChain, symbol: string, name: string | n
  * verified table (src/config/tokens.ts); else, for a symbol given in
  * parentheses only, CoinGecko's list for the chain. A word given alone is
  * never looked up in the list, and words with no symbol are not looked up at
- * all: each would be a guess at what the question meant.
+ * all: each would be a guess at what the question meant. `atBlock` gives
+ * the anchoring block, at which listed tokens sharing the symbol have their
+ * name() read.
  */
-async function locateToken(chain: SupportedChain, ref: TokenRef): Promise<Located> {
+async function locateToken(chain: SupportedChain, ref: TokenRef, atBlock: () => Promise<bigint>): Promise<Located> {
   if (ref.address) {
     return {
-      address: ref.address, expectedSymbol: null, givenName: null, names: [], where: 'the question', foundIn: null, note: null,
+      address: ref.address, expectedSymbol: null, givenName: null, names: [], exactName: false, where: 'the question', foundIn: null, note: null,
       besideSymbol: ref.symbol,
       ifNoCode: ref.symbol === null ? null : { symbol: ref.symbol, known: inVerifiedTable(chain, ref.symbol, ref.name) },
     };
@@ -237,10 +264,12 @@ async function locateToken(chain: SupportedChain, ref: TokenRef): Promise<Locate
       + `${table.length > 0 ? ` (${table.join(', ')})` : ''}, and a word given alone may be a name as well as a symbol, so public token lists are not searched for it;`
       + ' give the symbol in parentheses, as in "Bancor (BNT)", or the contract address');
   }
-  const match = await findListedToken(chain, ref.symbol, ref.name);
+  const match = await findListedToken(chain, ref.symbol, ref.name, undefined, nameReader(chain, atBlock));
+  const chosen = match.chosenByName === null ? '' : `, chosen among the tokens with that symbol by its name() "${match.chosenByName}"`;
   return {
-    address: match.token.address, expectedSymbol: ref.symbol, givenName: ref.name, names: [match.token.name],
-    where: match.list, foundIn: `found in ${match.list} as "${match.token.name}"`, note: null, ifNoCode: null,
+    address: match.token.address, expectedSymbol: ref.symbol, givenName: ref.name,
+    names: match.chosenByName === null ? [match.token.name] : [match.token.name, match.chosenByName], exactName: false,
+    where: match.list, foundIn: `found in ${match.list} as "${match.token.name}"${chosen}`, note: null, ifNoCode: null,
   };
 }
 
@@ -277,17 +306,21 @@ function withoutCode(chain: SupportedChain, located: Located, blockNumber: bigin
  * the symbol must agree with the token (src/miner/tokenNames.ts). The name
  * is compared with the names the token was found under and its symbol, and
  * when those disagree, with the contract's own name() at the block: CoinGecko
- * calls POL "POL (ex-MATIC)", its contract "Polygon Ecosystem Token". With
- * `withSupply`, totalSupply() is read beside the rest, from the contract
- * confirmed.
+ * calls POL "POL (ex-MATIC)", its contract "Polygon Ecosystem Token". A
+ * token from the verified table is held to the name exactly (Located's
+ * exactName): "USD Coin (Wormhole) (USDC) on Ethereum" names Wormhole's
+ * bridged USDC, and was answered with Circle's supply because "USD Coin" is
+ * a run of words within it. With `withSupply`, totalSupply() is read beside
+ * the rest, from the contract confirmed.
  */
 async function confirmToken(
   chain: SupportedChain, located: Located, blockNumber: bigint, withSupply = false,
 ): Promise<{ token: Erc20; supply: bigint | null }> {
   const { address, expectedSymbol, givenName } = located;
   const client = getClient(chain);
+  const accepts = (given: string, names: readonly string[]) => (located.exactName ? nameAgreement(given, names) === 3 : namesAgree(given, names));
   const nameUnsettled = givenName !== null
-    && !namesAgree(givenName, expectedSymbol === null ? located.names : [...located.names, expectedSymbol]);
+    && !accepts(givenName, expectedSymbol === null ? located.names : [...located.names, expectedSymbol]);
   const [erc20, ownName, supply] = await Promise.allSettled([
     readErc20(chain, address, blockNumber),
     nameUnsettled ? readText(client, address, 'name', blockNumber) : Promise.resolve(null),
@@ -315,9 +348,13 @@ async function confirmToken(
       throw new IntentError('UPSTREAM_RPC_ERROR', `${chain} did not answer name() for ${address}: ${rpcFailure(ownName.reason)}`);
     }
     const contractName = ownName.status === 'fulfilled' ? ownName.value : null;
-    if (contractName === null || !namesAgree(givenName!, [contractName])) {
-      throw new IntentError('INVALID_INPUT', `the name "${givenName}" does not agree with the token found for ${expectedSymbol}: ${address} is ${quoted(located.names)} in ${located.where}`
-        + ` and ${contractName === null ? 'answers no name()' : `"${contractName}" by its name()`} at block ${blockNumber}; give the name and symbol of one token, or its contract address`);
+    if (contractName === null || !accepts(givenName!, [contractName])) {
+      const is = `${address} is ${quoted(located.names)} in ${located.where}`
+        + ` and ${contractName === null ? 'answers no name()' : `"${contractName}" by its name()`} at block ${blockNumber}`;
+      throw new IntentError('INVALID_INPUT', located.exactName
+        ? `the name "${givenName}" does not agree exactly with ${expectedSymbol} in the verified token table: ${is}. A name with other words`
+          + ` may be another token with the same symbol, such as a bridged or wrapped twin; give the token's exact name, or its contract address`
+        : `the name "${givenName}" does not agree with the token found for ${expectedSymbol}: ${is}; give the name and symbol of one token, or its contract address`);
     }
   }
   // no figure unless the contract was confirmed as the token asked for
@@ -356,7 +393,7 @@ async function resolveAsset(chain: SupportedChain, raw: string, blockNumber: big
   const ref = parseTokenRef(raw);
   const native = !ref.address && (ref.symbol === null ? ref.name === null : isNativeOf(chain, ref.symbol));
   if (native) return { address: null, decimals: 18, symbol: meta.nativeSymbol, foundIn: null, note: null };
-  return (await confirmToken(chain, await locateToken(chain, ref), blockNumber)).token;
+  return (await confirmToken(chain, await locateToken(chain, ref, async () => blockNumber), blockNumber)).token;
 }
 
 /** Address or ENS name to an address. ENS resolves on Ethereum mainnet. */
@@ -511,8 +548,12 @@ export async function handleSupply(input: SupplyInput) {
   }
   // The block and the contract are found at once, then the contract is read
   // at that block. A token that cannot be located is reported ahead of an
-  // RPC failure, so the same request always fails the same way.
-  const [anchored, located] = await Promise.allSettled([anchor(input.chain), locateToken(input.chain, ref)]);
+  // RPC failure, so the same request always fails the same way. Choosing
+  // between listed tokens that share a symbol waits for the block, since
+  // their name() is read there.
+  const anchoring = anchor(input.chain);
+  const atBlock = () => anchoring.then((b) => b.number);
+  const [anchored, located] = await Promise.allSettled([anchoring, locateToken(input.chain, ref, atBlock)]);
   if (located.status === 'rejected') throw located.reason;
   if (anchored.status === 'rejected') throw anchored.reason;
   const block = anchored.value;
