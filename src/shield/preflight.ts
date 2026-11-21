@@ -379,7 +379,9 @@ function securityFindings(p: Purchase | undefined, token: TokenFacts): Finding[]
   if (!p || !p.ok || !p.fields) return [unavailable(p, 'security', 'Security review')];
   const examined = notExamined(p.fields.summary, p.fields.issues);
   if (examined) {
-    return [{
+    // A blocking fact stated in the same answer (a honeypot, a 100% tax) still blocks.
+    const blocking = securityFindingsFrom(p, p.fields, token).filter((x) => x.severity === 'block');
+    return [...blocking, {
       rule: 'security.not_examined', severity: 'review', title: 'Security review did not examine the contract',
       detail: `The answer says "${examined}"${str(p.fields.verdict) ? ` yet gives the verdict "${str(p.fields.verdict)}"` : ''}, so it is no evidence about this contract either way.`,
       source: 'telegraph', evidence: ['security'],
@@ -766,7 +768,17 @@ export async function withSecondOpinion(plan: Omit<Planned, 'question'>, firstAs
   ctx.spend.settle(m.priceUsd, pinned);
   so.second = second;
   const secondLacking = noEvidence({ ...resolved(second), reused: false, boughtAt: '' }, ctx);
-  so.used = secondLacking === null;
+  // A second opinion may make a decision stricter, never clear a token by itself:
+  // when the ranked miner did answer (but gave no evidence), a clean pinned answer
+  // is recorded and not used. It is used when the first ask got no answer at all,
+  // or when it holds the token back in its own right.
+  const secondHolds = factFindings({ ...resolved(second), reused: false, boughtAt: '' }, ctx).some((f) => f.severity === 'review' || f.severity === 'block');
+  const firstAnswered = firstAsk.ok;
+  so.used = secondLacking === null && (!firstAnswered || secondHolds);
+  if (secondLacking === null && !so.used) {
+    so.outcome = 'not used: a second opinion may hold a token back but never clear one whose ranked answer examined nothing';
+    return done();
+  }
   if (so.used) {
     const gives = factFindings({ ...resolved(second), reused: false, boughtAt: '' }, ctx).filter((f) => f.severity !== 'info').map((f) => f.title);
     so.outcome = `used: it is evidence (${gives.join('; ')})`;
