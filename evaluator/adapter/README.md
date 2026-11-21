@@ -6,6 +6,10 @@ Its evaluation pool then held 378 eligible rows from 4 contributors, above
 the node's minimum of 3, so with no incumbent an adapter needs to rank at
 least 70% of 30 hidden pairs correctly to take the seat.
 
+**Status, 2026-11-21: trained, packaged and checked on the node's engine; not
+registered.** The package is [`package/SMART_CONTRACT_AUDIT.safetensors`](package/)
+(keccak256 `0xca1e61ec…afdf7`).
+
 An adapter is a small LoRA delta and reward head on Telegraph's shared
 Foundation Model (ModernBERT-base). The node renders each pair as
 `### Task:\n{question}\n\n### Answer:\n{answer}` and the adapter must score the
@@ -49,8 +53,8 @@ python3 generate_pairs.py --out pairs.jsonl --n 2400 --seed 7
 
 ## Training and packaging (on the scorer server)
 
-The kit is `telegraphprotocol/telegraph-wasm-baseline` (commit 1ed063e). Two
-workarounds were needed on 2026-11-20:
+The kit is `telegraphprotocol/telegraph-wasm-baseline` (commit 1ed063e). Three
+workarounds were needed on 2026-11-20 and 21:
 
 - Hugging Face's `answerdotai/ModernBERT-base` tokenizer.json (revision
   `8949b909…`, unchanged since January 2025) is not byte-identical to the one
@@ -63,6 +67,15 @@ workarounds were needed on 2026-11-20:
 - `train_adapter` exits 1 with `NameError: name 'pkg' is not defined` while
   printing its next steps, after the run is saved. It is harmless (also in
   bounties#223).
+- `adapterbuild lora` takes the intent's class from a catalog compiled into
+  the kit, which predates `SMART_CONTRACT_AUDIT`, so the unmodified kit
+  refuses the package: `SMART_CONTRACT_AUDIT is not a judgment or hybrid
+  intent in the compiled-in catalog — refusing to guess a class`. The node
+  itself classes the family as judgment (`GET /engine/v1/intents/SMART_CONTRACT_AUDIT`).
+  `adapterbuild` was run from a scratch copy of the kit with the entry in
+  [`kit-catalog.patch`](kit-catalog.patch) added. The executor does not read
+  that catalog, so the executor that serves the adapter is the unmodified kit
+  build.
 
 ```bash
 python -m float_runtime.train_adapter --intent SMART_CONTRACT_AUDIT --data pairs.jsonl \
@@ -70,17 +83,123 @@ python -m float_runtime.train_adapter --intent SMART_CONTRACT_AUDIT --data pairs
 cp foundation/tokenizer.json runs/v1/adapter/tokenizer.json
 python -m float_runtime.export_adapter --adapter runs/v1/adapter --intent SMART_CONTRACT_AUDIT \
   --class judgment --foundation foundation/foundation.json --out SMART_CONTRACT_AUDIT.safetensors
+# in a copy of the kit with kit-catalog.patch applied (git apply kit-catalog.patch)
 go run ./cmd/adapterbuild lora --intent SMART_CONTRACT_AUDIT --package SMART_CONTRACT_AUDIT.safetensors \
-  --out . --foundation foundation/foundation.json
+  --out . --foundation foundation/foundation.json \
+  --foundation-onnx foundation/foundation_lora_fp32.onnx --engine float_runtime/engine/foundation_engine.wasm \
+  --engine-hash 77643d6e1176ab8744801cef93ccb844d0136ed32b8daa865d541f37d13292de
 ```
 
-On the server's 6 CPU cores a pair takes about 4.6 seconds per epoch at these
-lengths, so the full run is several hours; a GPU does it in minutes.
+Exporting again does not give these bytes back; see [Never re-export](#never-re-export).
+
+## Results
+
+### Training (run v1)
+
+2,400 pairs (seed 7): the kit held out 360 for validation and trained on
+2,040, at rank 8, alpha 32, 512 tokens, learning rate 1e-4, batch 1 with 16
+steps of gradient accumulation. 3 epochs, 381 optimizer steps, 9 h 09 min on
+the server's 6 CPU cores in fp32 (no GPU), 2026-11-20 18:51 to 2026-11-21
+04:00 UTC.
+
+| Epoch | Held-out accuracy (360 pairs) | Held-out loss |
+|---|---|---|
+| 1 | 0.7778 | 0.5678 |
+| 2 | 0.8806 | 0.2563 |
+| 3 | 0.9111 | 0.2260 |
+
+The kit's evaluation gate passed: 0.9111 against a "pick the longer answer"
+baseline of 0.5194 on the same pairs (it needs at least 0.65 and 10 points
+over the baseline). Verdict `PASS`.
+
+### A fresh sample (seed 11)
+
+200 new pairs from the same generator with seed 11, none of whose prompts is
+in the training file, scored in PyTorch with the trained adapter:
+**183 of 200 (91.5%)**, against 52.75% for "pick the longer answer".
+
+| Task | Ordered correctly |
+|---|---|
+| access_quote | 40 / 50 (80%) |
+| swc_identify | 59 / 63 |
+| scoped_count | 38 / 40 |
+| fix | 30 / 31 |
+| dasp | 16 / 16 |
+
+`access_quote` is the weakest: 10 of the 17 misses. This sample measures the
+adapter on our own generator's kind of question, not on the pool's.
+
+### On the node's engine
+
+A batch shaped like a validator's remote check (15 pairs, 30 texts: the
+first three pairs of each task in the seed-11 sample, rendered and tokenised
+the way the node does) was sent in one request, with the score identity, to
+the kit's reference executor (`adapterexec`) running the released foundation
+and engine on 127.0.0.1:
+
+| | |
+|---|---|
+| Pairs in the right order | 14 of 15 (the node needs 70%); the miss is an `access_quote` pair PyTorch also gets wrong |
+| Same order as PyTorch | 15 of 15; largest difference in a score 0.000055 |
+| Identity echo | foundation, adapter and tokenizer hashes as sent |
+| Time | about 6 minutes for 30 texts (12 s a text; the node allows 30 minutes) |
+| Memory | about 2.5 GB resident at peak |
+
+The first run used an executor built from the patched scratch copy. The
+same batch through the unmodified build the server's `truvian-scorer` unit
+runs, with the unit's own foundation files and package path, returned the
+same bits for all 30 texts.
+
+## The package
+
+| | |
+|---|---|
+| File | `package/SMART_CONTRACT_AUDIT.safetensors` |
+| Size | 6,776,916 bytes |
+| sha256 | `52830f37c0d8150e22654fc941c3033cc42864e7ec71201c144c6a357bb8e0f5` |
+| keccak256 (the hash to register) | `0xca1e61ec8376def41ac1208e8dc941b34b03d3e50338ed3650d6d1787b6afdf7` |
+| Metadata | intent `SMART_CONTRACT_AUDIT`, class `judgment`, abi `lora-v1`, rank 8, alpha 32, targets `Wi`, `Wo`, `Wqkv`, `max_tokens` 512, 178 tensors |
+| Foundation | `modernbert-base-lora16-v1`, sha256 `0a49b325…f8e6` |
+| Tokenizer | `67bc76f8…c456` |
+
+`package/SMART_CONTRACT_AUDIT.safetensors.manifest.json` is what
+`adapterbuild lora` wrote: the node's Stage 1 parser accepted the package,
+and it loaded on the foundation and scored the same input twice with
+identical bits (`0xbf909d3f`). The examples repository's
+`evaluator-adapter/inspect-package.ts` also passes it.
+
+Check a copy before relying on it:
+
+```bash
+shasum -a 256 package/SMART_CONTRACT_AUDIT.safetensors   # 52830f37…
+cast keccak < package/SMART_CONTRACT_AUDIT.safetensors   # 0xca1e61ec…
+```
+
+### Never re-export
+
+The hash that `export_adapter` prints is not the hash of the file it
+writes, and exporting the same adapter again gives a file with yet another
+hash. safetensors (0.8.0 here) writes the `__metadata__` keys in a different
+order on every write, so each serialisation has a different header and
+hash while the tensor bytes stay the same. `export_adapter` serialises the
+package twice: once in memory, whose sha256 it logs, and once to disk. On
+2026-11-21 this package was re-serialised twelve times, both ways, in two
+processes: twelve different sha256s, none equal to the file's, every one
+with the file's tensor bytes.
+
+So the hash to register is taken from the file (`adapterbuild lora` prints
+it, or `cast keccak < file`), and the registered hash, the hosted file and
+the executor's package must all be these exact bytes. On the scorer server
+they are `/opt/truvian-scorer/SMART_CONTRACT_AUDIT.safetensors` and its copy
+`/opt/truvian-scorer/current.safetensors`, and a backup with SHA256SUMS is
+kept off the server.
 
 ## Limits
 
 - The pool's hidden pairs are written by other contributors about real
   production contracts, and ours are generated. How well the adapter carries
-  over is only known from the node's own check.
+  over is only known from the node's own check. The public descriptions of
+  that material put access-control questions first, and `access_quote` is
+  the adapter's weakest task.
 - Contracts with a long prompt are cut at 512 tokens by the node for every
   adapter alike; this data does not train on that case.
