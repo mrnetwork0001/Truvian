@@ -425,7 +425,8 @@ async function main() {
     ['Kelp DAO Restaked ETH (rsETH) on Ethereum', 'ethereum', null, 'rsETH', false, 'Kelp DAO Restaked ETH'],
     ['Bancor (BNT) on Ethereum', 'ethereum', null, 'BNT', false, 'Bancor'],
     ['0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6 on Polygon', 'polygon', '0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6', null, false, null],
-    ['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', 'ethereum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', null, false, null],
+    ['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', 'ethereum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'USDC', true, null],
+    ['USD Coin (USDC) (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Arbitrum', 'arbitrum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'USDC', false, 'USD Coin'],
     ['Arbitrum (ARB) on Ethereum', 'ethereum', null, 'ARB', false, 'Arbitrum'],
     ['Brett (ETH) (BRETT) on Base', 'base', null, 'BRETT', false, 'Brett (ETH)'],
     ['What is the current total supply of Bancor (BNT) on Ethereum, in whole tokens?', 'ethereum', null, 'BNT', false, 'Bancor'],
@@ -510,6 +511,9 @@ async function main() {
     ['Bancor (BNT) on Ethereum', 'ethereum', '0x1F573D6Fb3F13d689FF844B4cE37794d79a7FF1C'],
     ['0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6 on Polygon', 'polygon', '0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6'],
     ['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Ethereum', 'ethereum', '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'],
+    // 2026-11-21 08:32:40 UTC: Ethereum's USDC address with Arbitrum named,
+    // where that address has no code; the symbol is read from the verified table
+    ['USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Arbitrum', 'arbitrum', '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'],
     // a name chooses between two listed UNI tokens (UNICORN and Uniswap)
     ['Uniswap (UNI) on Ethereum', 'ethereum', '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984'],
     // POL is Polygon's coin, but on Ethereum it is an ERC-20
@@ -536,6 +540,26 @@ async function main() {
       if (listRefused(e)) skip(`"${question}"`, e.message);
       else check(`"${question}"`, false, e?.message ?? String(e));
     }
+  }
+
+  // A given address with no code on the named chain is no contract there.
+  // A symbol beside it is then read from the verified table only, and the
+  // answer says so; without a symbol the table holds, the question is refused.
+  const ethUsdcOnArbitrum = await handleSupply(validateSupplyInput({ token: 'USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) on Arbitrum' }))
+    .then((r) => r.answer, (e) => `refused: ${e?.message}`);
+  check('the answer says the given address is not a contract on Arbitrum, so the symbol was used',
+    ethUsdcOnArbitrum.includes('The given address 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 is not a contract on Arbitrum One, so the symbol USDC was used'),
+    ethUsdcOnArbitrum);
+  const balanceOnArbitrum = await handleBalance(validateBalanceInput({ address: '0x3304E22DDaa22bCdC5fCa2269b418046aE7b566A', chain: 'arbitrum', token: 'USDC (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48)' }))
+    .then((r) => r, (e) => e);
+  check('a balance by another chain\'s address reads the verified table\'s contract for the symbol, saying so',
+    !(balanceOnArbitrum instanceof Error) && balanceOnArbitrum.token_address === KNOWN_TOKENS.arbitrum!.USDC!.address
+      && balanceOnArbitrum.answer.includes('is not a contract on Arbitrum One'), balanceOnArbitrum?.answer ?? balanceOnArbitrum?.message);
+  for (const [question, says] of [['0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 on Arbitrum', 'has no code there'],
+    ['BNT (0x1F573D6Fb3F13d689FF844B4cE37794d79a7FF1C) on Arbitrum', 'BNT is not in the verified token table for Arbitrum One'],
+    ['0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D on Ethereum', 'does not answer decimals() and symbol() like an ERC-20']] as const) {
+    const refused = await handleSupply(validateSupplyInput({ token: question })).then(() => null, (e) => e);
+    check(`"${question}" is refused: ${says}`, refused instanceof IntentError && refused.code === 'INVALID_INPUT' && refused.message.includes(says), refused?.message);
   }
 
   // A symbol the list gives to several tokens is refused, naming them, when

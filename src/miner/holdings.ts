@@ -37,6 +37,8 @@ interface Asset {
   symbol: string;
   /** How a contract named by symbol or name was found, for the answer's source; null otherwise */
   foundIn: string | null;
+  /** Said in the answer after the figure, when the contract read is not the address the question gave; null otherwise */
+  note: string | null;
 }
 
 /** An ERC-20, as its contract describes itself at the anchoring block. */
@@ -125,9 +127,13 @@ function sameSymbol(asked: string, reported: string): boolean {
 
 /** A token as a question names it: by contract address, or by symbol and name. */
 export interface TokenRef {
-  /** EIP-55. When given it is the token, whatever else the text says. */
+  /**
+   * EIP-55. When it has code on the chain it is the token, whatever else the
+   * text says. When it has none, a symbol given beside it may be read
+   * instead, from the verified table only.
+   */
   address: `0x${string}` | null;
-  /** The last parenthesised word, or a word given alone */
+  /** The last parenthesised word, or a word given alone (beside an address too: "USDC (0xA0b8…)") */
   symbol: string | null;
   /**
    * True when the symbol is a word given alone, without parentheses ("USDC",
@@ -142,23 +148,28 @@ export interface TokenRef {
 
 const ADDRESS_IN_TEXT = /(?<![0-9A-Za-z])0x[0-9a-fA-F]{40}(?![0-9A-Za-z])/;
 
+/** A symbol and name read from text with no address in it. */
+function describedBy(text: string): Omit<TokenRef, 'address'> {
+  const t = text.replace(/\(\s*\)/g, ' ').replace(/\s+/g, ' ').trim();
+  const symbolGroup = [...t.matchAll(/\(([^()\s]+)\)/g)].at(-1);
+  if (symbolGroup) return { symbol: symbolGroup[1]!, bare: false, name: t.slice(0, symbolGroup.index).trim() || null };
+  if (t === '') return { symbol: null, bare: false, name: null };
+  return t.includes(' ') ? { symbol: null, bare: false, name: t } : { symbol: t, bare: true, name: null };
+}
+
 /**
  * Read a token reference the way the node writes one: "Kelp DAO Restaked ETH
  * (rsETH)", "Bancor (BNT)", "USDC (0xA0b8…)", "0x1BFD…", or a lone "USDC".
- * A contract address wins. Otherwise the symbol is the last parenthesised
- * word, since names carry parentheses of their own ("Brett (ETH) (BRETT)"),
- * and the name before it is kept to choose between tokens sharing a symbol.
+ * A contract address wins; what else the text says is kept beside it.
+ * Otherwise the symbol is the last parenthesised word, since names carry
+ * parentheses of their own ("Brett (ETH) (BRETT)"), and the name before it
+ * is kept to choose between tokens sharing a symbol.
  */
 export function parseTokenRef(text: string): TokenRef {
   const t = text.replace(/\s+/g, ' ').trim();
-  const address = t.match(ADDRESS_IN_TEXT)?.[0];
-  if (address) return { address: getAddress(address), symbol: null, bare: false, name: null };
-  const symbolGroup = [...t.matchAll(/\(([^()\s]+)\)/g)].at(-1);
-  if (symbolGroup) return { address: null, symbol: symbolGroup[1]!, bare: false, name: t.slice(0, symbolGroup.index).trim() || null };
-  if (t === '') return { address: null, symbol: null, bare: false, name: null };
-  return t.includes(' ')
-    ? { address: null, symbol: null, bare: false, name: t }
-    : { address: null, symbol: t, bare: true, name: null };
+  const found = t.match(ADDRESS_IN_TEXT);
+  if (!found) return { address: null, ...describedBy(t) };
+  return { address: getAddress(found[0]), ...describedBy(`${t.slice(0, found.index)} ${t.slice(found.index! + found[0].length)}`) };
 }
 
 /** Where a token's contract is, and what the question said that the contract must bear out. */
@@ -174,6 +185,25 @@ interface Located {
   where: string;
   /** How the contract was found, for the answer's source; null for the verified table or a given address */
   foundIn: string | null;
+  /** Said in the answer after the figure; null for none */
+  note: string | null;
+  /**
+   * For a given address with a symbol beside it: the symbol, and the verified
+   * table's contract for it on the chain (null when the table has none), read
+   * instead when the address has no code on the chain.
+   */
+  ifNoCode: { symbol: string; known: Located | null } | null;
+}
+
+/** The verified table's contract for the symbol on the chain, held to the name given beside it; null when the table has none. */
+function inVerifiedTable(chain: SupportedChain, symbol: string, name: string | null): Located | null {
+  const key = symbolKey(symbol);
+  const known = KNOWN_TOKENS[chain]?.[key];
+  if (!known) return null;
+  return {
+    address: known.address, expectedSymbol: symbol, givenName: name, names: KNOWN_TOKEN_NAMES[key] ?? [],
+    where: 'the verified token table', foundIn: null, note: null, ifNoCode: null,
+  };
 }
 
 /**
@@ -184,21 +214,20 @@ interface Located {
  * all: each would be a guess at what the question meant.
  */
 async function locateToken(chain: SupportedChain, ref: TokenRef): Promise<Located> {
-  if (ref.address) return { address: ref.address, expectedSymbol: null, givenName: null, names: [], where: 'the question', foundIn: null };
+  if (ref.address) {
+    return {
+      address: ref.address, expectedSymbol: null, givenName: null, names: [], where: 'the question', foundIn: null, note: null,
+      ifNoCode: ref.symbol === null ? null : { symbol: ref.symbol, known: inVerifiedTable(chain, ref.symbol, ref.name) },
+    };
+  }
   const label = chainMeta(chain).label;
   if (ref.symbol === null) {
     throw new IntentError('INVALID_INPUT', ref.name === null
       ? 'no token symbol, name or contract address was given'
       : `"${ref.name}" gives no symbol and no contract address; give the symbol in parentheses after the name, as in "${ref.name} (SYMBOL)", or the contract address`);
   }
-  const key = symbolKey(ref.symbol);
-  const known = KNOWN_TOKENS[chain]?.[key];
-  if (known) {
-    return {
-      address: known.address, expectedSymbol: ref.symbol, givenName: ref.name, names: KNOWN_TOKEN_NAMES[key] ?? [],
-      where: 'the verified token table', foundIn: null,
-    };
-  }
+  const known = inVerifiedTable(chain, ref.symbol, ref.name);
+  if (known) return known;
   if (ref.bare) {
     const table = Object.keys(KNOWN_TOKENS[chain] ?? {});
     throw new IntentError('INVALID_INPUT', `"${ref.symbol}" is not a symbol in the verified token table for ${label}`
@@ -208,7 +237,7 @@ async function locateToken(chain: SupportedChain, ref: TokenRef): Promise<Locate
   const match = await findListedToken(chain, ref.symbol, ref.name);
   return {
     address: match.token.address, expectedSymbol: ref.symbol, givenName: ref.name, names: [match.token.name],
-    where: match.list, foundIn: `found in ${match.list} as "${match.token.name}"`,
+    where: match.list, foundIn: `found in ${match.list} as "${match.token.name}"`, note: null, ifNoCode: null,
   };
 }
 
@@ -217,22 +246,60 @@ function quoted(names: readonly string[]): string {
 }
 
 /**
+ * A given address with no code on the chain is no contract there; the
+ * question may have given another chain's address, as the node did with
+ * "USDC (0xA0b86991…) on Arbitrum", Ethereum's USDC. A symbol given beside
+ * it is then read from the verified table for the chain, and the answer says
+ * so; a symbol the table lacks, or none, is refused.
+ */
+function withoutCode(chain: SupportedChain, located: Located, blockNumber: bigint): Located {
+  const label = chainMeta(chain).label;
+  const absent = `${located.address} is not a contract on ${label}: it has no code there at block ${blockNumber}`;
+  const fallback = located.ifNoCode;
+  if (fallback === null) throw new IntentError('INVALID_INPUT', `${absent}; give the token's contract address on ${label}`);
+  if (fallback.known === null) {
+    throw new IntentError('INVALID_INPUT', `${absent}, and ${fallback.symbol} is not in the verified token table for ${label}; give the token's contract address on ${label}`);
+  }
+  const { known } = fallback;
+  return {
+    ...known,
+    foundIn: `in the verified token table for ${fallback.symbol}, since the given address ${located.address} has no code on ${label}`,
+    note: `The given address ${located.address} is not a contract on ${label}, so the symbol ${fallback.symbol} was used: the verified token table gives ${known.address} for ${fallback.symbol} there.`,
+  };
+}
+
+/**
  * Read the located contract at the block, and hold it to what the question
  * said: its symbol() must be the symbol asked for, and a name given beside
  * the symbol must agree with the token (src/miner/tokenNames.ts). The name
  * is compared with the names the token was found under and its symbol, and
  * when those disagree, with the contract's own name() at the block: CoinGecko
- * calls POL "POL (ex-MATIC)", its contract "Polygon Ecosystem Token".
+ * calls POL "POL (ex-MATIC)", its contract "Polygon Ecosystem Token". With
+ * `withSupply`, totalSupply() is read beside the rest, from the contract
+ * confirmed.
  */
-async function confirmToken(chain: SupportedChain, located: Located, blockNumber: bigint): Promise<Erc20> {
+async function confirmToken(
+  chain: SupportedChain, located: Located, blockNumber: bigint, withSupply = false,
+): Promise<{ token: Erc20; supply: bigint | null }> {
   const { address, expectedSymbol, givenName } = located;
+  const client = getClient(chain);
   const nameUnsettled = givenName !== null
     && !namesAgree(givenName, expectedSymbol === null ? located.names : [...located.names, expectedSymbol]);
-  const [erc20, ownName] = await Promise.allSettled([
+  const [erc20, ownName, supply] = await Promise.allSettled([
     readErc20(chain, address, blockNumber),
-    nameUnsettled ? readText(getClient(chain), address, 'name', blockNumber) : Promise.resolve(null),
+    nameUnsettled ? readText(client, address, 'name', blockNumber) : Promise.resolve(null),
+    withSupply ? client.readContract({ address, abi: ERC20, functionName: 'totalSupply', blockNumber }) : Promise.resolve(null),
   ]);
-  if (erc20.status === 'rejected') throw erc20.reason;
+  if (erc20.status === 'rejected') {
+    // An address the question gave that answered like no ERC-20: is there a contract at all?
+    if (located.expectedSymbol === null && erc20.reason instanceof IntentError && erc20.reason.code === 'INVALID_INPUT') {
+      const code = await client.getCode({ address, blockNumber }).catch((err) => {
+        throw new IntentError('UPSTREAM_RPC_ERROR', `${chain} did not answer eth_getCode for ${address}: ${rpcFailure(err)}`);
+      });
+      if (code === undefined || code === '0x') return confirmToken(chain, withoutCode(chain, located, blockNumber), blockNumber, withSupply);
+    }
+    throw erc20.reason;
+  }
   const { decimals, symbol } = erc20.value;
   if (expectedSymbol !== null && !sameSymbol(expectedSymbol, symbol)) {
     throw new IntentError('INVALID_INPUT', `${address}, ${located.foundIn ?? `in ${located.where}`} for ${expectedSymbol} on ${chain}, reports symbol() "${symbol}" at block ${blockNumber}, so it is not taken to be ${expectedSymbol}`);
@@ -247,7 +314,13 @@ async function confirmToken(chain: SupportedChain, located: Located, blockNumber
         + ` and ${contractName === null ? 'answers no name()' : `"${contractName}" by its name()`} at block ${blockNumber}; give the name and symbol of one token, or its contract address`);
     }
   }
-  return { address, decimals, symbol, foundIn: located.foundIn };
+  // no figure unless the contract was confirmed as the token asked for
+  if (supply.status === 'rejected') {
+    throw contractAnswered(supply.reason)
+      ? new IntentError('INVALID_INPUT', `${address} on ${chain} does not answer totalSupply()`)
+      : new IntentError('UPSTREAM_RPC_ERROR', rpcFailure(supply.reason));
+  }
+  return { token: { address, decimals, symbol, foundIn: located.foundIn, note: located.note }, supply: supply.value };
 }
 
 /** Resolve a balance's token: empty or a native symbol for the chain's coin, else an ERC-20. */
@@ -256,8 +329,8 @@ async function resolveAsset(chain: SupportedChain, raw: string, blockNumber: big
   const ref = parseTokenRef(raw);
   const symbol = ref.symbol === null ? null : symbolKey(ref.symbol);
   const native = symbol === null ? ref.name === null : NATIVE_SYMBOLS.has(symbol) || symbol === meta.nativeSymbol;
-  if (!ref.address && native) return { address: null, decimals: 18, symbol: meta.nativeSymbol, foundIn: null };
-  return confirmToken(chain, await locateToken(chain, ref), blockNumber);
+  if (!ref.address && native) return { address: null, decimals: 18, symbol: meta.nativeSymbol, foundIn: null, note: null };
+  return (await confirmToken(chain, await locateToken(chain, ref), blockNumber)).token;
 }
 
 /** Address or ENS name to an address. ENS resolves on Ethereum mainnet. */
@@ -332,7 +405,7 @@ export async function handleBalance(input: BalanceInput) {
   const meta = chainMeta(input.chain);
   const exact = formatUnits(raw, asset.decimals);
   const answer = `${holder} holds ${exact} ${asset.symbol} on ${meta.label} (chain id ${meta.chainId}) at block ${block.number}`
-    + (asset.address ? `, read from the ${asset.symbol} contract ${asset.address}.` : '.');
+    + (asset.address ? `, read from the ${asset.symbol} contract ${asset.address}.` : '.') + (asset.note ? ` ${asset.note}` : '');
   return {
     answer,
     signal: answer,
@@ -431,21 +504,11 @@ export async function handleSupply(input: SupplyInput) {
   if (located.status === 'rejected') throw located.reason;
   if (anchored.status === 'rejected') throw anchored.reason;
   const block = anchored.value;
-  const [described, supply] = await Promise.allSettled([
-    confirmToken(input.chain, located.value, block.number),
-    getClient(input.chain).readContract({ address: located.value.address, abi: ERC20, functionName: 'totalSupply', blockNumber: block.number }),
-  ]);
-  // no figure unless the contract was confirmed as the token asked for
-  if (described.status === 'rejected') throw described.reason;
-  if (supply.status === 'rejected') {
-    throw contractAnswered(supply.reason)
-      ? new IntentError('INVALID_INPUT', `${located.value.address} on ${input.chain} does not answer totalSupply()`)
-      : new IntentError('UPSTREAM_RPC_ERROR', rpcFailure(supply.reason));
-  }
-  const asset = described.value;
-  const raw = supply.value;
+  const { token: asset, supply } = await confirmToken(input.chain, located.value, block.number, true);
+  const raw = supply!; // read, since withSupply is true; a failed read has thrown
   const exact = formatUnits(raw, asset.decimals);
-  const answer = `The total supply of ${asset.symbol} (${asset.address}) on ${meta.label} is ${exact} tokens at block ${block.number} (${raw} base units, ${asset.decimals} decimals).`;
+  const answer = `The total supply of ${asset.symbol} (${asset.address}) on ${meta.label} is ${exact} tokens at block ${block.number} (${raw} base units, ${asset.decimals} decimals).`
+    + (asset.note ? ` ${asset.note}` : '');
   return {
     answer,
     signal: answer,
