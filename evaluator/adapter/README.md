@@ -6,7 +6,13 @@ Its evaluation pool then held 378 eligible rows from 4 contributors, above
 the node's minimum of 3, so with no incumbent an adapter needs to rank at
 least 70% of 30 hidden pairs correctly to take the seat.
 
-**Status, 2026-11-21 21:10 UTC: v1 was registered (id 175) and rejected; v2
+**Status, 2026-11-22 12:55 UTC: v3 was registered as id 187** (tx
+`0x98544a4f…3dce4b`, package URL pinned to commit `ba67924`), after it
+ordered 13 of the 15 public pairs the node sent v2, the best possible on
+that batch (the node needs 11). See [Version 3](#version-3). The node's
+decision is pending.
+
+**Earlier, 2026-11-21 21:10 UTC: v1 was registered (id 175) and rejected; v2
 was registered at 21:16 UTC as id 182 (tx
 `0xf548bd976429d872a8e1e3ebd1dc20069612826f31a6ac3a2909f10b201e0d4a`,
 package URL pinned to commit `d8f8958`), and rejected at 22:50 UTC: "ordered
@@ -279,14 +285,14 @@ export RPC=https://ethereum-sepolia-rpc.publicnode.com
 export USDC=0xcc194e1a843B658526D0D5C431f670028582Ae17      # test USDC, the Diamond's usdcToken()
 export AUTHOR=0xcd0a2370f2dc12c1802707b7d9ab3fec891e3c02    # owns the registration (the miner wallet)
 export FEE_ADDRESS=$AUTHOR                                 # where the adapter's rewards go; can be a cold wallet
-export WASM_HASH=0xa39d6e4e7ff5d05e8d542130ad355611d0ff2e4fb77dce2b63622b98f61aa19e   # v2 (v1 was 0xca1e61ec…afdf7)
-export WASM_URL=https://raw.githubusercontent.com/mrnetwork0001/Truvian/<COMMIT>/evaluator/adapter/package-v2/SMART_CONTRACT_AUDIT.safetensors
+export WASM_HASH=0x6e764b0e2574849d59cbe95b6fc1535181e5896f46cb98d016639492fd0d3154   # v3 (v2 0xa39d6e4e…, v1 0xca1e61ec…)
+export WASM_URL=https://raw.githubusercontent.com/mrnetwork0001/Truvian/<COMMIT>/evaluator/adapter/package-v3/SMART_CONTRACT_AUDIT.safetensors
 export WASM_RUNNABLE_URL=https://scorer.truvian.xyz/runnable
 
 # 1. The URL serves the registered bytes, without a redirect (the node re-hashes what it downloads).
 curl -fsS "$WASM_URL" | cast keccak           # must print $WASM_HASH
 # 2. The executor is up and runs this package: the empty-batch request above
-#    must echo adapter_hash a39d6e4e… (v2)
+#    must echo adapter_hash 6e764b0e… (v3)
 
 # 3. The bond: third value of entityBonds() is the adapter bond in test USDC base units.
 cast call $DIAMOND "entityBonds()(uint64,uint64,uint256,uint256)" --rpc-url $RPC
@@ -437,6 +443,95 @@ entirely, so they score the same and count as wrong for any adapter. The
 best possible score on this batch is 13 of 15, and 11 are needed. Both
 our versions trained on formats the pool does not use, which explains most
 of the misses. A v3 would be trained on these three formats.
+
+## Version 3
+
+### Training data: `generate_pairs_v3.py`
+
+v3 is trained on the three kinds of pair the node's check held, generated
+rather than copied: no pool row and no text of the captured batch is in the
+training data.
+
+- **Access control (half the pairs).** A function that names a modifier, and
+  a JSON answer `{"target", "authorization_check"}`. The better answer gives
+  the modifier the function names, or the first `require` that checks
+  `msg.sender`. The worse one gives another modifier from the same contract
+  or another project, or a check from a neighbouring function.
+- **Old Solidity audits (30%).** A Solidity 0.4 contract with line numbers
+  and one of nine vulnerability classes, answered in the
+  "Verdict / Highest severity / Finding / line / Fix" form. The worse answer
+  names the wrong class or line, misses the vulnerability, or calls the
+  contract safe.
+- **Audits by address (20%).** "Audit the smart contract at address 0x…
+  (Name)." The better answer describes the contract. The worse one is a
+  varied false claim that contracts cannot be audited, or a wave-off.
+
+1,800 training pairs (seed 31) and a separate 240-pair test set (seed 97).
+The kit's dataset gate passed: 97.1% unique worse answers, the largest one
+at 0.67%, length shortcut 51.6%, bag-of-words probe 63.4% (limit 65%),
+held-out leak 3.3%.
+
+### Training (run v3)
+
+The run used the same settings as v1 and v2. It held out 270 pairs for
+validation and trained on 1,530, from 2026-11-22 08:13 to 12:45 UTC.
+
+| Epoch | Validation accuracy (270) | Validation loss |
+|---|---|---|
+| 1 | 0.8778 | 0.2698 |
+| 2 | 0.9296 | 0.1510 |
+| 3 | 0.9444 | 0.1246 |
+
+On the 240-pair test set, v3 ordered **97.08%** correctly, against 54.37%
+for "pick the longer answer". Verdict `PASS` (`package-v3/train-result.json`).
+The kit's training script exits with `NameError: name 'pkg' is not defined`
+after writing that file, so systemd lists the run as failed. That bug is in
+the kit's closing step and does not touch the adapter.
+
+### The v3 package
+
+| | |
+|---|---|
+| File | `package-v3/SMART_CONTRACT_AUDIT.safetensors`, 6,776,916 bytes |
+| sha256 | `e038808b8d9bd4c52ecbbe0a943802ee4afd563d7cc3772247adc6e9a174ecbe` |
+| keccak256 (registered) | `0x6e764b0e2574849d59cbe95b6fc1535181e5896f46cb98d016639492fd0d3154` |
+| Default-input score | `0x3f97d908` |
+
+The package was exported once, with Telegraph's `tokenizer.json` copied into
+the run's adapter folder first. `adapterbuild lora`, run from the patched
+scratch kit, accepted it: class judgment, rank 8, 178 tensors, default input
+scored twice as `0x3f97d908`.
+
+### Replaying the node's check
+
+`replay-public.sh` starts a second, temporary executor (the unmodified kit
+build) on `127.0.0.1:8081` with v3 and sends it the node's captured batch
+for registration 182, unchanged except for the adapter hash. It took 5 min
+23 s for 30 texts.
+
+| Kind | Pairs | v2 | v3 |
+|---|---|---|---|
+| Access control (JSON) | 8 | 4 right, 3 wrong, 1 tie | 7 right, 1 tie |
+| Audit by address | 4 | 2 right, 2 wrong | 4 right |
+| Old Solidity audit | 3 | 2 right, 1 tie | 2 right, 1 tie |
+| **Total** | 15 | **8** | **13** |
+
+The two ties are the two pairs cut off at 512 tokens, so 13 is the best
+possible score on this batch; the node needs 11. The node's next batch may
+hold different pairs, and its hidden round of 30 pairs is not seen before
+registration.
+
+### Registration
+
+At 12:52 UTC the production executor was switched to v3; v2's file is kept
+in `/opt/truvian-scorer/backup-v2/`. From outside, it echoed adapter hash
+`6e764b0e…`. The package URL was pinned to commit `ba67924` and checked
+against the keccak above. The Diamond was checked on the docs page first.
+
+- Mint 5 test USDC: `0xdb0407a95d3ed832493c2c7482be2881181f7b6c559fc25dbb6827d7a92b9967`
+- Approve 5 USDC: `0xb8c316f6a227ca597924927ec1d35c6372b15ac962175a1895c94d5ad14c2409`
+- `registerWasm`, **id 187**, 12:54 UTC, block 12188880:
+  `0x98544a4f94ced1267c2d29b56926bc0f699697b961c9f3dfd000f2320a3dce4b`
 
 ## Limits
 
