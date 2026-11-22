@@ -9,8 +9,10 @@ least 70% of 30 hidden pairs correctly to take the seat.
 **Status, 2026-11-22 12:55 UTC: v3 was registered as id 187** (tx
 `0x98544a4f…3dce4b`, package URL pinned to commit `ba67924`), after it
 ordered 13 of the 15 public pairs the node sent v2, the best possible on
-that batch (the node needs 11). See [Version 3](#version-3). The node's
-decision is pending.
+that batch (the node needs 11). See [Version 3](#version-3). **At 14:03
+UTC the node promoted it: "first Canonical for SMART_CONTRACT_AUDIT at
+83.33% on 30 pairs (floor 70%)"**, so it is active and holds the champion
+seat (epoch 37, corpus `8d1bfb37…`).
 
 **Earlier, 2026-11-21 21:10 UTC: v1 was registered (id 175) and rejected; v2
 was registered at 21:16 UTC as id 182 (tx
@@ -532,6 +534,18 @@ against the keccak above. The Diamond was checked on the docs page first.
 - Approve 5 USDC: `0xb8c316f6a227ca597924927ec1d35c6372b15ac962175a1895c94d5ad14c2409`
 - `registerWasm`, **id 187**, 12:54 UTC, block 12188880:
   `0x98544a4f94ced1267c2d29b56926bc0f699697b961c9f3dfd000f2320a3dce4b`
+
+The node listed it at 13:02 UTC (`awaiting_compatible_material`), sent the
+30-text public batch at 13:45 UTC (scored in 6 min 9 s), and at 14:03 UTC
+set it `active`, stage `canonical`, champion:
+
+> promoted: first Canonical for SMART_CONTRACT_AUDIT at 83.33% on 30 pairs
+> (floor 70%, corpus 8d1bfb3724b0)
+
+That is 25 of the 30 hidden pairs, drawn with the seed of epoch 37. It was
+the only candidate in the round. A later adapter takes the seat only by
+beating 83.33% by the replacement margin, 2 points. The status is at
+`GET https://devnode.telegraphprotocol.com/api/wasm/187`.
 
 ## Limits
 
