@@ -7,12 +7,13 @@ supply, wash-trading, liquidity and sanctions intelligence through Telegraph
 and checks it against the chain. The result is a signed memo that gives the
 decision, every finding with its evidence, and what the decision cost.
 
-One engine serves two desks, one for each Season II mission:
+One engine serves three desks, each for a Season II mission:
 
 | Desk | Mission | Customer | Decision |
 |---|---|---|---|
 | Token preflight | [14, Web3 Native & DeFi](https://github.com/telegraphprotocol/bounties/issues/202), route 1 "token-risk preflight" | a trading agent about to buy a token | HOLD / REVIEW / REJECT; the buy is simulated |
 | Listing review | [01, Exchange](https://github.com/telegraphprotocol/bounties/issues/189), route 1 "autonomous listing review" | an exchange listings desk | LIST / REVIEW / REJECT for the contract, its issuer and its treasury wallet |
+| Holdings proof | [13, Asset Management](https://github.com/telegraphprotocol/bounties/issues/201), "holdings proof with input receipts" | an investor agent checking what a fund or index says a custody wallet holds | VERIFIED / REVIEW / REJECT for up to three holdings, without trusting the issuer |
 
 ## Try it
 
@@ -38,11 +39,39 @@ curl -s https://truvian.xyz/api/preflight -H 'content-type: application/json' -d
   "issuer": "Uniswap Labs",
   "treasury": "0x1a9C8182C09F50C8318d769245beA52c32BE35BC"
 }' | jq '{decision: .memo.decision, findings: [.memo.findings[] | {severity, title}]}'
+
+# fund check: does the Uniswap timelock hold the 300M UNI it is said to? (it does not: REJECT)
+curl -s https://truvian.xyz/api/preflight -H 'content-type: application/json' \
+  -d '{"mode":"holdings","chain":"ethereum",
+       "wallet":"0x1a9C8182C09F50C8318d769245beA52c32BE35BC",
+       "holdings":[{"token":"0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984","claimed":"300000000"}]}'
 ```
 
 Add `?stream=1` to receive NDJSON progress events: `chain`, `plan`, one
 `purchase` per answer, then `memo`. Free use is rate limited per visitor,
 like the pre-sign check.
+
+### The holdings proof (Mission 13)
+
+[`src/shield/holdings.ts`](../src/shield/holdings.ts). A fund states what a
+custody wallet holds: up to three tokens, each with the amount it claims
+and, optionally, the pool it rebalances through. For each holding Shield
+reads the token's contract and `balanceOf(wallet)` at one block, free, and
+buys the wallet's balance (`WALLET_BALANCE_CHECK_GENERAL`), the token's total
+supply (`TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL`) and, with a pool, its USD
+liquidity (`LIQUIDITY_DEPTH_VERIFY_GENERAL`) at $0.01 each, with receipts.
+
+| Finding | Decision |
+|---|---|
+| the chain shows the holding more than 10 bps short of its claim, or the "token" is not a contract | REJECT |
+| a bought answer is missing, has no figure, is about another address, or is more than 50 bps from the chain read | REVIEW |
+| every claim is covered on the chain and every bought answer agrees | VERIFIED |
+
+The memo states each holding's share of the token's supply and the pool's
+depth. First live run, Nov 23: the ENS DAO treasury
+([`JYjvJrmy`](https://truvian.xyz/preflight?m=JYjvJrmy)), six answers for
+$0.06, **REVIEW**, because the balance miner the node chose answered for
+another address. Tests: `npm run test:preflight`.
 
 ## What one decision does
 
