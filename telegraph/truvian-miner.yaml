@@ -18,8 +18,12 @@ description: >
   percentiles and the L1 base fee on OP-stack chains. Wallet balance returns
   the native-coin or ERC-20 balance of an address or ENS name, and total
   supply returns an ERC-20's supply, both with decimals applied and anchored
-  to one block. Every response carries the intent's fields by name and a
-  plain-language statement of the same facts.
+  to one block. Transfer verification says whether a transaction settled,
+  with its confirmations, the fee and its burned base fee and L1 data fee,
+  and the token amounts it moved. Pool liquidity returns a DEX pool's USD
+  liquidity from its on-chain reserves at one block, priced by DefiLlama and
+  checked against GeckoTerminal. Every response carries the intent's fields
+  by name and a plain-language statement of the same facts.
 
 docs:
   repository: https://github.com/mrnetwork0001/Truvian
@@ -129,6 +133,54 @@ endpoints:
             type: string
             intents: ["*"]
             description: Chain name or EIP-155 chain id, when not named in token. Defaults to ethereum.
+  - path: /transfer
+    external_path: /transfer
+    method: GET
+    description: >
+      Verify one on-chain transfer by its transaction hash: whether it settled
+      (confirmed, reverted, pending or not found), its block and number of
+      confirmations, sender and recipient, native value, the fee paid with the
+      base fee burned and any L1 data fee, and the ERC-20 amounts it moved.
+    intents: [CRYPTO_TRANSFER_VERIFY_GENERAL]
+    params:
+      query:
+        required:
+          - name: tx_hash
+            type: string
+            intents: ["*"]
+            description: "Complete transaction hash: 0x followed by exactly 64 hexadecimal characters."
+        optional:
+          - name: chain
+            type: string
+            intents: ["*"]
+            description: >-
+              Chain the transaction is on, as a name or EIP-155 chain id
+              (ethereum, base, arbitrum, optimism, polygon, bsc, avalanche,
+              scroll, linea, gnosis, zksync, xlayer, sepolia, base-sepolia).
+              When omitted, every listed chain is searched.
+  - path: /liquidity
+    external_path: /liquidity
+    method: GET
+    description: >
+      Total liquidity in US dollars of one DEX pool: the pool's on-chain
+      reserves of its two tokens at one block, each priced in USD.
+    intents: [LIQUIDITY_DEPTH_VERIFY_GENERAL]
+    params:
+      query:
+        required:
+          - name: pool
+            type: string
+            intents: ["*"]
+            description: >-
+              The pool's contract address, or its name with its tokens and fee
+              tier, such as "WETH / USDC 0.05%".
+          - name: chain
+            type: string
+            intents: ["*"]
+            description: >-
+              Chain the pool is on: ethereum, base, arbitrum, optimism,
+              polygon, bsc, avalanche, scroll, linea, gnosis or zksync, or the
+              EIP-155 chain id.
 input_schema:
   type: object
   properties:
@@ -141,6 +193,9 @@ input_schema:
       description: >-
         Chain name or EIP-155 chain id: base, ethereum, arbitrum, optimism,
         polygon, bsc, avalanche, xlayer, sepolia, base-sepolia.
+    pool:
+      type: string
+      description: "/liquidity: the DEX pool's contract address, or its name with tokens and fee tier."
 
 output_schema:
   type: object
@@ -188,6 +243,21 @@ output_schema:
     source:
       type: string
       description: The JSON-RPC methods and chain the answer was derived from.
+    confirmations:
+      type: integer
+      description: "/transfer: blocks confirming the transaction, counting its own, at response time."
+    fee_total_native:
+      type: string
+      description: "/transfer: everything the sender paid, in whole native coins, exact."
+    fee_burned_native:
+      type: string
+      description: "/transfer: the base fee part of the fee, burned under EIP-1559; null where the block has no base fee."
+    liquidity_usd:
+      type: number
+      description: "/liquidity: the pool's total liquidity in USD at block_number, 6 decimals."
+    pool_address:
+      type: string
+      description: "/liquidity: the pool read, EIP-55."
     confidence:
       type: number
       description: Confidence that live RPC reads completed successfully.
@@ -251,6 +321,17 @@ intent_mapping:
         how: "Copy the token reference as given, including any contract address and chain."
     output:
       total_supply: { path: total_supply, unit: "whole tokens" }
+  LIQUIDITY_DEPTH_VERIFY_GENERAL:
+    endpoint: /liquidity
+    input:
+      pool:
+        from: pool
+        how: "Copy the pool's contract address if given, otherwise its name with tokens and fee tier."
+      chain:
+        from: chain
+        how: "Lower-case chain name such as ethereum, base, arbitrum, optimism, polygon, bsc, or the EIP-155 chain id."
+    output:
+      liquidity_usd: { path: liquidity_usd, unit: USD }
 semantics:
   signal_mapping:
     confidence_field: confidence
@@ -261,3 +342,5 @@ semantics:
     - GAS_PRICE_GENERAL
     - WALLET_BALANCE_CHECK_GENERAL
     - TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL
+    - CRYPTO_TRANSFER_VERIFY_GENERAL
+    - LIQUIDITY_DEPTH_VERIFY_GENERAL

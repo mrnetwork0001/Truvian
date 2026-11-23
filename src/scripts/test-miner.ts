@@ -1010,6 +1010,82 @@ async function main() {
   const txRefusal = (await app.inject({ method: 'GET', url: '/tx?tx_hash=0x123' })).json();
   check('a refused transaction lookup keeps its own wording', txRefusal.error === 'INVALID_INPUT'
     && txRefusal.answer.startsWith('The request did not identify a transaction to look up.'), txRefusal.answer);
+
+  // --- CRYPTO_TRANSFER_VERIFY: every figure against the chain, read here directly ---
+  console.log('');
+  const erc20Meta = parseAbi(['function decimals() view returns (uint8)']);
+  // 2026-11-23: a SKY transfer on Ethereum, and a Base transaction that pays an L1 data fee
+  const transferCases: Array<[string, SupportedChain]> = [
+    ['0xcb9fc3f74716db681a532d561c0010e47921fa1223c427af39b9ba64bec05ac6', 'ethereum'],
+    ['0xe7eb427edfb13ceb9360010478848821107f50e5154dca03bf24225927d3d7a6', 'base'],
+  ];
+  for (const [hash, chain] of transferCases) {
+    const got = (await app.inject({ method: 'GET', url: `/transfer?tx_hash=${hash}&chain=${chain}` })).json();
+    const c = getClient(chain);
+    const receipt = await c.getTransactionReceipt({ hash: hash as `0x${string}` });
+    const block = await c.getBlock({ blockHash: receipt.blockHash });
+    const l1 = BigInt((receipt as any).l1Fee ?? 0);
+    const total = receipt.gasUsed * receipt.effectiveGasPrice + l1;
+    const burned = block.baseFeePerGas === null || block.baseFeePerGas === undefined ? null : receipt.gasUsed * block.baseFeePerGas;
+    check(`/transfer ${chain}: settled, block, sender and recipient match the receipt`,
+      got.status === 'confirmed' && got.settled === true && got.block_number === Number(receipt.blockNumber)
+        && got.from === receipt.from.toLowerCase() && got.to === receipt.to?.toLowerCase(), got.answer);
+    check(`/transfer ${chain}: the fee is gasUsed x effectiveGasPrice + l1Fee, and the burned part is baseFee x gasUsed`,
+      got.fee_total_native === formatEther(total) && got.fee_l1_native === formatEther(l1)
+        && got.fee_burned_native === (burned === null ? null : formatEther(burned)), `${got.fee_total_native} / burned ${got.fee_burned_native}`);
+    check(`/transfer ${chain}: confirmations count the block itself and are at least 1`, Number.isInteger(got.confirmations) && got.confirmations >= 1, String(got.confirmations));
+    const first = got.token_transfers?.[0];
+    if (first) {
+      const dec = await c.readContract({ address: first.token, abi: erc20Meta, functionName: 'decimals' });
+      check(`/transfer ${chain}: a token amount is its raw amount with the token's decimals() applied`,
+        first.amount === formatUnits(BigInt(first.amount_raw), dec) && got.answer.includes(first.amount), `${first.amount} ${first.symbol}`);
+    }
+  }
+  const noHash = (await app.inject({ method: 'GET', url: '/transfer?question=did%20my%20payment%20arrive' })).json();
+  check('/transfer with no hash answers 200 with a refusal about a transfer, not a transaction lookup',
+    noHash.error === 'INVALID_INPUT' && noHash.answer.startsWith('The request did not identify a transfer to verify.'), noHash.answer);
+  const inText = (await app.inject({ method: 'GET', url: `/transfer?question=${encodeURIComponent(`Did ${transferCases[0]![0]} on Ethereum settle?`)}` })).json();
+  check('/transfer finds a hash in free text under any parameter name', inText.settled === true && inText.chain === 'ethereum', inText.answer);
+  const unknown = (await app.inject({ method: 'GET', url: `/transfer?tx_hash=0x${'0'.repeat(63)}1&chain=ethereum` })).json();
+  check('/transfer for an unknown hash says it cannot be verified as settled', unknown.settled === false && unknown.status === 'not_found'
+    && unknown.answer.includes('cannot be verified as settled'), unknown.answer);
+
+  // --- LIQUIDITY_DEPTH_VERIFY: the figure is the reserves it reports, priced; the index agrees ---
+  console.log('');
+  const poolErc20 = parseAbi(['function balanceOf(address) view returns (uint256)']);
+  const liqCases: Array<[string, SupportedChain]> = [
+    ['0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640', 'ethereum'], // WETH / USDC 0.05%, Uniswap v3
+    ['0xcDAC0d6c6C59727a65F871236188350531885C43', 'base'], // USDC / WETH, Aerodrome
+  ];
+  for (const [pool, chain] of liqCases) {
+    const res = await app.inject({ method: 'GET', url: `/liquidity?pool=${pool}&chain=${chain}` });
+    const got = res.json();
+    if (res.statusCode === 502) { skip(`/liquidity ${chain} ${pool}`, got.message); continue; }
+    const raws = await Promise.all(got.reserves.map(async (r: any) => {
+      const [raw, dec] = await Promise.all([
+        getClient(chain).readContract({ address: r.token, abi: poolErc20, functionName: 'balanceOf', args: [pool as `0x${string}`], blockNumber: BigInt(got.block_number) }),
+        getClient(chain).readContract({ address: r.token, abi: erc20Meta, functionName: 'decimals' }),
+      ]);
+      return formatUnits(raw, dec);
+    }));
+    const sum = got.reserves.reduce((a: number, r: any) => a + Number(r.value_usd), 0);
+    check(`/liquidity ${chain}: each reserve is the pool's balanceOf() at the stated block`,
+      got.reserves.every((r: any, i: number) => r.amount === raws[i]), `${got.reserves.map((r: any) => r.amount).join(' / ')} vs ${raws.join(' / ')}`);
+    check(`/liquidity ${chain}: liquidity_usd is the sum of the priced reserves`, Math.abs(got.liquidity_usd - sum) < 0.01, `${got.liquidity_usd} vs ${sum}`);
+    check(`/liquidity ${chain}: GeckoTerminal's figure for the pool is within 2%`,
+      got.geckoterminal_reserve_usd === null || Math.abs(got.liquidity_usd - got.geckoterminal_reserve_usd) / got.geckoterminal_reserve_usd < 0.02,
+      `${got.liquidity_usd} vs ${got.geckoterminal_reserve_usd}`);
+  }
+  const byName = await app.inject({ method: 'GET', url: '/liquidity?pool=WETH%20%2F%20USDC%200.05%25&chain=base' });
+  if (byName.statusCode === 502) skip('/liquidity by name', byName.json().message);
+  else {
+    const n = byName.json();
+    check('/liquidity by name picks a pool of exactly those two tokens at that fee, and says which',
+      /^(WETH \/ USDC|USDC \/ WETH) 0\.05%/.test(n.pool_name) && n.answer.includes('was matched to') && n.liquidity_usd > 1000, n.answer);
+  }
+  const noPool = (await app.inject({ method: 'GET', url: '/liquidity?chain=base' })).json();
+  check('/liquidity with no pool answers 200 with a refusal about a pool', noPool.error === 'INVALID_INPUT'
+    && noPool.answer.startsWith('The request did not identify a DEX pool whose liquidity can be read'), noPool.answer);
   await app.close();
 
   const tally = `${passes} passed, ${failures} failed, ${skips} skipped`;
