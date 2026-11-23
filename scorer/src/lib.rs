@@ -6,7 +6,7 @@
 //!   rank_answer(q_ptr, q_len, gt_ptr, gt_len, ma_ptr, ma_len) -> f32 in [0,1]
 //!
 //! v2 strategy (post-rejection iteration):
-//!   1. Typed onchain fact recall (tx hashes, addresses, ints/wei, decimals,
+//!   1. Typed on-chain fact recall (tx hashes, addresses, ints/wei, decimals,
 //!      tx status) — unchanged core idea, now with partial hex-prefix credit.
 //!   2. NEGATION-AWARE lexing: a strong negator ("not", "never", "didn't",
 //!      "wasn't", "without", "rather"/"instead", sentence punctuation resets)
@@ -40,22 +40,7 @@ use std::alloc::{alloc as raw_alloc, dealloc as raw_dealloc, Layout};
 /// Build tag embedded in the binary (kept alive so each release hashes uniquely).
 #[used]
 #[no_mangle]
-pub static TRUVIAN_BUILD_TAG: [u8; 8] = *b"truv-12\0";
-
-// ---- v12 bisection toggles (compile-time; each variant flips one) --------
-/// Proper-noun substitution forces the crushed band only in an anchored slot
-/// ("on <Chain>", "<X> is …"); elsewhere it is a strong soft penalty (v5 style).
-const DEMOTE_PROPER: bool = true;
-/// Antonym contradiction forces the crushed band only when the antonym sits
-/// in the exact predicate slot of the ground-truth word; else a strong penalty.
-const DEMOTE_ANTONYM: bool = true;
-/// Omission cushion (lift contradiction-free partial answers).
-const CUSHION_ENABLED: bool = true;
-/// Discount ground-truth facts the question already gives away.
-const Q_DISCOUNT_ENABLED: bool = true;
-/// Negated-copula contradiction ("Paris is not the capital") and short-truth
-/// coverage ("Paris" / "Yes, …") handling.
-const NEGPRED_ENABLED: bool = true;
+pub static TRUVIAN_BUILD_TAG: [u8; 8] = *b"truv-11\0";
 
 // v9: the MiniLM INT8 embedding path was removed. It bought a handful of
 // distant-paraphrase cases but cost ~23 MB of module load plus two
@@ -688,9 +673,6 @@ struct Tok {
     /// Word is a key:value label — immediately followed by ':' (markdown
     /// emphasis allowed in between): "Status:", "**Hash**:".
     label: bool,
-    /// Token lies inside a negation scope (clause after a negator, up to
-    /// punctuation / "but" / ~3 content words).
-    scoped: bool,
 }
 
 struct Analysis {
@@ -740,7 +722,7 @@ fn analyze(text: &str) -> Analysis {
         let c = chars[i];
 
         // Sentence/clause punctuation closes any open negation scope.
-        if c == '.' || c == ',' || c == ';' || c == '!' || c == '?' || c == ':' || c == ')' || c == '(' {
+        if c == '.' || c == ',' || c == ';' || c == '!' || c == '?' || c == ':' {
             neg_active = 0;
             flag_budget = 0;
             if c != ',' {
@@ -778,7 +760,7 @@ fn analyze(text: &str) -> Analysis {
                 marker = Some((f, d + 1));
             }
             facts.push(Fact::Hex(tok.clone()));
-            toks.push(Tok { text: tok, kind: Kind::Hex, negated: false, proper: false, label: false, scoped: neg_active > 0 });
+            toks.push(Tok { text: tok, kind: Kind::Hex, negated: false, proper: false, label: false });
             i = j;
             continue;
         }
@@ -808,12 +790,12 @@ fn analyze(text: &str) -> Analysis {
                 if let Ok(v) = raw.parse::<f64>() {
                     facts.push(Fact::Dec(v));
                 }
-                toks.push(Tok { text: raw, kind: Kind::Num, negated: false, proper: false, label: false, scoped: neg_active > 0 });
+                toks.push(Tok { text: raw, kind: Kind::Num, negated: false, proper: false, label: false });
             } else {
                 let trimmed = raw.trim_start_matches('0');
                 let norm = if trimmed.is_empty() { "0" } else { trimmed };
                 facts.push(Fact::Int(norm.to_string()));
-                toks.push(Tok { text: norm.to_string(), kind: Kind::Num, negated: false, proper: false, label: false, scoped: neg_active > 0 });
+                toks.push(Tok { text: norm.to_string(), kind: Kind::Num, negated: false, proper: false, label: false });
             }
             if let Some((f, d)) = marker {
                 marker = Some((f, d + 1));
@@ -824,7 +806,7 @@ fn analyze(text: &str) -> Analysis {
 
         // CJK / emoji: one char = one similarity token
         if is_cjk_or_symbol(c) {
-            toks.push(Tok { text: c.to_string(), kind: Kind::Cjk, negated: false, proper: false, label: false, scoped: neg_active > 0 });
+            toks.push(Tok { text: c.to_string(), kind: Kind::Cjk, negated: false, proper: false, label: false });
             i += 1;
             continue;
         }
@@ -887,7 +869,7 @@ fn analyze(text: &str) -> Analysis {
                         flag_budget = 1;
                     }
                 }
-                toks.push(Tok { text: word, kind: Kind::Word, negated: false, proper: prop, label: lab, scoped: neg_active > 0 });
+                toks.push(Tok { text: word, kind: Kind::Word, negated: false, proper: prop, label: lab });
                 i = j;
                 continue;
             }
@@ -896,7 +878,7 @@ fn analyze(text: &str) -> Analysis {
             // the negation windows (like digit tokens).
             if let Some(d) = word_number(&word) {
                 facts.push(Fact::Int(d.to_string()));
-                toks.push(Tok { text: d.to_string(), kind: Kind::Num, negated: false, proper: false, label: false, scoped: neg_active > 0 });
+                toks.push(Tok { text: d.to_string(), kind: Kind::Num, negated: false, proper: false, label: false });
                 if let Some((f, dd)) = marker {
                     marker = Some((f, dd + 1));
                 }
@@ -904,10 +886,6 @@ fn analyze(text: &str) -> Analysis {
                 continue;
             }
 
-            if word == "but" || word == "however" || word == "instead" && false {
-                neg_active = 0;
-                flag_budget = 0;
-            }
             let strong_neg = in_list(NEG_STRONG, &word);
             let weak_neg = in_list(NEG_WEAK, &word);
             if strong_neg || weak_neg {
@@ -918,7 +896,7 @@ fn analyze(text: &str) -> Analysis {
                 // "instead of X", "rather than X", "without X" disclaim the
                 // whole following phrase, not just its first word.
                 flag_budget = if matches!(word.as_str(), "instead" | "rather" | "without") { 3 } else { 1 };
-                toks.push(Tok { text: word, kind: Kind::Word, negated: false, proper: prop, label: lab, scoped: neg_active > 0 });
+                toks.push(Tok { text: word, kind: Kind::Word, negated: false, proper: prop, label: lab });
                 if let Some((f, d)) = marker {
                     marker = Some((f, d + 1));
                 }
@@ -998,7 +976,7 @@ fn analyze(text: &str) -> Analysis {
             }
             let stop = in_list(STOPWORDS, &word);
             let flag = flag_budget > 0 && !stop;
-            toks.push(Tok { text: word, kind: Kind::Word, negated: flag, proper: prop, label: lab, scoped: neg_active > 0 });
+            toks.push(Tok { text: word, kind: Kind::Word, negated: flag, proper: prop, label: lab });
             if !stop {
                 // content words consume both negation windows
                 if neg_active > 0 {
@@ -1618,7 +1596,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
         match gf {
             Fact::Status(_) | Fact::Indet | Fact::Func(_) => w,
             _ => {
-                if Q_DISCOUNT_ENABLED && q.facts.iter().any(|qf| facts_match(gf, qf)) {
+                if q.facts.iter().any(|qf| facts_match(gf, qf)) {
                     w * 0.15
                 } else {
                     w
@@ -1691,7 +1669,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
         match gf {
             Fact::Status(_) | Fact::Indet | Fact::Func(_) => w,
             _ => {
-                if Q_DISCOUNT_ENABLED && q.facts.iter().any(|qf| facts_match(gf, qf)) {
+                if q.facts.iter().any(|qf| facts_match(gf, qf)) {
                     w * 0.15
                 } else {
                     w
@@ -1803,30 +1781,14 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             toks.iter().any(|t| t.kind == Kind::Word && !t.negated && canon(t) == label)
         };
         let mut hits = 0.0f32;
-        let slot_of = |toks: &[Tok], k: usize| -> (String, String) {
-            let p = if k == 0 { "^".to_string() } else { canon(&toks[k - 1]) };
-            let n = if k + 1 >= toks.len() { "$".to_string() } else { canon(&toks[k + 1]) };
-            (p, n)
-        };
-        let same_slot = |x: &str, y: &str| -> bool {
-            gt.toks.iter().enumerate().filter(|(_, t)| t.kind == Kind::Word && !t.negated && canon(t) == x).any(|(i, _)| {
-                let (p, n) = slot_of(&gt.toks, i);
-                ma.toks.iter().enumerate().filter(|(_, t)| t.kind == Kind::Word && !t.negated && canon(t) == y).any(|(j, _)| {
-                    let (p2, n2) = slot_of(&ma.toks, j);
-                    p == p2 && n == n2 && (p != "^" || n != "$")
-                })
-            })
-        };
         for (a, b) in ANTONYMS {
             for (x, y) in [(a, b), (b, a)] {
                 if affirmed(&gt.toks, x) && affirmed(&ma.toks, y) && !affirmed(&ma.toks, x) {
                     hits += 0.40;
-                    // Asserting the opposite of the ground truth in the SAME
-                    // predicate slot is a false claim: force the crushed band.
-                    // In any other role it is a strong penalty only.
-                    if !DEMOTE_ANTONYM || same_slot(x, y) {
-                        veto_antonym = true;
-                    }
+                    // Asserting the opposite of the ground truth is the same
+                    // class of error as substituting a wrong value: a false
+                    // claim, not an omission. Force the crushed band.
+                    veto_antonym = true;
                 }
             }
         }
@@ -1841,17 +1803,9 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
         let gt_set = canon_set(&gt.toks);
         let ma_set = canon_set(&ma.toks);
         let q_set = canon_set(&q.toks);
-        // Slot of the whole proper-noun SPAN containing k ("William
-        // Shakespeare" is one entity): the token before the span and the
-        // token after it.
         let slot = |toks: &[Tok], k: usize| -> (String, String) {
-            let is_prop = |t: &Tok| t.kind == Kind::Word && t.proper && !in_list(STOPWORDS, &t.text);
-            let mut a = k;
-            while a > 0 && is_prop(&toks[a - 1]) { a -= 1; }
-            let mut b = k;
-            while b + 1 < toks.len() && is_prop(&toks[b + 1]) { b += 1; }
-            let prev = if a == 0 { "^".to_string() } else { canon(&toks[a - 1]) };
-            let next = if b + 1 >= toks.len() { "$".to_string() } else { canon(&toks[b + 1]) };
+            let prev = if k == 0 { "^".to_string() } else { canon(&toks[k - 1]) };
+            let next = if k + 1 >= toks.len() { "$".to_string() } else { canon(&toks[k + 1]) };
             (prev, next)
         };
         // `from_question` gates only the ANSWER side: an entity the question
@@ -1893,7 +1847,6 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
             ALIASES.iter().any(|g| g.contains(&a) && g.contains(&b))
         };
         let mut fired = false;
-        let mut fired_anchored = false;
         'outer: for (gi, gtok) in gt.toks.iter().enumerate() {
             if !candidate(gtok, &gt_set, &ma_set, false) {
                 continue;
@@ -1910,85 +1863,14 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
                 let real_side = (gp == mp && gp != "^") || (gn == mn && gn != "$");
                 if gp == mp && gn == mn && real_side {
                     fired = true;
-                    // anchored slots: "on <Chain>", "<X> is/was …", "… is <X>"
-                    let copula = |w: &str| matches!(w, "is" | "was" | "are" | "were");
-                    fired_anchored = gp == "on" || gp == "by" || copula(&gn) || copula(&gp) || gn == "capit";
                     break 'outer;
                 }
             }
         }
         if fired {
             p_contra += 0.55;
-            if !DEMOTE_PROPER || fired_anchored {
-                veto_proper = true;
-            }
+            veto_proper = true;
         }
-    }
-
-    // --- Negated core predicate --------------------------------------------
-    // "<gt-subject> is not <gt-predicate>" / "isn't" / "was never" / "is no
-    // longer": the answer denies the truth's own claim about its own subject.
-    // Negating a DIFFERENT entity ("is not Lyon; it is Paris") is fine.
-    let mut veto_negpred = false;
-    let mut short_full = false;
-    let mut yn_match = false;
-    if NEGPRED_ENABLED {
-        let is_content = |t: &Tok| t.kind == Kind::Word && !in_list(STOPWORDS, &t.text)
-            && !in_list(NEG_STRONG, &t.text) && !in_list(NEG_WEAK, &t.text) && t.text.len() >= 2;
-        // ground-truth content asserted affirmatively (outside any negation scope)
-        let gt_content: Vec<String> = {
-            let mut v: Vec<String> = gt.toks.iter().filter(|t| is_content(t) && !t.scoped).map(canon).collect();
-            v.sort(); v.dedup(); v
-        };
-        // predicate head: first status/polarity word, else first content word
-        // after a copula, else the last content word
-        let head: Option<String> = gt.toks.iter().find(|t| t.kind == Kind::Word && !t.scoped && polarity_word(&t.text).is_some()).map(canon)
-            .or_else(|| {
-                let ci = gt.toks.iter().position(|t| t.kind == Kind::Word && matches!(t.text.as_str(), "is" | "was" | "are" | "were"));
-                ci.and_then(|i| gt.toks.iter().skip(i + 1).find(|t| is_content(t) && !t.scoped).map(canon))
-            })
-            .or_else(|| gt.toks.iter().rev().find(|t| is_content(t) && !t.scoped).map(canon));
-        // --- negated coverage: gt content whose only answer occurrences are negated ---
-        let mut contradicted: Vec<String> = Vec::new();
-        for c in &gt_content {
-            let occ: Vec<&Tok> = ma.toks.iter().filter(|t| t.kind == Kind::Word && canon(t) == *c).collect();
-            if !occ.is_empty() && occ.iter().all(|t| t.scoped) {
-                contradicted.push(c.clone());
-            }
-        }
-        let mut num_contradicted = false;
-        for f in &gt.facts {
-            let hits: Vec<&Tok> = match f {
-                Fact::Int(v) => ma.toks.iter().filter(|t| t.kind == Kind::Num && t.text == *v).collect(),
-                Fact::Dec(d) => ma.toks.iter().filter(|t| t.kind == Kind::Num && t.text.parse::<f64>().map_or(false, |pv| num_eq(pv, *d))).collect(),
-                _ => Vec::new(),
-            };
-            if !hits.is_empty() && hits.iter().all(|t| t.scoped) {
-                num_contradicted = true;
-            }
-        }
-        let head_hit = head.as_ref().map_or(false, |h| contradicted.iter().any(|c| c == h));
-        if num_contradicted || head_hit || contradicted.len() >= 2 {
-            veto_negpred = true;
-            p_contra += 0.60;
-        }
-        // --- Short ground truth: whole truth is the answer-bearing content ---
-        let ma_aff: Vec<String> = ma.toks.iter().filter(|t| t.kind == Kind::Word && !t.negated).map(canon).collect();
-        if !gt_content.is_empty() && gt_content.len() <= 4 && gt_weight_raw <= 1.5 {
-            short_full = gt_content.iter().all(|c| ma_aff.iter().any(|m| m == c));
-        }
-        // A short truth whose named entities all appear affirmed in the answer
-        // ("Cairo sits on the Nile…" for "The Nile flows through Cairo.") is
-        // covered too; a substituted entity ("The Congo…") is not.
-        if !short_full && gt_weight_raw <= 1.5 && gt_content.len() <= 6 {
-            let propers: Vec<String> = gt.toks.iter().filter(|t| is_content(t) && !t.scoped && t.proper).map(canon).collect();
-            if !propers.is_empty() && propers.iter().all(|c| ma_aff.iter().any(|m| m == c)) {
-                short_full = true;
-            }
-        }
-        // yes/no ground truth: matching lead-in polarity on a short truth
-        let gt_yn = gt.pol[G_YESNO]; let ma_yn = ma.pol[G_YESNO];
-        if gt_yn != 0 && ma_yn == gt_yn && gt_content.len() <= 6 { yn_match = true; }
     }
 
     let mut veto_swap = false;
@@ -2454,19 +2336,16 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     // typed fact is a status word, where "recall" would be 1.0 for any answer
     // that merely repeats the verdict while explaining it wrongly; the text
     // floor requires the answer to actually resemble the truth it omits from.
-    let clean = p_contra <= 0.0 && veto <= 0.0 && !veto_proper && !veto_antonym && !veto_clash && !veto_status && !veto_chain && !veto_swap && !veto_negpred && p_prec < 0.05;
+    let clean = p_contra <= 0.0 && veto <= 0.0 && !veto_proper && !veto_antonym && !veto_clash && !veto_status && !veto_chain && !veto_swap && p_prec < 0.05;
     // (0.30: a terse "Tx <hash> was confirmed in block N" covers hash + block +
     // status = 0.32 of a five-fact truth once the question-given hash is
     // discounted; it contradicts nothing and must keep the cushion.)
-    let raw = if CUSHION_ENABLED && clean && gt_weight_raw >= 3.0 && recall >= 0.30 && text >= 0.35 {
+    let raw = if clean && gt_weight_raw >= 3.0 && recall >= 0.30 && text >= 0.35 {
         raw.max(0.45 + 0.5 * recall)
     } else {
         raw
     };
 
-    // Short truth fully covered / yes-no polarity matched, nothing contradicted:
-    // the answer IS the answer.
-    let raw = if clean && (short_full || yn_match) { raw.max(0.92) } else { raw };
     let s = (raw * (1.0 - p_contra) - p_prec - p_mild).clamp(0.0, 1.0);
     let c = (contrast(s) * (1.0 - 0.42 * blob)).clamp(0.0, 0.995);
 
@@ -2475,7 +2354,7 @@ fn score(question: &str, ground_truth: &str, miner_answer: &str) -> f32 {
     // ordering inside the vetoed class is preserved, and capped far below
     // the low band's reachable range so a vetoed answer can never outrank a
     // merely incomplete one.
-    if veto > 0.0 || veto_proper || veto_antonym || veto_clash || veto_status || veto_chain || veto_swap || veto_negpred {
+    if veto > 0.0 || veto_proper || veto_antonym || veto_clash || veto_status || veto_chain || veto_swap {
         return (0.012 * c).clamp(0.0, 0.995);
     }
     step_band(c, recall)

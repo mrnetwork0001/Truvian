@@ -408,22 +408,6 @@ sg=$(run "$DQ" "Transaction 0xe5cf8a1d2b3c4e5f60718a1d2b3c4e5f60718a1d2b3c4e5f60
 check "D6c omission-only strictly below complete" "$so" "s < $sg"
 check "D6c omission-only still high"            "$so" "s >= 0.6"
 
-
-# --- v12 pins: negated core predicate + short ground truths --------------------
-PQ="What is the capital of France?"; PGT="Paris is the capital of France."
-s=$(run "$PQ" "$PGT" "Paris is not the capital of France; Marseille is.");  check "NEGPRED subject-negated bad crushed"   "$s" "s < 0.15"
-s=$(run "$PQ" "$PGT" "Paris isn't the capital of France anymore.");         check "NEGPRED isn't-form crushed"            "$s" "s < 0.15"
-s=$(run "$PQ" "$PGT" "The capital of France is not Lyon; it is Paris.");   check "NEGPRED other-entity negation high"    "$s" "s >= 0.6"
-s=$(run "$PQ" "$PGT" "Paris, on the Seine, is the capital of France.");    check "NEGPRED extra proper noun high"        "$s" "s >= 0.6"
-OQ="What are the details of transaction 0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 on Base?"; OGT="Transaction 0xe5cf8ea2682a3a49c02c2ccaf55d1bbac1975ab23b9bf30a0a4321c8713e9668 on Base succeeded in block 50343626, transferring 0.25 ETH from 0x76F68ADF3D4eCFDd0725b1320fB25B6772754Ae2 to 0xecec48Ec5A7B7F7B96460b0F4E2B99cf0dB94Cb1."
-s=$(run "$OQ" "$OGT" "It was not 0.25 ETH that moved in block 50343626; 2.5 ETH did, from 0x76F68ADF3D4eCFDd0725b1320fB25B6772754Ae2 to 0xecec48Ec5A7B7F7B96460b0F4E2B99cf0dB94Cb1."); check "NEGPRED onchain denied amount crushed" "$s" "s < 0.15"
-s=$(run "$OQ" "$OGT" "Not a contract call but a plain transfer of 0.25 ETH from 0x76F68ADF3D4eCFDd0725b1320fB25B6772754Ae2 to 0xecec48Ec5A7B7F7B96460b0F4E2B99cf0dB94Cb1, succeeded in block 50343626."); check "NEGPRED 'not a call but a transfer' high" "$s" "s >= 0.6"
-s=$(run "$PQ" "Paris" "The capital of France is Paris.");                   check "SHORTGT 'Paris' covered high"          "$s" "s >= 0.9"
-s=$(run "$PQ" "Paris" "The capital of France is Lyon.");                    check "SHORTGT 'Paris' substituted low"       "$s" "s < 0.15"
-s=$(run "Did it succeed?" "Yes, the transaction succeeded." "Yes.");        check "SHORTGT yes-polarity match high"       "$s" "s >= 0.9"
-s=$(run "Did it succeed?" "Yes, the transaction succeeded." "No.");         check "SHORTGT yes/no mismatch low"           "$s" "s < 0.15"
-s=$(run "What is 6 times 7?" "42" "42");                                    check "SHORTGT numeric verbatim 1.0"          "$s" "s >= 0.99"
-
 # Empty question must not trap and self-match must still be 1.0.
 s_noq=$(run "" "$GT" "$GT")
 check "empty question self-match == 1"        "$s_noq"        "s >= 0.99"
