@@ -133,8 +133,9 @@ handing them over instead of keeping sole control of them:
 - **Review.** Any team can check every reference independently:
   `npm run verify:truth` and `npm run test:truth` run against the live API,
   and `src/truth` is the whole server. If a reference is wrong, open an issue
-  here. A confirmed wrong reference takes that source out of the pool until it
-  is fixed.
+  here. Once a wrong reference is confirmed, the API stops serving that kind
+  of answer until it is fixed: it returns an HTTP error, which the node leaves
+  out of the median.
 - **Co-ownership.** We are looking for another team, preferably one with no
   miner in these intents, to co-maintain the sources: review every change to
   `src/truth`, and run a mirror of the truth API from this code on their own
