@@ -54,8 +54,8 @@ not give the answer away. The kit's dataset gate on 1,200 pairs (seed 7):
 | eval negatives leaked into training | 0 | 0 |
 
 ```
-python3 generate_pairs.py --n 1200 --seed 7 > pairs.jsonl
-python3 generate_pairs.py --n 240 --seed 97 > test.jsonl
+python3 generate_pairs.py --n 1200 --seed 7 --out pairs.jsonl
+python3 generate_pairs.py --n 240 --seed 97 --out test.jsonl
 ```
 
 ## Training and package (version 1)

@@ -2,7 +2,7 @@
 
 Telegraph Protocol Season I, Track 2 (Script Author). A domain-aware scoring
 module for the `ONCHAIN_TX_LOOKUP` intent: instead of generic semantic
-similarity, it extracts typed on-chain facts (tx hashes, addresses, wei values,
+similarity, it extracts typed onchain facts (tx hashes, addresses, wei values,
 block numbers, tx status) from the ground truth and scores miner answers by
 weighted factual recall, with anti-gaming penalties.
 
@@ -81,7 +81,7 @@ go run . ../../../../target/wasm32-unknown-unknown/release/truvian_scorer.wasm \
   "<question>" "<ground truth>" "<miner answer>"
 ```
 
-## Submission (register on-chain)
+## Submission (register onchain)
 
 1. Host the **exact built bytes** of `truvian_scorer.wasm` at a stable public
    URL (any host; bytes must never change after registration).

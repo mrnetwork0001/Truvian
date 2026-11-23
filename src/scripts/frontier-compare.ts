@@ -14,11 +14,13 @@
  *   LLM_BASE_URL  e.g. https://…/v1   (POST {base}/chat/completions)
  *   LLM_API_KEY   bearer token, read from .env and never printed
  *   LLM_MODELS    comma-separated model ids
- * Run: npx tsx src/scripts/frontier-compare.ts [--dry]   (--dry reads the chain only)
+ * Run: npx tsx src/scripts/frontier-compare.ts [--agent] [--random [--seed N]] [--dry]
+ *   --dry reads the chain only; --random draws cases from live chain state
  */
 import 'dotenv/config';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { getClient } from '../config/chains.js';
+import { chainMeta, getClient, type SupportedChain } from '../config/chains.js';
+import { KNOWN_TOKENS } from '../config/tokens.js';
 import { handleSupply, validateSupplyInput, handleBalance, validateBalanceInput } from '../miner/holdings.js';
 import { handleLiquidity, validateLiquidityInput } from '../miner/liquidity.js';
 import { handleTransferVerify, validateTransferInput } from '../miner/transfer.js';
@@ -104,6 +106,110 @@ async function buildCases(): Promise<Case[]> {
     { id: 'plain-gas', desk: 'Execution (gas)', question: 'What is the gas price on Ethereum right now, in gwei? Give one number.',
       truth: gas.gas_price_gwei, truthText: `${gas.gas_price_gwei} gwei now`, tolerance: 0.5 },
   );
+  return cases;
+}
+
+/**
+ * --random [--seed N]: cases drawn from live chain state instead of chosen by
+ * hand, so nobody (us included) picked the examples. The seed and the drawn
+ * cases are saved with the run, so the draw can be checked; the chain state it
+ * read moves on, so a rerun draws new cases.
+ *  - fees and settlement of random transactions from recent blocks;
+ *  - native balances of the senders of those transactions;
+ *  - USD liquidity of pools that emitted a Uniswap-v3-style Swap in those blocks;
+ *  - total supplies of tokens drawn from the verified token table;
+ *  - each chain's gas price.
+ */
+const RANDOM_CHAINS: SupportedChain[] = ['ethereum', 'base', 'arbitrum', 'polygon', 'bsc'];
+/** Swap(address,address,int256,int256,uint160,uint128,int24): Uniswap v3 and its forks */
+const V3_SWAP = '0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67';
+
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+async function buildRandomCases(seed: number, perChain: { tx: number; balance: number; pool: number; supply: number }): Promise<Case[]> {
+  const rnd = mulberry32(seed);
+  const pick = <T,>(xs: readonly T[]) => xs[Math.floor(rnd() * xs.length)]!;
+  const cases: Case[] = [];
+  const skipped: string[] = [];
+  for (const chain of RANDOM_CHAINS) {
+    const meta = chainMeta(chain);
+    const client = getClient(chain);
+    const tip = await client.getBlock({ blockTag: 'latest' });
+    // a few blocks back, so every endpoint has the block and no model can have seen it
+    const blocks = await Promise.all([5, 8, 11].map((d) => client.getBlock({ blockNumber: tip.number - BigInt(d) })));
+    const hashes = blocks.flatMap((b) => b.transactions as `0x${string}`[]);
+    const senders = new Set<string>();
+    for (let i = 0, n = 0; n < perChain.tx && i < perChain.tx * 4; i++) {
+      const hash = pick(hashes);
+      try {
+        const tx = await handleTransferVerify(validateTransferInput({ tx_hash: hash, chain })) as any;
+        if (!(Number(tx.fee_total_native) > 0)) { skipped.push(`${chain} ${hash}: no fee`); continue; }
+        cases.push({
+          id: `rand-fee-${chain}-${n}`, desk: 'Settlement check (CRYPTO_TRANSFER_VERIFY)',
+          question: `Did ${meta.label} transaction ${hash} succeed, and exactly how much ${meta.nativeSymbol} did its sender pay in fees? Answer the fee as one number in ${meta.nativeSymbol}.`,
+          truth: Number(tx.fee_total_native), truthText: `${tx.status}, fee ${tx.fee_total_native} ${meta.nativeSymbol} (receipt, block ${tx.block_number})`, tolerance: 0.01,
+        });
+        if (tx.from) senders.add(String(tx.from));
+        n++;
+      } catch (e: any) { skipped.push(`${chain} ${hash}: ${e.message}`); }
+    }
+    for (const [n, address] of [...senders].slice(0, perChain.balance).entries()) {
+      try {
+        const b = await handleBalance(validateBalanceInput({ address, chain })) as any;
+        if (!(Number(b.balance) > 0)) { skipped.push(`${chain} ${address}: zero balance`); continue; }
+        cases.push({
+          id: `rand-balance-${chain}-${n}`, desk: 'Listing review / holdings proof (wallet balance)',
+          question: `What is the exact ${meta.nativeSymbol} balance of ${address} on ${meta.label} at block ${b.blockNumber}? Give one number in ${meta.nativeSymbol}.`,
+          truth: Number(b.balance), truthText: `${b.balance_exact} ${meta.nativeSymbol} at block ${b.blockNumber}`, tolerance: 0.01,
+        });
+      } catch (e: any) { skipped.push(`${chain} ${address}: ${e.message}`); }
+    }
+    const logs = await client.getLogs({ fromBlock: blocks[2]!.number, toBlock: blocks[0]!.number, topics: [V3_SWAP] } as any).catch(() => [] as any[]);
+    const pools = [...new Set(logs.map((l: any) => String(l.address)))];
+    for (let i = 0, n = 0; n < perChain.pool && i < perChain.pool * 4 && pools.length > 0; i++) {
+      const pool = pick(pools);
+      try {
+        const p = await handleLiquidity(validateLiquidityInput({ pool, chain })) as any;
+        if (!(Number(p.liquidity_usd) > 1000)) { skipped.push(`${chain} ${pool}: under $1,000`); continue; }
+        cases.push({
+          id: `rand-liquidity-${chain}-${n}`, desk: 'Token preflight (pool depth)',
+          question: `How much liquidity, in US dollars, does the pool ${pool} on ${meta.label} hold at block ${p.block_number}? Give one number in USD.`,
+          truth: Number(p.liquidity_usd), truthText: `$${p.liquidity_usd} (${(p.reserves ?? []).map((r: any) => r.symbol).join('/') || 'pool'} reserves at block ${p.block_number})`, tolerance: 0.05,
+        });
+        pools.splice(pools.indexOf(pool), 1);
+        n++;
+      } catch (e: any) { skipped.push(`${chain} ${pool}: ${e.message}`); }
+    }
+    const table = Object.entries(KNOWN_TOKENS[chain] ?? {});
+    for (let i = 0, n = 0; n < perChain.supply && i < perChain.supply * 4 && table.length > 0; i++) {
+      const [sym, t] = table.splice(Math.floor(rnd() * table.length), 1)[0]!;
+      try {
+        const s = await handleSupply(validateSupplyInput({ token: `${sym} (${t.address}) on ${meta.label}` })) as any;
+        cases.push({
+          id: `rand-supply-${chain}-${sym}`, desk: 'Token preflight / holdings proof (total supply)',
+          question: `What is the exact total supply of ${sym} (${t.address}) on ${meta.label} at block ${s.blockNumber}? Give one number in whole tokens.`,
+          truth: Number(s.total_supply), truthText: `${s.total_supply_exact} ${sym} at block ${s.blockNumber}`, tolerance: 0.005,
+        });
+        n++;
+      } catch (e: any) { skipped.push(`${chain} ${sym}: ${e.message}`); }
+    }
+    const gas = await handleGasPrice(validateGasPriceInput({ chain })) as any;
+    cases.push({
+      id: `rand-gas-${chain}`, desk: 'Execution (gas)',
+      question: `What is the gas price on ${meta.label} at block ${gas.blockNumber ?? 'the latest block'}, in gwei? Give one number.`,
+      truth: Number(gas.gas_price_gwei), truthText: `${gas.gas_price_gwei} gwei (eth_gasPrice)`, tolerance: 0.25,
+    });
+  }
+  if (skipped.length) console.log(`skipped while drawing (${skipped.length}):\n  ${skipped.join('\n  ')}`);
   return cases;
 }
 
@@ -198,7 +304,12 @@ async function main() {
   if (at > 0) return rescore(process.argv[at + 1]!);
   const dry = process.argv.includes('--dry');
   // a number-only prompt cannot ask a yes/no question, so that case runs only when the model may decline
-  const cases = (await buildCases()).filter((c) => CONDITION === 'may-decline' || c.expect === undefined);
+  const random = process.argv.includes('--random');
+  const seedAt = process.argv.indexOf('--seed');
+  const seed = seedAt > 0 ? Number(process.argv[seedAt + 1]) : Number((await getClient('ethereum').getBlockNumber()) % 1_000_000n);
+  if (random) console.log(`random draw, seed ${seed}`);
+  const cases = (random ? await buildRandomCases(seed, { tx: 4, balance: 3, pool: 2, supply: 2 }) : await buildCases())
+    .filter((c) => CONDITION === 'may-decline' || c.expect === undefined);
   console.log(`${cases.length} cases read from the chain`);
   for (const c of cases) console.log(`- ${c.id}: ${c.truthText}`);
   if (dry) return;
@@ -219,14 +330,15 @@ async function main() {
   }
   const date = new Date().toISOString().slice(0, 10);
   mkdirSync('docs/frontier-comparison', { recursive: true });
-  writeFileSync(`docs/frontier-comparison/${date}-${CONDITION}.json`, JSON.stringify({ ranAt: new Date().toISOString(), condition: CONDITION, system: SYSTEM, cases, results }, null, 2));
+  const stem = `docs/frontier-comparison/${date}${random ? '-random' : ''}-${CONDITION}`;
+  writeFileSync(`${stem}.json`, JSON.stringify({ ranAt: new Date().toISOString(), condition: CONDITION, system: SYSTEM, ...(random ? { seed } : {}), cases, results }, null, 2));
   const tally = (m: string, v: string) => results.filter((r) => r.model === m && r.verdict === v).length;
   const lines = [
     `| Model | Correct | Wrong | Declined | Empty | Errors |`, `|---|---|---|---|---|---|`,
     ...models.map((m) => `| ${m} | ${tally(m, 'correct')} | ${tally(m, 'wrong')} | ${tally(m, 'declined')} | ${tally(m, 'empty')} | ${tally(m, 'error')} |`),
     `| Truvian (chain reads) | ${cases.length} | 0 | 0 | 0 | 0 |`,
   ];
-  writeFileSync(`docs/frontier-comparison/${date}-${CONDITION}.md`, `${lines.join('\n')}\n`);
+  writeFileSync(`${stem}.md`, `${lines.join('\n')}\n`);
   console.log(`\n${lines.join('\n')}`);
 }
 
