@@ -124,6 +124,25 @@ All three were uploaded on 2026-11-21 and were `eligible` in the evaluation
 pool by 15:50 UTC the same day. As with the first three, eligible is not the
 same as used.
 
+### Open for review and co-ownership (from 2026-11-23)
+
+Telegraph asks evaluators not to build tests around their own miner. These
+three sources set references for intents our miner is scored on, so we are
+handing them over instead of keeping sole control of them:
+
+- **Review.** Any team can check every reference independently:
+  `npm run verify:truth` and `npm run test:truth` run against the live API,
+  and `src/truth` is the whole server. If a reference is wrong, open an issue
+  here. A confirmed wrong reference takes that source out of the pool until it
+  is fixed.
+- **Co-ownership.** We are looking for another team, preferably one with no
+  miner in these intents, to co-maintain the sources: review every change to
+  `src/truth`, and run a mirror of the truth API from this code on their own
+  server, so that no reference depends on our server alone. The descriptors
+  would then name both endpoints.
+- **Until someone takes this up,** the sources keep running as described
+  above, and every change to `src/truth` is a public commit.
+
 ## Known limits
 
 - The three newer sources are ours as well, so for those intents too they are
