@@ -7,7 +7,9 @@ liveness check and a scored batch at registration, a batch for the hidden
 benchmark, then live scoring once the intent is used. Keeping every executor
 resident leaves no memory for training, so the gate starts an executor's
 systemd unit when a request for it arrives, waits until it listens, forwards
-the request, and stops the unit after IDLE_SECONDS with no request.
+the request, and stops the unit after IDLE_SECONDS with no request. Starting one
+executor first stops any other that is not serving a request, so at most one
+is resident beside a training run unless two are called at the same moment.
 
 nginx sends every runnable-URL request here (127.0.0.1:8090). ROUTES maps a
 path prefix to a unit and its port; the first match wins, so "/" goes last.
@@ -56,6 +58,13 @@ def ensure_running(unit, port):
     with starting[unit]:
         if listening(port):
             return True
+        # one resident executor at a time beside training: stop the others that are not serving
+        for _, other, oport, _ in ROUTES:
+            with lock:
+                busy = state[other]["inflight"] > 0
+            if other != unit and not busy and listening(oport):
+                log(f"stopping {other} to make room for {unit}")
+                subprocess.run(["systemctl", "stop", other], check=False)
         log(f"starting {unit}")
         subprocess.run(["systemctl", "start", unit], check=False)
         deadline = time.time() + START_TIMEOUT
