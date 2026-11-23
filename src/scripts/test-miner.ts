@@ -704,6 +704,11 @@ async function main() {
     // two listed LUSD tokens: Liquity's is "Liquity USD" in the list and
     // "LUSD Stablecoin" by its name(); the list names alone chose 0x31a2E08F… ("LUSD")
     ['LUSD Stablecoin (LUSD) on Ethereum', 'ethereum', '0x5f98805A4E8be255a32880FDeC7F6728C6568bA0'],
+    // 2026-11-23 02:15 UTC and earlier: words given alone, answered from the
+    // verified table (they were refused until AAVE, PEPE and STORJ were added)
+    ['Aave on Ethereum', 'ethereum', '0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9'],
+    ['PEPE on Ethereum', 'ethereum', '0x6982508145454Ce325dDbE47a25d4ec3d2311933'],
+    ['STORJ on Ethereum', 'ethereum', '0xB64ef51C888972c908CFacf59B47C1AfBC0Ab8aC'],
   ];
   for (const [question, chain, address] of nodeQuestions) {
     try {
@@ -939,7 +944,8 @@ async function main() {
         c.readContract({ address: t.address, abi: erc20, functionName: 'decimals' }),
         c.readContract({ address: t.address, abi: erc20, functionName: 'name' }),
       ]).catch(() => ['?', -1, '?'] as const);
-      const symOk = onSym === sym || (sym === 'USDT' && /^USD(₮|T)0$/.test(String(onSym)));
+      // keys are symbolKey()s, as the lookup makes them: stETH and cbETH are keyed STETH and CBETH
+      const symOk = symbolKey(String(onSym)) === sym || (sym === 'USDT' && /^USD(₮|T)0$/.test(String(onSym)));
       const nameOk = nameAgreement(String(onName), KNOWN_TOKEN_NAMES[sym] ?? []) > 0;
       if (!symOk || !nameOk || Number(onDec) !== t.decimals) tokenMismatches.push(`${chain} ${sym}: ${onSym}/${onDec}/${onName}`);
     }

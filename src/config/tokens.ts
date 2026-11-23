@@ -3,7 +3,9 @@
  * symbol instead of address ("the USDC balance of 0x… on Base").
  *
  * Every entry was checked on-chain on 2026-11-20 (symbol() and decimals()
- * against each address). On Arbitrum and Polygon the canonical USDT contract
+ * against each address); the AAVE to ARB and cbETH entries were added and
+ * checked the same way on 2026-11-23, after the node asked for AAVE, PEPE,
+ * STORJ, UNI, cbETH and OP by symbol alone. On Arbitrum and Polygon the canonical USDT contract
  * now reports its symbol as USD₮0 / USDT0; it is still listed as USDT, the
  * name callers use. A token given by address needs no entry here: its
  * decimals and symbol are read from the contract.
@@ -28,11 +30,21 @@ export const KNOWN_TOKENS: Partial<Record<SupportedChain, Record<string, KnownTo
     DAI: { address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', decimals: 18 },
     WETH: { address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18 },
     WBTC: { address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', decimals: 8 },
+    AAVE: { address: '0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9', decimals: 18 },
+    UNI: { address: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', decimals: 18 },
+    LINK: { address: '0x514910771AF9Ca656af840dff83E8264EcF986CA', decimals: 18 },
+    LDO: { address: '0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32', decimals: 18 },
+    PEPE: { address: '0x6982508145454Ce325dDbE47a25d4ec3d2311933', decimals: 18 },
+    SHIB: { address: '0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE', decimals: 18 },
+    STORJ: { address: '0xB64ef51C888972c908CFacf59B47C1AfBC0Ab8aC', decimals: 8 },
+    STETH: { address: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84', decimals: 18 },
+    CBETH: { address: '0xBe9895146f7AF43049ca1c1AE358B0541Ea49704', decimals: 18 },
   },
   base: {
     USDC: { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6 },
     WETH: { address: '0x4200000000000000000000000000000000000006', decimals: 18 },
     DAI: { address: '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb', decimals: 18 },
+    CBETH: { address: '0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22', decimals: 18 },
   },
   arbitrum: {
     USDC: { address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', decimals: 6 },
@@ -40,12 +52,14 @@ export const KNOWN_TOKENS: Partial<Record<SupportedChain, Record<string, KnownTo
     WETH: { address: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', decimals: 18 },
     WBTC: { address: '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f', decimals: 8 },
     DAI: { address: '0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1', decimals: 18 },
+    ARB: { address: '0x912CE59144191C1204E64559FE8253a0e49E6548', decimals: 18 },
   },
   optimism: {
     USDC: { address: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', decimals: 6 },
     USDT: { address: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58', decimals: 6 },
     WETH: { address: '0x4200000000000000000000000000000000000006', decimals: 18 },
     DAI: { address: '0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1', decimals: 18 },
+    OP: { address: '0x4200000000000000000000000000000000000042', decimals: 18 },
   },
   polygon: {
     USDC: { address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', decimals: 6 },
@@ -74,4 +88,15 @@ export const KNOWN_TOKEN_NAMES: Record<string, readonly string[]> = {
   DAI: ['Dai Stablecoin', 'Dai'],
   WETH: ['Wrapped Ether', 'WETH'],
   WBTC: ['Wrapped BTC', 'Wrapped Bitcoin'],
+  AAVE: ['Aave Token', 'Aave'],
+  UNI: ['Uniswap'],
+  LINK: ['ChainLink Token', 'Chainlink'],
+  LDO: ['Lido DAO Token', 'Lido DAO'],
+  PEPE: ['Pepe'],
+  SHIB: ['SHIBA INU', 'Shiba Inu'],
+  STORJ: ['StorjToken', 'Storj'],
+  STETH: ['Liquid staked Ether 2.0', 'Lido Staked Ether'],
+  CBETH: ['Coinbase Wrapped Staked ETH'],
+  ARB: ['Arbitrum'],
+  OP: ['Optimism'],
 };
