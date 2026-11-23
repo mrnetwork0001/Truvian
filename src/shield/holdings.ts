@@ -159,13 +159,13 @@ function claimFindings(read: HoldingRead, wallet: string): Finding[] {
  */
 export function balanceFindings(p: Purchase | undefined, read: HoldingRead, wallet: string): Finding[] {
   const sym = labelOf(read);
-  if (!p || !p.ok || !p.fields) return [unavailable(p, 'balance', `${sym} wallet balance`)];
+  if (!p || !p.ok || !p.fields) return [unavailable(p, 'balance', 'Wallet balance')];
   const answeredFor = typeof p.fields.address === 'string' ? p.fields.address.trim() : '';
   if (/^0x[0-9a-fA-F]{40}$/.test(answeredFor) && answeredFor.toLowerCase() !== wallet.toLowerCase()) {
-    return [{ rule: 'balance.not_about_wallet', severity: 'review', title: `${sym} wallet balance: about another address`, detail: `The answer gives a balance of ${String(p.fields.balance)} for ${answeredFor}${answeredFor.toLowerCase() === read.token.toLowerCase() ? ', the token contract itself,' : ''} not for the wallet ${wallet}, so it is no evidence about this holding.`, source: 'telegraph', evidence: ['balance'] }];
+    return [{ rule: 'balance.not_about_wallet', severity: 'review', title: 'Wallet balance: about another address', detail: `The answer gives a balance of ${String(p.fields.balance)} for ${answeredFor}${answeredFor.toLowerCase() === read.token.toLowerCase() ? ', the token contract itself,' : ''} not for the wallet ${wallet}, so it is no evidence about this holding.`, source: 'telegraph', evidence: ['balance'] }];
   }
   const told = num(p.fields.balance);
-  if (told === null) return [{ rule: 'balance.missing', severity: 'review', title: `${sym} wallet balance: no figure`, detail: `The answer carried no balance (field status ${JSON.stringify(p.fieldStatus)}).`, source: 'telegraph', evidence: ['balance'] }];
+  if (told === null) return [{ rule: 'balance.missing', severity: 'review', title: 'Wallet balance: no figure', detail: `The answer carried no balance (field status ${JSON.stringify(p.fieldStatus)}).`, source: 'telegraph', evidence: ['balance'] }];
   if (read.balance === null) return [{ rule: 'balance.chain_only', severity: 'info', title: `${sym}: Telegraph says ${told.toLocaleString('en-US')}`, detail: 'There is no chain read to compare it with.', source: 'telegraph', evidence: ['balance'] }];
   const chain = Number(read.balance);
   const bps = relDiffBps(told, chain);
@@ -185,7 +185,7 @@ function floatFindings(read: HoldingRead): Finding[] {
 
 /** Prefix a shared rule's title with the holding it is about. */
 const about = (read: HoldingRead, findings: Finding[]): Finding[] =>
-  findings.map((f) => (f.title.startsWith(`${labelOf(read)}:`) ? f : { ...f, title: `${labelOf(read)}: ${f.title}` }));
+  findings.map((f) => (f.title.startsWith(`${labelOf(read)}:`) || f.title.startsWith(`${labelOf(read)} `) ? f : { ...f, title: `${labelOf(read)}: ${f.title}` }));
 
 /**
  * The decision from the evidence. Pure: the same chain reads and answers

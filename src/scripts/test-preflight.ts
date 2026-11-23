@@ -698,6 +698,14 @@ const ensReq = { chain: 'ethereum' as const, wallet: ENS_WALLET };
   const verified = evaluateHoldings(ensReq, [usdcHeld, ensHeld], agreeing);
   check('holdings: covered claims with agreeing answers are VERIFIED', verified.decision === 'VERIFIED', verified.findings.filter((f) => f.severity === 'review' || f.severity === 'block').map((f) => f.rule).join(','));
 
+  // Second live proof, 2026-11-23 09:09 UTC (memo mQ0zqydQ), signal 0x0d89b227747709ae0b8b0c8472ef5aec5391388e172fe53ccf57ff10f7e8bac1
+  // (miner 9002 TxLens): this time for the wallet, but 4,499.79 "ENS" where the chain holds 8,632,326.6
+  const balanceEnsLive2 = bought('balance', 'WALLET_BALANCE_CHECK_GENERAL', { address: ENS_WALLET, chain: 'eth', balance: 4499.789408, token_symbol: 'ENS', as_of: '2026-11-23T09:09:14.985Z' }, { address: 'ok', chain: 'ok', balance: 'ok', token_symbol: 'ok', as_of: 'ok' }, { holding: 1, minerId: '9002' });
+  const live2 = evaluateHoldings(ensReq, [ensHeld], [{ ...balanceEnsLive2, holding: 0 }, { ...supplyEnsHeld, holding: 0 }]);
+  check('holdings: the live 4,499.79 ENS answer for the wallet is a conflict (9995 bps): REVIEW', live2.decision === 'REVIEW' && live2.findings.some((f) => f.rule === 'balance.conflict' && /9995 bps/.test(f.detail)));
+  const titles = evaluateHoldings(ensReq, [usdcHeld], [balanceUsdcLive]).findings.map((f) => f.title);
+  check('holdings: a title already naming the holding is not prefixed twice', titles.every((t) => !/^USDC: USDC /.test(t)), titles.join(' | '));
+
   const conflict = evaluateHoldings(ensReq, [usdcHeld], [forWallet(balanceUsdcLive, 2_000_000), supplyUsdcHeld]);
   check('holdings: a wallet balance 18% off the chain read needs review', conflict.decision === 'REVIEW' && conflict.findings.some((f) => f.rule === 'balance.conflict'));
 
