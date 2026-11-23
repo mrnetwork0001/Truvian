@@ -34,6 +34,8 @@ import {
   type PreflightRequest,
 } from '../shield/preflight.js';
 import { canonicalJson, memoDigest, signMemo, verifyMemo } from '../shield/memo.js';
+import { asPreflightRequest, balanceFindings, evaluateHoldings, normalizeHoldingsRequest } from '../shield/holdings.js';
+import type { HoldingRead } from '../shield/preflight.js';
 import {
   askPinnedIntent,
   errorBodyText,
@@ -638,6 +640,118 @@ const wethGoPlusScan = bought('security', 'SECURITY_REVIEW_GENERAL', {
   const generic = stubDeps(securityRanking, { ...named, fields: { ...named.fields!, summary: 'Secure. There are no injection vectors, authentication, or exposure concerns present. No further issues identified.' } });
   const g = await withSecondOpinion({ key: 'security', intent: 'SECURITY_REVIEW_GENERAL', params: {} }, typed(secureQueryOnly, {}), usdcCtx, generic.deps);
   check('security: a pinned "Secure" that names no token is not used either', g.secondOpinion?.used === false && /does not mention this token/.test(g.secondOpinion?.outcome ?? ''), g.secondOpinion?.outcome);
+}
+
+// ---------- unit: holdings proof (Mission 13) ----------
+// Chain reads and answers from the live proof of 2026-11-23 09:03 UTC (memo sha256 bf1e9979…):
+// the ENS DAO timelock 0xFe89cc7a… claimed to hold 2,400,000 USDC and 8,600,000 ENS, ENS rebalanced
+// through the ENS / WETH 0.3% Uniswap v3 pool. Signal hashes are kept so each answer can be resolved.
+
+const ENS_WALLET = '0xFe89cc7aBB2C4183683ab71653C4cdc9B02D44b7' as const;
+const ENS = '0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72' as const;
+const ENS_WETH_POOL = '0x92560C178cE069CC014138eD3C2F5221Ba71f58a' as const;
+const UNI = '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984' as const;
+const UNI_TIMELOCK = '0x1a9C8182C09F50C8318d769245beA52c32BE35BC' as const;
+const holdingFacts = (over: Partial<TokenFacts>): TokenFacts => ({
+  chain: 'ethereum', chainId: 1, chainLabel: 'Ethereum', address: USDC, block: '26476790', blockTime: '2026-11-23T08:58:35.000Z',
+  isContract: true, codeBytes: 1, delegatedTo: null, name: null, symbol: null, decimals: 18, totalSupplyRaw: null, totalSupply: null, proxy: null, owner: null, ...over,
+});
+const usdcHeld: HoldingRead = {
+  token: USDC, claimed: '2400000', pool: null, balanceRaw: '2435008157713', balance: '2435008.157713',
+  facts: holdingFacts({ address: USDC, codeBytes: 2186, name: 'USD Coin', symbol: 'USDC', decimals: 6, totalSupplyRaw: '44348048815126902', totalSupply: '44348048815.126902' }),
+};
+const ensHeld: HoldingRead = {
+  token: ENS, claimed: '8600000', pool: ENS_WETH_POOL, balanceRaw: '8632326596646019731884049', balance: '8632326.596646019731884049',
+  facts: holdingFacts({ address: ENS, codeBytes: 18709, name: 'Ethereum Name Service', symbol: 'ENS', decimals: 18, totalSupplyRaw: '100000000000000000000000000', totalSupply: '100000000', owner: ENS_WALLET }),
+};
+// signals 0xcb5a6bdd6c87a46407591a482843ae5c0d7caf55343dfa36ef65f4c8750627f0 and 0x4ccd09d7a4325a978cdfa4733a5b0e4d2c404900e6e890a69151be4f7f6c4841
+// (miner 9002 TxLens, served rank 1): balance 0 for the TOKEN contract's address, not the wallet asked about
+const balanceUsdcLive = bought('balance', 'WALLET_BALANCE_CHECK_GENERAL', { address: USDC, chain: 'eth', balance: 0, token_symbol: 'USDC', as_of: '2026-11-23T09:00:09.749Z' }, { address: 'ok', chain: 'ok', balance: 'ok', token_symbol: 'ok', as_of: 'ok' }, { holding: 0, minerId: '9002', minerName: 'TxLens', signalHash: '0xcb5a6bdd6c87a46407591a482843ae5c0d7caf55343dfa36ef65f4c8750627f0' });
+const balanceEnsLive = bought('balance', 'WALLET_BALANCE_CHECK_GENERAL', { address: ENS, chain: 'eth', balance: 0, token_symbol: 'ENS', as_of: '2026-11-23T09:01:07.889Z' }, { address: 'ok', chain: 'ok', balance: 'ok', token_symbol: 'ok', as_of: 'ok' }, { holding: 1, minerId: '9002', minerName: 'TxLens', signalHash: '0x4ccd09d7a4325a978cdfa4733a5b0e4d2c404900e6e890a69151be4f7f6c4841' });
+// signals 0xb4c0f6708999732ddf52bc05ae16d656b5e2e35e1b7f215b75016ebb0031f503 and 0x9638ebbb87b6bff473ebf75b12125c5cc70e3f49e6aea08d17717756054f0811 (miner 4433 LiveCert)
+const supplyUsdcHeld = bought('supply', 'TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL', { total_supply: 44345909570.684204 }, { total_supply: 'ok' }, { holding: 0, minerId: '4433' });
+const supplyEnsHeld = bought('supply', 'TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL', { total_supply: 100000000 }, { total_supply: 'ok' }, { holding: 1, minerId: '4433' });
+// signal 0x641d5c4be1eb62cb7b379568eaca704f0f582dbf3d38a2177973a77d63927421 (miner 20260828, served rank 3)
+const liquidityEnsPool = bought('liquidity', 'LIQUIDITY_DEPTH_VERIFY_GENERAL', { liquidity_usd: 723055.2 }, { liquidity_usd: 'ok' }, { holding: 1, minerId: '20260828' });
+const ensProofLive = [balanceUsdcLive, supplyUsdcHeld, balanceEnsLive, supplyEnsHeld, liquidityEnsPool];
+// The same answers as a miner that reads the wallet would give them: address the wallet, balance the chain read
+const forWallet = (p: Purchase, balance: number): Purchase => ({ ...p, fields: { ...p.fields!, address: ENS_WALLET, balance } });
+const ensReq = { chain: 'ethereum' as const, wallet: ENS_WALLET };
+
+{
+  const live = evaluateHoldings(ensReq, [usdcHeld, ensHeld], ensProofLive);
+  check('holdings: the live ENS DAO proof is REVIEW, not VERIFIED', live.decision === 'REVIEW', live.decision);
+  check('holdings: both claims are covered on the chain', live.findings.filter((f) => f.rule === 'holding.covered').length === 2);
+  check('holdings: a balance answered for the token contract is "about another address", not a pass',
+    live.findings.filter((f) => f.rule === 'balance.not_about_wallet').length === 2 && !live.findings.some((f) => f.rule === 'balance.agrees'),
+    live.findings.filter((f) => f.evidence.includes('balance')).map((f) => f.rule).join(','));
+  check('holdings: the live supplies agree with the chain (USDC 0.48 bps apart)', live.findings.filter((f) => f.rule === 'supply.agrees').length === 2);
+  check('holdings: the ENS share of float is stated from the chain read (8.6323%)', live.findings.some((f) => f.rule === 'holding.float_share' && f.title === 'ENS: 8.6323% of supply'));
+  check('holdings: the rebalancing pool depth is stated ($723,055)', live.findings.some((f) => f.rule === 'liquidity.ok' && /\$723,055/.test(f.title)));
+  check('holdings: every finding names its holding', live.findings.every((f) => /^(USDC|ENS):/.test(f.title)), live.findings.map((f) => f.title).find((t) => !/^(USDC|ENS):/.test(t)));
+
+  const ctx = { req: asPreflightRequest(ensReq, usdcHeld), facts: usdcHeld.facts, treasuryRead: null, judge: (x: Purchase) => balanceFindings(x, usdcHeld, ENS_WALLET) };
+  check('holdings: the live TxLens balance answer is no evidence, so a second opinion is asked', noEvidence(balanceUsdcLive, ctx)?.rule === 'balance.not_about_wallet');
+  check('holdings: a balance for the wallet that agrees is evidence', noEvidence(forWallet(balanceUsdcLive, 2435008.157713), ctx) === null);
+
+  const agreeing = [forWallet(balanceUsdcLive, 2435008.157713), supplyUsdcHeld, forWallet(balanceEnsLive, 8632326.596646), supplyEnsHeld, liquidityEnsPool];
+  const verified = evaluateHoldings(ensReq, [usdcHeld, ensHeld], agreeing);
+  check('holdings: covered claims with agreeing answers are VERIFIED', verified.decision === 'VERIFIED', verified.findings.filter((f) => f.severity === 'review' || f.severity === 'block').map((f) => f.rule).join(','));
+
+  const conflict = evaluateHoldings(ensReq, [usdcHeld], [forWallet(balanceUsdcLive, 2_000_000), supplyUsdcHeld]);
+  check('holdings: a wallet balance 18% off the chain read needs review', conflict.decision === 'REVIEW' && conflict.findings.some((f) => f.rule === 'balance.conflict'));
+
+  const nothing = evaluateHoldings(ensReq, [usdcHeld, ensHeld], []);
+  check('holdings: with nothing bought the proof cannot be VERIFIED', nothing.decision === 'REVIEW' && nothing.findings.some((f) => f.rule === 'balance.unavailable'));
+
+  // The Uniswap timelock held 262,247,996.305835021033106178 UNI at block 26476779 (read 2026-11-23)
+  const uniHeld: HoldingRead = {
+    token: UNI, claimed: '300000000', pool: null, balanceRaw: '262247996305835021033106178', balance: '262247996.305835021033106178',
+    facts: holdingFacts({ address: UNI, block: '26476779', name: 'Uniswap', symbol: 'UNI', totalSupplyRaw: '1000000000000000000000000000', totalSupply: '1000000000' }),
+  };
+  const uniAgreeing = bought('balance', 'WALLET_BALANCE_CHECK_GENERAL', { address: UNI_TIMELOCK, chain: 'ethereum', balance: 262247996.305835, token_symbol: 'UNI' }, { balance: 'ok' }, { holding: 0 });
+  const short = evaluateHoldings({ chain: 'ethereum', wallet: UNI_TIMELOCK }, [uniHeld], [uniAgreeing]);
+  check('holdings: 300M UNI claimed against 262.2M held is REJECT, even with every answer agreeing', short.decision === 'REJECT' && short.findings.some((f) => f.rule === 'holding.short' && f.severity === 'block'), short.findings.find((f) => f.rule === 'holding.short')?.detail);
+  check('holdings: the shortfall is stated exactly', short.findings.some((f) => f.rule === 'holding.short' && /37752003\.694164978966893822 missing/.test(f.detail)));
+
+  const within = evaluateHoldings(ensReq, [{ ...usdcHeld, claimed: '2436000' }], [forWallet(balanceUsdcLive, 2435008.157713), supplyUsdcHeld]);
+  check('holdings: a claim 4 bps above the chain read is covered (tolerance 10 bps)', within.decision === 'VERIFIED' && within.findings.some((f) => f.rule === 'holding.covered' && /within the 10 bps tolerance/.test(f.detail)));
+
+  const notToken = evaluateHoldings(ensReq, [{ ...usdcHeld, token: ENS_WALLET, balanceRaw: null, balance: null, facts: holdingFacts({ address: ENS_WALLET, isContract: false, codeBytes: 0, decimals: null }) }], []);
+  check('holdings: a "holding" with no contract code is REJECT', notToken.decision === 'REJECT' && notToken.findings[0]?.rule === 'holding.not_a_contract');
+
+  const tooFine = evaluateHoldings(ensReq, [{ ...usdcHeld, claimed: '1.1234567' }], []);
+  check('holdings: a claim with more decimals than the token needs review', tooFine.findings.some((f) => f.rule === 'holding.claim_unreadable'));
+}
+
+// The engine's second-opinion rule holds here too: a pinned answer may hold a holding back but never clear one
+// whose ranked answer was about another address.
+{
+  const ctx = { req: asPreflightRequest(ensReq, usdcHeld), facts: usdcHeld.facts, treasuryRead: null, judge: (x: Purchase) => balanceFindings(x, usdcHeld, ENS_WALLET), spend: new Spend(0.1, 0.05) };
+  const ranking: IntentRanking = { intent: 'WALLET_BALANCE_CHECK_GENERAL', epoch: 38, miners: [
+    { minerId: '9002', slug: 'txlens', name: 'TxLens', rank: 1, score: 0.5, priceUsd: 0.01 },
+    { minerId: '6180', slug: 'truvian-onchain-truth', name: 'Truvian', rank: 2, score: 0.5, priceUsd: 0.01 },
+  ] } as IntentRanking;
+  const deps: OpinionDeps = {
+    ranking: async () => ranking,
+    askPinned: async (minerId, intent, params) => ({ intent, params, ok: true, fields: { address: ENS_WALLET, chain: 'ethereum', balance: 2435008.157713, token_symbol: 'USDC' }, fieldStatus: { balance: 'ok' }, minerId, costUsd: 0.01, latencyMs: 1000 }),
+  };
+  const first: TypedAnswer = { intent: 'WALLET_BALANCE_CHECK_GENERAL', params: {}, ok: true, fields: balanceUsdcLive.fields, fieldStatus: balanceUsdcLive.fieldStatus, minerId: '9002', costUsd: 0.01, latencyMs: 20_000 };
+  const r = await withSecondOpinion({ key: 'balance', intent: 'WALLET_BALANCE_CHECK_GENERAL', params: {} }, first, ctx, deps);
+  check('holdings: the wrong-address answer gets a second opinion from the next-best miner, not TxLens again', r.secondOpinion?.reasonRule === 'balance.not_about_wallet' && r.secondOpinion.miner?.id === '6180');
+  check('holdings: a clean second opinion is recorded but does not clear the holding', r.secondOpinion?.used === false && r.minerId === '9002');
+}
+
+{
+  const rejects = (body: unknown, re: RegExp) => {
+    try { normalizeHoldingsRequest(body); return false; } catch (e) { return e instanceof PreflightInputError && re.test(e.message); }
+  };
+  check('holdings input: a wallet is required', rejects({ mode: 'holdings', chain: 'ethereum', holdings: [{ token: USDC, claimed: '1' }] }, /wallet/));
+  check('holdings input: at most 3 holdings', rejects({ mode: 'holdings', chain: 'ethereum', wallet: ENS_WALLET, holdings: [USDC, ENS, UNI, WETH].map((token) => ({ token, claimed: '1' })) }, /at most 3/));
+  check('holdings input: a token listed twice is refused', rejects({ mode: 'holdings', chain: 'ethereum', wallet: ENS_WALLET, holdings: [{ token: USDC, claimed: '1' }, { token: USDC.toLowerCase(), claimed: '2' }] }, /repeats/));
+  check('holdings input: a zero or negative claim is refused', rejects({ mode: 'holdings', chain: 'ethereum', wallet: ENS_WALLET, holdings: [{ token: USDC, claimed: '0' }] }, /positive/) && rejects({ mode: 'holdings', chain: 'ethereum', wallet: ENS_WALLET, holdings: [{ token: USDC, claimed: '-5' }] }, /positive/));
+  const ok = normalizeHoldingsRequest({ mode: 'holdings', chain: 'ethereum', wallet: ENS_WALLET.toLowerCase(), holdings: [{ token: ENS.toLowerCase(), claimed: '8,600,000', pool: ENS_WETH_POOL.toLowerCase() }] });
+  check('holdings input: addresses checksummed, thousands commas dropped', ok.wallet === ENS_WALLET && ok.holdings[0]!.token === ENS && ok.holdings[0]!.claimed === '8600000' && ok.holdings[0]!.pool === ENS_WETH_POOL);
 }
 
 // ---------- unit: input ----------
