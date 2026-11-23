@@ -23,6 +23,26 @@ package URL pinned to commit `e6e17a8`, runnable URL
 check (11 of 15) and the hidden round against the seed champion. Progress:
 `GET https://devnode.telegraphprotocol.com/api/wasm/211`.
 
+**v1 rejected, 2026-11-23 18:17 UTC:** at the runnable URL it ordered 7 of
+the node's 15 public pairs (46.7%, below the 70% floor). The batch was logged
+(`input_root` included) and decoded on the scorer server; it is kept there,
+not here, because the pool does not publish its rows. The 15 pairs were of
+four kinds, and v1 was trained on part of one:
+
+| Kind | Pairs | What separates the answers |
+|---|---|---|
+| Evaluation of a model output, as "Verdict: Poor, 2 out of 10. Errors: … Strengths: …", "Rating: … Score: …/10" or JSON | 7 | the rating that matches whether the output is true (misconceptions, false premises, hallucinated details), or a rating that contradicts its own errors |
+| Workflow case ("case 5 concerns …") | 4 | an answer naming the issue, its consequence and a bounded next step, against a generic one |
+| Direct factual answer | 2 | the right fact against a wrong one of the same type |
+| Passage extraction | 2 | the passage's sentence word for word against one with a phrase swapped |
+
+v2 ([`generate_pairs_v2.py`](generate_pairs_v2.py)) generates all four kinds
+from our own facts and wording. Kit dataset gate PASS on 1,400 pairs: surface
+probe 59.2%, length shortcut 56.5%, unique negatives 100%, held-out leak 0%
+(`dedupe_test.py` drops held-out pairs whose negative is in training). Before
+v2 is registered, the logged batch is replayed against it with
+[`replay-log.py`](../../deploy/scorer/replay-log.py).
+
 ## Training data: `generate_pairs.py`
 
 A pair is (question, better evaluation, worse evaluation). The better one is
