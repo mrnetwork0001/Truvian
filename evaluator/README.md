@@ -20,6 +20,24 @@ wrong, so each one here is checked against the chain before it is uploaded.
 
 Bounties: `telegraphprotocol/bounties` #87 and #179.
 
+## Adapters
+
+Judgment intents have no single right answer, so the node scores them with an
+adapter: a LoRA layer on Telegraph's shared ModernBERT-base model that must
+rank the better of two answers higher. We have two, each with its pair
+generator, package and runbook in its own folder.
+
+| Folder | Intent | Registration | Result |
+|---|---|---|---|
+| [`adapter/`](adapter/) | `SMART_CONTRACT_AUDIT` | id 187, Nov 22 ([`/api/wasm/187`](https://devnode.telegraphprotocol.com/api/wasm/187)) | **Champion**: the intent's first Canonical adapter, 83.33% of 30 hidden pairs (floor 70%). v1 (id 175) and v2 (id 182) were rejected on the public pairs first |
+| [`adapter-oer/`](adapter-oer/) | `OPTIMAL_EXECUTION_ROUTE` | id 209, Nov 23 ([`/api/wasm/209`](https://devnode.telegraphprotocol.com/api/wasm/209)) | Pending (`awaiting_compatible_material` at 12:44 UTC); 96.67% of our 240 held-out pairs. No adapter had held this intent: three earlier ones had unreachable executors and one ordered 10 of the node's 15 public pairs |
+
+Our miner does not serve `OPTIMAL_EXECUTION_ROUTE`, so that adapter never
+scores our own answers. Both executors run on the scorer VPS behind
+`scorer.truvian.xyz` (`/runnable` and `/oer/runnable`), and each logs the
+node's requests so a rejected version can be retrained against the batch
+the node actually sent, as v3 of the first adapter was.
+
 ## What was verified
 
 `npm run verify:truth` builds each request from the descriptor itself, reads

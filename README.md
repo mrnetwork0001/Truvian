@@ -43,6 +43,8 @@ Built for Telegraph Protocol Season II (Nov 1 to Dec 1, 2026) · **Independent e
 | **Pay per run** | Past the free allowance Shield answers with HTTP status 402, Payment Required, and a price under x402, a protocol for paying per request over that status: $0.05 test USDC on Base Sepolia (`SHIELD_PRICE_USD`). `/app` signs it in the visitor's own browser wallet; agents send an `X-PAYMENT` header. Nobody has paid yet: `earnedUsd` was 0 on Nov 21. | `/app` after 5 runs, or any client |
 | **Live stats** | Counters across both seasons. On Nov 21 at 10:07 UTC: 15 pre-sign checks (10 of them from September), 8 preflights, 73 Telegraph requests and $0.57 recorded as paid. Nearly all are our own test runs: every preflight, and at least 4 of the 5 checks since September. Costs recorded before Nov 21 at 08:20 UTC understate what the node billed (see below). | [`/api/stats`](https://truvian.xyz/api/stats) |
 | **Adapter** | A `SMART_CONTRACT_AUDIT` adapter, a low-rank adaptation (LoRA) layer on Telegraph's ModernBERT-base model, trained on the evaluation pool's three answer formats. Registered on Nov 22 as id 187, it is the intent's **first Canonical adapter and its champion**: the node ranked 83.33% of 30 hidden pairs correctly (floor 70%). Nothing calls the intent yet, because `SMART_CONTRACT_AUDIT_GENERAL` has not opened ([bounties#224](https://github.com/telegraphprotocol/bounties/issues/224)). | [`evaluator/adapter/`](evaluator/adapter), [`/api/wasm/187`](https://devnode.telegraphprotocol.com/api/wasm/187) |
+| **Second adapter** | An `OPTIMAL_EXECUTION_ROUTE` adapter for an intent with no champion and an intent our miner does not serve, so it scores other teams' miners only. Trained on pairs where the worse answer has one fault a judge can check in the text (units, direction, token, chain, a contradiction, no figure), it ranked 96.67% of 240 held-out pairs correctly. Registered on Nov 23 as id 209 with its own executor at `scorer.truvian.xyz/oer/runnable`; on Nov 23 at 12:44 UTC the node had it pending, `awaiting_compatible_material`. | [`evaluator/adapter-oer/`](evaluator/adapter-oer), [`/api/wasm/209`](https://devnode.telegraphprotocol.com/api/wasm/209) |
+| **Model comparison** | Four frontier models (Claude Opus 5.5, GPT-6.1, Gemini 3.1 Pro, DeepSeek V4 Pro, no tools) against our chain reads on the facts the desks buy. No model gave a correct live figure. Allowed to decline, they declined 36 of 40; asked for a bare number, Gemini got 9 of 10 wrong (a $290M pool that holds $71M, 245.5 ETH in a wallet that holds 5.80). Small sample: read it as an illustration, not a rate. | [`docs/FRONTIER-COMPARISON.md`](docs/FRONTIER-COMPARISON.md) |
 
 The `/preflight` header carries the Truvian logo, a *Telegraph Season II · Apps & Agents* badge and links to the pre-sign check and the method. Two tabs pick the desk; **Try one:** fills the form with a fixture, and nothing runs until **Run preflight** is pressed. No login or wallet code loads. Answers stream in as they land (newline-delimited JSON, or NDJSON, with `?stream=1`), each with its miner, rank, cost, latency, receipt and node signal. Then come the decision and its cost line, the findings sorted block, review, info, pass, Shield's chain read under the label *Truvian's own JSON-RPC reads, not Telegraph* (JSON-RPC: the remote procedure call interface every Ethereum node serves), and **Verify signature**, **Download memo (JSON)** and **Permalink**.
 
@@ -145,7 +147,9 @@ flowchart TB
     direction TB
     TRUTH["Truth API, truth.truvian.xyz<br/>two archives must agree"]
     ADAPT["SMART_CONTRACT_AUDIT<br/>adapter, id 187,<br/>champion"]
+    ADAPT2["OPTIMAL_EXECUTION_ROUTE<br/>adapter, id 209,<br/>pending"]
     TRUTH ~~~ ADAPT
+    ADAPT ~~~ ADAPT2
   end
 
   subgraph Chains["Chains"]
@@ -384,7 +388,7 @@ The memo says **REVIEW** after 37.4 s for $0.04, and its simulated buy was not p
 | Chain reads at one block over public JSON-RPC on mainnets (Ethereum, BNB Smart Chain and others), labelled *Truvian chain registry, not Telegraph* | Settlement: answers are paid in **test USDC** from an Anjoman escrow on Ethereum Sepolia, a testnet, and every memo says so in `network.settlement` |
 | Signed memos: EIP-191 by `0x956aECB0b0DEfC2f2631C26ec0FF7366Ebb53245`, verifiable offline | Shield's x402 charges are test USDC on Base Sepolia (`0x036CbD53842c5426634e7929541eC2318f3dCF7e`); none collected yet |
 | Miner registration 6180 on the Diamond [`0x72a70e949362670Bf8bceAd24eFC5b8f950aa08b`](https://sepolia.etherscan.io/address/0x72a70e949362670Bf8bceAd24eFC5b8f950aa08b) (Ethereum Sepolia, chain 11155111), bonded with 1.50 test USDC ([`0xcc194e1a843B658526D0D5C431f670028582Ae17`](https://sepolia.etherscan.io/token/0xcc194e1a843B658526D0D5C431f670028582Ae17)) | The bond and escrow token is test USDC that anyone can mint, and 20.00 of the escrow's 22.00 deposited was minted by our own miner wallet; neither has market value |
-| The miner's answers: live reads on 12 mainnets and 2 testnets | The adapter's 83.33% is on 30 hidden pairs from a pool of 4 contributors, and the intent is not callable yet, so no live answer has been scored by it |
+| The miner's answers: live reads on 12 mainnets and 2 testnets | The adapter's 83.33% is on 30 hidden pairs from a pool of 4 contributors, and the intent is not callable yet, so no live answer has been scored by it. The second adapter's 96.67% is on our own held-out pairs, not the node's; the node has not tested it yet |
 | Three truth sources `eligible` in the node's evaluation pool, checked against archive nodes by `npm run verify:truth` | Unit tests replay answers recorded live on Nov 20 (`test:preflight`) and Sep 5 (`test:shield`), each labelled with its capture date |
 | 8 preflights and 15 pre-sign checks on the live service ([`/api/stats`](https://truvian.xyz/api/stats)) | All on testnet settlement and nearly all our own test runs; nobody has paid Shield (`earnedUsd` 0) |
 | | The `direct` transport, for local development, asks real miners' public endpoints without paying; every result says `transport: direct` |
@@ -477,13 +481,13 @@ src/truth/             the truth API: server.ts, balance.ts (two archives must a
 src/agent/guard.ts     viem wallet wrapper that refuses to sign on BLOCK or when Shield is unreachable
 src/types/index.ts     intent payload types and IntentError (answer text on every error)
 src/scripts/           test-*.ts, verify-truth-sources.ts, readiness.ts (spends test USDC), demo-guard.ts,
-                       pay-check.ts (a reference x402 client), capture, narration and probe tools
-evaluator/             truth-sources/ (3 descriptors), upload-truth-source.sh, adapter/ (pair generator, runbook)
+                       pay-check.ts (a reference x402 client), frontier-compare.ts, capture, narration and probe tools
+evaluator/             truth-sources/ (3 descriptors), upload-truth-source.sh, adapter/ and adapter-oer/ (pair generators, packages, runbooks)
 telegraph/             PREFLIGHT.md, REGISTRATION.md, TRACK3.md (Season I), truvian-miner.yaml (registration 6180),
                        truvian-miner.registered.yaml (Season I), 13 Season I scorer .wasm builds
 deploy/                pm2 apps (truvian-miner, truvian-shield) and nginx sites (truvian.xyz, miner.truvian.xyz)
 scorer/                the Season I Rust scorer (rank_answer), fixtures and harnesses
-docs/                  SEASON-II.md (network study, Sep 30), shield-build-plan.md, X drafts, social/ fliers
+docs/                  INTEGRATE.md (outside-developer guide), FRONTIER-COMPARISON.md, SEASON-II.md (network study, Sep 30), shield-build-plan.md, X drafts, social/ fliers
 video/                 the Remotion project for the Season I demo video
 .env.example           the environment template
 ```
