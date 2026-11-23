@@ -95,10 +95,11 @@ export async function anchorBlock(chain: SupportedChain): Promise<{ number: bigi
   }
 }
 
-export async function readTokenFacts(chain: SupportedChain, address: `0x${string}`): Promise<TokenFacts> {
+/** `at` reads at a block already chosen, so several tokens are read at the same chain state. */
+export async function readTokenFacts(chain: SupportedChain, address: `0x${string}`, at?: { number: bigint; time: string }): Promise<TokenFacts> {
   const meta = chainMeta(chain);
   const client = getClient(chain);
-  const anchor = await anchorBlock(chain);
+  const anchor = at ?? await anchorBlock(chain);
   const blockNumber = anchor.number;
   let code: `0x${string}` | undefined;
   try {

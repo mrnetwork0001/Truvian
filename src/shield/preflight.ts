@@ -2,13 +2,16 @@
  * Truvian Shield preflight: decide about a token before acting on it, from
  * intelligence bought through Telegraph and checked against the chain.
  *
- * Two desks share one engine:
+ * Three desks share one engine:
  *  - trade   (Mission 14, Web3 Native & DeFi, route 1 "token-risk preflight"):
  *            an agent about to buy a token gets HOLD / REVIEW / REJECT, and the
  *            trade is only simulated, never sent.
  *  - listing (Mission 01, Exchange, route 1 "autonomous listing review"):
  *            a listings desk gets LIST / REVIEW / REJECT for a token contract,
  *            its issuer and its treasury wallet.
+ *  - holdings (Mission 13, Asset Management, "daily holdings proof"): an
+ *            investor agent gets VERIFIED / REVIEW / REJECT for what a fund
+ *            or index says a custody wallet holds (holdings.ts).
  *
  * How a decision is reached:
  *  1. Free direct chain reads at one block (tokenFacts.ts). An address with no
@@ -29,10 +32,10 @@ import type { SupportedChain } from '../config/chains.js';
 import { apiKeyBalanceUsd, askPinnedIntent, askTypedIntent, intentRanking, type IntentRanking, type PaymentReceipt, type RankedMiner, type TypedAnswer } from './telegraph.js';
 import { parseAddress, parseChain, readBalanceGwei, readTokenFacts, TokenFactsError, type TokenFacts } from './tokenFacts.js';
 
-export type PreflightMode = 'trade' | 'listing';
-export type Decision = 'HOLD' | 'LIST' | 'REVIEW' | 'REJECT';
+export type PreflightMode = 'trade' | 'listing' | 'holdings';
+export type Decision = 'HOLD' | 'LIST' | 'VERIFIED' | 'REVIEW' | 'REJECT';
 export type Severity = 'block' | 'review' | 'info' | 'pass';
-export type PurchaseKey = 'security' | 'supply' | 'wash' | 'liquidity' | 'sanctions' | 'treasury';
+export type PurchaseKey = 'security' | 'supply' | 'wash' | 'liquidity' | 'sanctions' | 'treasury' | 'balance';
 
 export interface PreflightRequest {
   mode: PreflightMode;
@@ -55,6 +58,8 @@ export interface PreflightRequest {
  */
 export interface Purchase {
   key: PurchaseKey;
+  /** Holdings proof: which holding (0-based, in input order) this fact is about */
+  holding?: number;
   intent: string;
   params: Record<string, unknown>;
   ok: boolean;
@@ -145,9 +150,33 @@ export const POLICY = {
   sanctionsNearMatchScore: 0.85,
 } as const;
 
+/** The holdings proof's own thresholds (Mission 13), written into its memos. */
+export const HOLDINGS_POLICY = {
+  /** At most this many holdings per proof, so one proof fits the budget per decision */
+  maxHoldings: 3,
+  /** The chain read may fall short of a claimed amount by at most this much and still cover it */
+  claimShortfallToleranceBps: 10,
+  /** Telegraph's wallet balance vs the chain read; the two are read seconds apart */
+  balanceToleranceBps: 50,
+} as const;
+
+/** One holding as the chain shows it at the proof's block (Mission 13). */
+export interface HoldingRead {
+  token: `0x${string}`;
+  /** The amount the fund states, in whole tokens, as given */
+  claimed: string;
+  /** DEX pool the holding is rebalanced through, when given */
+  pool: `0x${string}` | null;
+  facts: TokenFacts;
+  /** balanceOf(wallet) at facts.block, exact integer; null when the contract did not answer */
+  balanceRaw: string | null;
+  /** The same in whole tokens, exact decimal text */
+  balance: string | null;
+}
+
 export interface PreflightMemo {
   version: 'truvian-shield-memo/1';
-  kind: 'token-preflight' | 'listing-review';
+  kind: 'token-preflight' | 'listing-review' | 'holdings-proof';
   createdAt: string;
   input: {
     mode: PreflightMode;
@@ -157,6 +186,9 @@ export interface PreflightMemo {
     tradeUsd: number | null;
     issuer: string | null;
     treasury: string | null;
+    /** Holdings proof: the custody wallet, and what it is said to hold */
+    wallet?: string;
+    holdings?: Array<{ token: string; claimed: string; pool: string | null }>;
   };
   network: {
     telegraphNode: string;
@@ -166,6 +198,8 @@ export interface PreflightMemo {
   };
   chainReads: (TokenFacts & { source: string }) | null;
   treasuryRead: { address: string; block: string; balanceGwei: string; source: string } | null;
+  /** Holdings proof: each holding read from the chain at one block */
+  holdingReads?: Array<HoldingRead & { source: string }>;
   purchases: Purchase[];
   findings: Finding[];
   decision: Decision;
@@ -187,6 +221,7 @@ export interface PreflightMemo {
   };
   latencyMs: number;
   policy: typeof POLICY;
+  holdingsPolicy?: typeof HOLDINGS_POLICY;
 }
 
 export class PreflightInputError extends Error {}
@@ -240,12 +275,12 @@ const list = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => String(x
 const usd = (n: number): string => `$${Math.round(n).toLocaleString('en-US')}`;
 const pct = (n: number): string => `${Number(n.toFixed(4))}%`;
 
-function relDiffBps(a: number, b: number): number {
+export function relDiffBps(a: number, b: number): number {
   if (b === 0) return a === 0 ? 0 : Infinity;
   return (Math.abs(a - b) / Math.abs(b)) * 10_000;
 }
 
-function unavailable(p: Purchase | undefined, key: PurchaseKey, what: string): Finding {
+export function unavailable(p: Purchase | undefined, key: PurchaseKey, what: string): Finding {
   return {
     rule: `${key}.unavailable`,
     severity: 'review',
@@ -458,7 +493,7 @@ function securityFindingsFrom(p: Purchase, f: Record<string, unknown>, token: To
   return out;
 }
 
-function supplyFindings(p: Purchase | undefined, facts: TokenFacts): Finding[] {
+export function supplyFindings(p: Purchase | undefined, facts: TokenFacts): Finding[] {
   if (facts.totalSupply === null) {
     return [{ rule: 'supply.no_chain_read', severity: 'review', title: 'No totalSupply() on chain', detail: `${facts.address} did not answer totalSupply() and decimals() like an ERC-20 at block ${facts.block}.`, source: 'chain', evidence: [] }];
   }
@@ -488,7 +523,7 @@ function washFindings(p: Purchase | undefined): Finding[] {
   return [{ rule: 'wash.ok', severity: 'pass', title: `Wash trading ${pct(share)} of volume`, detail: context, source: 'telegraph', evidence: ['wash'] }];
 }
 
-function liquidityFindings(p: Purchase | undefined, req: PreflightRequest): Finding[] {
+export function liquidityFindings(p: Purchase | undefined, req: PreflightRequest): Finding[] {
   if (!req.pool) return [{ rule: 'liquidity.not_checked', severity: 'info', title: 'Liquidity not checked', detail: 'No pool was given, so pool depth was not bought.', source: 'policy', evidence: [] }];
   if (!p || !p.ok || !p.fields) return [unavailable(p, 'liquidity', 'Pool liquidity')];
   const depth = num(p.fields.liquidity_usd);
@@ -542,6 +577,8 @@ export interface FactContext {
   req: PreflightRequest;
   facts: TokenFacts;
   treasuryRead: PreflightMemo['treasuryRead'];
+  /** The findings for a fact this file has no rule for (a holding's balance, holdings.ts) */
+  judge?: (p: Purchase) => Finding[];
 }
 
 /** The findings one answer gives for its own fact. */
@@ -553,6 +590,7 @@ function factFindings(p: Purchase, ctx: FactContext): Finding[] {
     case 'liquidity': return liquidityFindings(p, ctx.req);
     case 'sanctions': return sanctionsFindings(p, ctx.req.issuer ?? '');
     case 'treasury': return treasuryFindings(p, ctx.treasuryRead, ctx.req.treasury !== undefined);
+    case 'balance': return ctx.judge ? ctx.judge(p) : [unavailable(p, 'balance', 'Wallet balance')];
   }
 }
 
@@ -564,6 +602,7 @@ const NO_EVIDENCE: ReadonlySet<string> = new Set([
   'liquidity.unavailable', 'liquidity.missing',
   'sanctions.unavailable', 'sanctions.uncertain',
   'treasury.unavailable', 'treasury.missing',
+  'balance.unavailable', 'balance.missing', 'balance.not_about_wallet',
 ]);
 
 /**
@@ -643,12 +682,12 @@ export function evaluate(
 // ---------------------------------------------------------------------------
 
 /** Escrow the node holds per routed ask while it runs (it bills about $0.01 of it). */
-const HOLD_PER_ASK_USD = 0.26;
+export const HOLD_PER_ASK_USD = 0.26;
 /** What a routed ask is billed: the one miner call it routes (engine route, 2026-11-21) */
-const ROUTED_ASK_USD = 0.01;
+export const ROUTED_ASK_USD = 0.01;
 const REUSE_TTL_MS = Number(process.env.SHIELD_REUSE_TTL_MS) > 0 ? Number(process.env.SHIELD_REUSE_TTL_MS) : 10 * 60_000;
 
-function budgetUsd(): number {
+export function budgetUsd(): number {
   const n = Number(process.env.SHIELD_PREFLIGHT_BUDGET_USD);
   return Number.isFinite(n) && n > 0 ? n : 0.1;
 }
@@ -714,7 +753,7 @@ export function nextBestMiner(ranking: IntentRanking, answeredBy: string | undef
   return { miner: best };
 }
 
-type Planned = { key: PurchaseKey; intent: string; params: Record<string, unknown>; question: string };
+export type Planned = { key: PurchaseKey; intent: string; params: Record<string, unknown>; question: string; holding?: number };
 /** A fact as bought, before it is marked reused or not. */
 type Resolved = Omit<Purchase, 'reused' | 'boughtAt'>;
 
@@ -799,7 +838,7 @@ function cacheKey(intent: string, params: Record<string, unknown>): string {
  * already bought (or in flight) in the last REUSE_TTL_MS is reused whole,
  * second opinion and all, so a repeat never pays for either again.
  */
-async function buy(plan: Planned, ctx: FactContext & { spend: Spend }): Promise<Purchase> {
+export async function buy(plan: Planned, ctx: FactContext & { spend: Spend }): Promise<Purchase> {
   const ck = cacheKey(plan.intent, plan.params);
   const now = Date.now();
   const hit = fresh.get(ck);
@@ -820,7 +859,9 @@ async function buy(plan: Planned, ctx: FactContext & { spend: Spend }): Promise<
   }
   const fact = await entry!.fact;
   if (!fact.ok && fresh.get(ck) === entry) fresh.delete(ck); // never reuse a failure
-  return { ...fact, costUsd: reused ? 0 : fact.costUsd, latencyMs: reused ? 0 : fact.latencyMs, reused, boughtAt: new Date(entry!.at).toISOString() };
+  const out: Purchase = { ...fact, costUsd: reused ? 0 : fact.costUsd, latencyMs: reused ? 0 : fact.latencyMs, reused, boughtAt: new Date(entry!.at).toISOString() };
+  if (plan.holding !== undefined) out.holding = plan.holding;
+  return out;
 }
 
 /**
@@ -840,7 +881,7 @@ export function memoCost(purchases: Purchase[]): Pick<PreflightMemo['cost'], 'te
 }
 
 /** Run tasks with at most `limit` in flight. */
-async function pooled<T>(tasks: Array<() => Promise<T>>, limit: number, onDone: (r: T) => void): Promise<T[]> {
+export async function pooled<T>(tasks: Array<() => Promise<T>>, limit: number, onDone: (r: T) => void): Promise<T[]> {
   const results: T[] = new Array(tasks.length);
   let next = 0;
   const worker = async () => {
