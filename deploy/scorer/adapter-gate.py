@@ -27,6 +27,7 @@ ROUTES = [
     # (path prefix, systemd unit, executor port, strip the prefix before forwarding)
     ("/oer/", "truvian-scorer-oer", 8082, True),
     ("/lle/", "truvian-scorer-lle", 8083, True),
+    ("/coa/", "truvian-scorer-coa", 8084, True),
     ("/", "truvian-scorer", 8080, False),
 ]
 LISTEN = ("127.0.0.1", 8090)
