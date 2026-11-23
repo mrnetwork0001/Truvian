@@ -16,6 +16,13 @@ were rejected: one ordered 5 of the 15 public pairs (33.3%, below the 70%
 floor), the other's executor was unreachable. With an incumbent, a new
 adapter has to beat it by 2 points on the hidden benchmark.
 
+**Status, 2026-11-23 16:55 UTC: v1 registered as id 211** (tx
+`0x07efbc8e5e20d41f6d3b77d3b82974a34dc35bb99eff7f42465ae556a9aa9bc2`,
+package URL pinned to commit `e6e17a8`, runnable URL
+`https://scorer.truvian.xyz/lle/runnable`). Next: the node's public-pair
+check (11 of 15) and the hidden round against the seed champion. Progress:
+`GET https://devnode.telegraphprotocol.com/api/wasm/211`.
+
 ## Training data: `generate_pairs.py`
 
 A pair is (question, better evaluation, worse evaluation). The better one is
