@@ -54,6 +54,16 @@ bond 1.30 test USDC) from 5252, which had been imported to the new Diamond on
 `TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL` (V2 lists intents, never family
 prefixes). The node listed it active with all four about 15 minutes later.
 
+**Since 2026-11-23: registration 6180**, from `updateMiner` on 6146
+(tx `0x070cda5788b34ec9b8715eac1831ff012df48aad390af91abaa5211e2dea78d3`,
+bond 1.50 test USDC: $1 plus $0.10 for each further intent), YAML pinned at
+commit `1507b04` (sha256 `de76685d…20aa`), six intents: the four above plus
+`CRYPTO_TRANSFER_VERIFY_GENERAL` (`/transfer`) and
+`LIQUIDITY_DEPTH_VERIFY_GENERAL` (`/liquidity`, scored field
+`liquidity_usd`). The dry run returned 6180 and the node listed it active
+13 minutes after the transaction. For the next update, use 6180 as the
+first argument and list all six intents.
+
 **How answers are read now.** Each intent has a response format
 (`GET $NODE/engine/v1/intents/<FAMILY>` -> `response.fields`; one field is
 `scored: true`). The node reads a miner's answer into those fields, exactly by
