@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Truvian Shield · Token preflight and listing review</title>
+<title>Truvian Shield · Token preflight, listing review and holdings proof</title>
 <meta name="description" content="Decide about a token before acting on it: security, supply, wash-trading, liquidity and sanctions intelligence bought through Telegraph, checked against the chain, in a signed memo with its cost.">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta property="og:title" content="Truvian Shield · Token preflight and listing review">
+<meta property="og:title" content="Truvian Shield · Token preflight, listing review and holdings proof">
 <meta property="og:description" content="Telegraph intelligence, checked against the chain, in a signed HOLD / REVIEW / REJECT memo with its cost.">
 <meta property="og:image" content="https://truvian.xyz/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -22,8 +22,9 @@
   .decision .word { font-size: 1.6rem; font-weight: 700; letter-spacing: .04em; }
   .decision .rule { color: var(--muted); font-size: .82rem; margin-top: .3rem; }
   .decision .action { color: var(--faint); font-size: .78rem; margin-top: .3rem; }
-  .decision.HOLD, .decision.LIST { border-left-color: var(--safe); background: rgba(83,192,127,.07); }
-  .decision.HOLD .word, .decision.LIST .word { color: var(--safe); }
+  .decision.HOLD, .decision.LIST, .decision.VERIFIED { border-left-color: var(--safe); background: rgba(83,192,127,.07); }
+  .decision.HOLD .word, .decision.LIST .word, .decision.VERIFIED .word { color: var(--safe); }
+  textarea.holdings { width: 100%; min-height: 5.2rem; font-family: var(--mono); font-size: .8rem; background: var(--panel); color: var(--text); border: 1px solid var(--edge); border-radius: 6px; padding: .55rem .65rem; resize: vertical; }
   .decision.REVIEW { border-left-color: var(--warn); background: rgba(224,168,75,.07); }
   .decision.REVIEW .word { color: var(--warn); }
   .decision.REJECT { border-left-color: var(--block); background: rgba(224,92,92,.07); }
@@ -76,6 +77,7 @@
       <div class="tabs" role="tablist">
         <button type="button" class="tab" role="tab" id="tab-trade" aria-selected="true" data-mode="trade">Token preflight<small>trading agent · HOLD / REVIEW / REJECT · Mission 14</small></button>
         <button type="button" class="tab" role="tab" id="tab-listing" aria-selected="false" data-mode="listing">Listing review<small>exchange listings desk · LIST / REVIEW / REJECT · Mission 01</small></button>
+        <button type="button" class="tab" role="tab" id="tab-holdings" aria-selected="false" data-mode="holdings">Holdings proof<small>fund or index holdings · VERIFIED / REVIEW / REJECT · Mission 13</small></button>
       </div>
       <p class="section-note" id="desk-note"></p>
 
@@ -97,11 +99,11 @@
             <option value="avalanche">avalanche</option>
           </select>
         </div>
-        <div class="field wide">
+        <div class="field wide mode-token">
           <label for="token">token contract</label>
           <input id="token" name="token" type="text" placeholder="0x… (40 hex chars)" autocomplete="off" spellcheck="false">
         </div>
-        <div class="field wide">
+        <div class="field wide mode-token">
           <label for="pool">DEX pool <span class="label-hint" id="pool-hint">- the pool the trade goes through</span></label>
           <input id="pool" name="pool" type="text" placeholder="0x…" autocomplete="off" spellcheck="false">
         </div>
@@ -116,6 +118,14 @@
         <div class="field wide mode-listing hidden">
           <label for="treasury">treasury wallet <span class="label-hint">(optional) - balance checked against the chain</span></label>
           <input id="treasury" name="treasury" type="text" placeholder="0x…" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field wide mode-holdings hidden">
+          <label for="wallet">custody wallet <span class="label-hint">- the address the fund says holds the tokens</span></label>
+          <input id="wallet" name="wallet" type="text" placeholder="0x…" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field wide mode-holdings hidden">
+          <label for="holdings">holdings <span class="label-hint">- one per line, at most 3: token contract, claimed amount in whole tokens, rebalancing pool (optional)</span></label>
+          <textarea id="holdings" name="holdings" class="holdings" spellcheck="false" placeholder="0xA0b8…eB48, 2400000&#10;0xC183…9D72, 8600000, 0x9256…f58a"></textarea>
         </div>
         <div class="field submit-field">
           <button id="submit-btn" type="submit">Run preflight</button>
@@ -145,7 +155,7 @@
     <section class="how-section">
       <h2 class="section-label">Recent decisions</h2>
       <ul id="recent" class="recent"><li class="pending">loading…</li></ul>
-      <p class="how-footnote">For agents: <span class="mono">POST /api/preflight</span> with <span class="mono">{"mode":"trade","chain":"ethereum","token":"0x…","pool":"0x…","tradeUsd":1000}</span> or <span class="mono">{"mode":"listing","chain":"ethereum","token":"0x…","issuer":"…","treasury":"0x…"}</span>; add <span class="mono">?stream=1</span> for NDJSON progress. Verify any memo with <span class="mono">POST /api/memo/verify {"memo","signature"}</span> or any EIP-191 library.</p>
+      <p class="how-footnote">For agents: <span class="mono">POST /api/preflight</span> with <span class="mono">{"mode":"trade","chain":"ethereum","token":"0x…","pool":"0x…","tradeUsd":1000}</span> or <span class="mono">{"mode":"listing","chain":"ethereum","token":"0x…","issuer":"…","treasury":"0x…"}</span> or <span class="mono">{"mode":"holdings","chain":"ethereum","wallet":"0x…","holdings":[{"token":"0x…","claimed":"2400000","pool":"0x…"}]}</span>; add <span class="mono">?stream=1</span> for NDJSON progress. Verify any memo with <span class="mono">POST /api/memo/verify {"memo","signature"}</span> or any EIP-191 library.</p>
     </section>
   </main>
 
@@ -164,6 +174,7 @@
         <li><a href="https://anjoman.ai" target="_blank" rel="noopener">anjoman.ai</a></li>
         <li><a href="https://github.com/telegraphprotocol/bounties/issues/202" target="_blank" rel="noopener">Mission 14 · Web3 &amp; DeFi</a></li>
         <li><a href="https://github.com/telegraphprotocol/bounties/issues/189" target="_blank" rel="noopener">Mission 01 · Exchange</a></li>
+        <li><a href="https://github.com/telegraphprotocol/bounties/issues/201" target="_blank" rel="noopener">Mission 13 · Asset Management</a></li>
       </ul></nav>
       <nav class="foot-col"><h4>Source</h4><ul>
         <li><a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">GitHub</a></li>

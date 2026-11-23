@@ -1,4 +1,4 @@
-// Truvian Shield: token preflight and listing review desks.
+// Truvian Shield: token preflight, listing review and holdings proof desks.
 // Every value shown comes from /api/preflight or /api/memo; miner text is
 // inserted as text, never as HTML.
 (() => {
@@ -33,12 +33,27 @@
       { label: 'UNI by Uniswap Labs, timelock treasury', cls: '', v: { chain: 'ethereum', token: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', pool: '', issuer: 'Uniswap Labs', treasury: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC' } },
       { label: 'Sanctioned issuer (Garantex) → REJECT', cls: 'preset-block', v: { chain: 'ethereum', token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', pool: '', issuer: 'Garantex Europe OU', treasury: '' } },
     ],
+    // Read on-chain 2026-11-23 (block 26476779): the ENS DAO timelock held 2,435,008 USDC and
+    // 8,632,326 ENS; the Uniswap timelock held 262,247,996 UNI. Balances move, so the labels say "expect".
+    holdings: [
+      { label: 'ENS DAO treasury (USDC, ENS + pool) → expect VERIFIED', cls: 'preset-safe', v: { chain: 'ethereum', wallet: '0xFe89cc7aBB2C4183683ab71653C4cdc9B02D44b7', holdings: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48, 2400000\n0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72, 8600000, 0x92560C178cE069CC014138eD3C2F5221Ba71f58a' } },
+      { label: 'Overstated claim (300M UNI in the Uniswap timelock) → REJECT', cls: 'preset-block', v: { chain: 'ethereum', wallet: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC', holdings: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984, 300000000' } },
+    ],
   };
 
   const NOTES = {
     trade: 'An agent is about to buy a token. Shield reads the contract from the chain, then buys a security review, the total supply, a wash-trading check and the pool\'s liquidity through Telegraph, one routed request each, with one second opinion from the next-best ranked miner when an answer examined nothing, and decides HOLD, REVIEW or REJECT. The buy itself is only simulated.',
     listing: 'A listings desk is reviewing a token. Shield reads the contract from the chain, buys a security review, the total supply and a wash-trading check, screens the issuer against sanctions lists, and checks the treasury balance against the chain, then decides LIST, REVIEW or REJECT in a signed memo.',
+    holdings: 'An investor agent checks what a fund or index says it holds, without trusting the issuer. Shield reads every holding\'s balance in the custody wallet from the chain at one block, buys the same balance, the token\'s total supply and, for a rebalancing pool, its liquidity through Telegraph, and decides VERIFIED, REVIEW or REJECT. The memo states each holding\'s share of the float and the pool depth, with a receipt for every answer.',
   };
+
+  const KIND_LABEL = { 'token-preflight': 'Token preflight', 'listing-review': 'Listing review', 'holdings-proof': 'Holdings proof' };
+  const KIND_SHORT = { 'token-preflight': 'preflight', 'listing-review': 'listing', 'holdings-proof': 'holdings' };
+  const SUBMIT = { trade: 'Run preflight', listing: 'Run listing review', holdings: 'Run holdings proof' };
+  // The symbol of each holding, by index, once the chain read names it
+  let holdingSymbols = [];
+  const rowKey = (p) => `${p.key}${p.holding === undefined || p.holding === null ? '' : `-${p.holding}`}`;
+  const tagText = (p) => `${p.intent.replace(/_GENERAL$/, '')}${p.holding === undefined || p.holding === null ? '' : ` · ${holdingSymbols[p.holding] || `#${p.holding + 1}`}`}`;
 
   let mode = 'trade';
 
@@ -47,9 +62,11 @@
     for (const tab of document.querySelectorAll('.tab')) tab.setAttribute('aria-selected', String(tab.dataset.mode === mode));
     for (const f of document.querySelectorAll('.mode-trade')) f.classList.toggle('hidden', mode !== 'trade');
     for (const f of document.querySelectorAll('.mode-listing')) f.classList.toggle('hidden', mode !== 'listing');
+    for (const f of document.querySelectorAll('.mode-holdings')) f.classList.toggle('hidden', mode !== 'holdings');
+    for (const f of document.querySelectorAll('.mode-token')) f.classList.toggle('hidden', mode === 'holdings');
     $('pool-hint').textContent = mode === 'trade' ? '- the pool the trade goes through' : '(optional) - its liquidity is bought too';
     $('desk-note').textContent = NOTES[mode];
-    $('submit-btn').textContent = mode === 'trade' ? 'Run preflight' : 'Run listing review';
+    $('submit-btn').textContent = SUBMIT[mode];
     const box = $('fixtures');
     box.replaceChildren(...FIXTURES[mode].map((f) => {
       const b = el('button', { type: 'button', class: `preset-btn ${f.cls}`, text: f.label });
@@ -80,6 +97,7 @@
       case 'LIQUIDITY_DEPTH_VERIFY_GENERAL': return el('span', { text: f.liquidity_usd != null ? usd(f.liquidity_usd) : 'no figure' });
       case 'SANCTIONS_SCREENING_MATCH_GENERAL': return el('span', {}, el('b', { text: f.matched === true ? 'MATCH' : f.matched === false ? 'no match' : 'uncertain' }), f.match_score != null ? ` · score ${f.match_score}` : '', Array.isArray(f.lists) ? el('div', { class: 'fields', text: `${f.lists.length} lists checked` }) : null);
       case 'ONCHAIN_METRIC_VERIFY_GENERAL': return el('span', { text: f.balance_gwei != null ? `${f.balance_gwei} Gwei` : 'no figure' });
+      case 'WALLET_BALANCE_CHECK_GENERAL': return el('span', { text: f.balance != null ? `${Number(f.balance).toLocaleString('en-US', { maximumFractionDigits: 6 })}${f.token_symbol ? ` ${f.token_symbol}` : ''}` : 'no figure' });
       default: return el('span', { class: 'fields', text: JSON.stringify(f).slice(0, 300) });
     }
   }
@@ -116,8 +134,8 @@
     const receipt = p.receipt
       ? el('div', { class: 'fields mono', title: `paid ${p.receipt.amountUsd} USDC from ${p.receipt.payer} to miner registration ${p.receipt.miner}, settles in epoch ${p.receipt.epochId} (${p.receipt.rail})`, text: `receipt ${p.receipt.hash.slice(0, 10)}…${p.receipt.hash.slice(-6)} · epoch ${p.receipt.epochId}` })
       : null;
-    return el('tr', { 'data-key': p.key },
-      el('td', {}, el('span', { class: 'intent-tag', text: p.intent.replace(/_GENERAL$/, '') })),
+    return el('tr', { 'data-key': rowKey(p) },
+      el('td', {}, el('span', { class: 'intent-tag', text: tagText(p) })),
       el('td', {}, answerText(p), p.secondOpinion ? secondOpinionNote(p.secondOpinion) : null),
       el('td', { class: 'detail' }, meta, receipt),
       el('td', {}, signal));
@@ -125,8 +143,8 @@
 
   function renderPlan(plan) {
     const body = $('purchases');
-    body.replaceChildren(...plan.map((p) => el('tr', { 'data-key': p.key },
-      el('td', {}, el('span', { class: 'intent-tag', text: p.intent.replace(/_GENERAL$/, '') })),
+    body.replaceChildren(...plan.map((p) => el('tr', { 'data-key': rowKey(p) },
+      el('td', {}, el('span', { class: 'intent-tag', text: tagText(p) })),
       el('td', { class: 'pending', colspan: '3', text: 'asking Telegraph…' }))));
     if (plan.length === 0) body.replaceChildren(el('tr', {}, el('td', { colspan: '4', class: 'pending', text: 'nothing was bought' })));
   }
@@ -134,7 +152,7 @@
   function renderPurchase(p) {
     const body = $('purchases');
     const row = purchaseRow(p);
-    const old = body.querySelector(`tr[data-key="${p.key}"]`);
+    const old = body.querySelector(`tr[data-key="${rowKey(p)}"]`);
     if (old) old.replaceWith(row); else body.append(row);
   }
 
@@ -152,13 +170,30 @@
     box.replaceChildren(...parts.map((t) => el('div', { class: 'mono', text: t })));
   }
 
+  // Holdings proof: each holding's contract and the wallet's balance, all at one block.
+  function renderHoldings(reads) {
+    const box = $('chainread');
+    if (!reads || !reads.length) { box.textContent = '-'; return; }
+    holdingSymbols = reads.map((r) => (r.facts && r.facts.symbol) || null);
+    const f0 = reads[0].facts;
+    const lines = [`${f0.chainLabel} (chain id ${f0.chainId}) at block ${f0.block}`];
+    for (const r of reads) {
+      const f = r.facts;
+      if (!f.isContract) { lines.push(`${r.token}: no contract code`); continue; }
+      const share = r.balanceRaw && f.totalSupplyRaw && f.totalSupplyRaw !== '0'
+        ? ` (${(Number(BigInt(r.balanceRaw) * 1000000n / BigInt(f.totalSupplyRaw)) / 10000).toFixed(4)}% of supply)` : '';
+      lines.push(`${f.symbol || r.token} ${r.token}: balanceOf = ${r.balance === null ? 'unreadable' : Number(r.balance).toLocaleString('en-US', { maximumFractionDigits: 6 })}${share}, claimed ${Number(r.claimed).toLocaleString('en-US')}${r.pool ? `, pool ${r.pool}` : ''}`);
+    }
+    box.replaceChildren(...lines.map((t) => el('div', { class: 'mono', text: t })));
+  }
+
   function renderMemo(stored) {
     const m = stored.memo;
     const d = $('decision');
     d.className = `decision ${m.decision}`;
     d.replaceChildren(...[
       el('div', { class: 'word', text: m.decision }),
-      el('div', { class: 'rule', text: `${m.kind === 'token-preflight' ? 'Token preflight' : 'Listing review'} · ${m.decisionRule}` }),
+      el('div', { class: 'rule', text: `${KIND_LABEL[m.kind] || m.kind} · ${m.decisionRule}` }),
       m.action ? el('div', { class: 'action', text: `${m.action.description} (simulated, nothing sent)` }) : null,
     ].filter(Boolean));
     $('costline').replaceChildren(...[
@@ -177,7 +212,7 @@
       el('td', {}, el('span', { class: `sev ${f.severity}`, text: f.severity })),
       el('td', {}, el('b', { text: f.title }), el('div', { class: 'detail', text: f.detail })),
       el('td', { class: 'detail', text: f.source }))));
-    renderChain(m.chainReads);
+    if (m.kind === 'holdings-proof') renderHoldings(m.holdingReads); else renderChain(m.chainReads);
     $('purchases').replaceChildren(...(m.purchases.length ? m.purchases.map(purchaseRow) : [el('tr', {}, el('td', { colspan: '4', class: 'pending', text: 'nothing was bought' }))]));
 
     const sig = $('sig');
@@ -225,9 +260,20 @@
   async function run(evt) {
     evt.preventDefault();
     showError('');
-    const body = { mode, chain: $('chain').value, token: $('token').value.trim(), pool: $('pool').value.trim() };
-    if (mode === 'trade') body.tradeUsd = $('tradeUsd').value.trim();
-    else { body.issuer = $('issuer').value.trim(); body.treasury = $('treasury').value.trim(); }
+    let body;
+    if (mode === 'holdings') {
+      // One holding per line: token, claimed amount, pool (optional). Commas inside the amount are not supported here; write 2400000.
+      const holdings = $('holdings').value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+        const [token, claimed, pool] = l.split(/[,\s]+/).filter(Boolean);
+        return pool ? { token, claimed, pool } : { token, claimed };
+      });
+      body = { mode, chain: $('chain').value, wallet: $('wallet').value.trim(), holdings };
+    } else {
+      body = { mode, chain: $('chain').value, token: $('token').value.trim(), pool: $('pool').value.trim() };
+      if (mode === 'trade') body.tradeUsd = $('tradeUsd').value.trim();
+      else { body.issuer = $('issuer').value.trim(); body.treasury = $('treasury').value.trim(); }
+    }
+    holdingSymbols = [];
     const btn = $('submit-btn');
     btn.disabled = true;
     const label = btn.textContent;
@@ -260,6 +306,7 @@
           if (!line) continue;
           const ev = JSON.parse(line);
           if (ev.type === 'chain') { renderChain(ev.facts); $('decision').replaceChildren(el('div', { class: 'word pending', text: ev.facts.isContract ? 'buying intelligence through Telegraph…' : 'not a contract' })); }
+          else if (ev.type === 'holdings') { renderHoldings(ev.reads); $('decision').replaceChildren(el('div', { class: 'word pending', text: 'buying the balances through Telegraph…' })); }
           else if (ev.type === 'plan') renderPlan(ev.plan);
           else if (ev.type === 'purchase') renderPurchase(ev.purchase);
           else if (ev.type === 'memo') { renderMemo(ev); history.replaceState(null, '', `/preflight?m=${ev.id}`); }
@@ -284,7 +331,7 @@
       if (!j.memos.length) { list.replaceChildren(el('li', { class: 'pending', text: 'none yet' })); return; }
       list.replaceChildren(...j.memos.map((m) => el('li', {},
         el('a', { href: `/preflight?m=${m.id}`, text: `${m.decision}` }),
-        ` · ${m.kind === 'token-preflight' ? 'preflight' : 'listing'} · ${m.symbol || m.token.slice(0, 10)} on ${m.chain} · $${m.costUsd.toFixed(2)} · ${m.createdAt.replace('T', ' ').slice(0, 16)} UTC`)));
+        ` · ${KIND_SHORT[m.kind] || m.kind} · ${m.kind === 'holdings-proof' ? `wallet ${m.token.slice(0, 10)}…` : m.symbol || m.token.slice(0, 10)} on ${m.chain} · $${m.costUsd.toFixed(2)} · ${m.createdAt.replace('T', ' ').slice(0, 16)} UTC`)));
     } catch {
       $('recent').replaceChildren(el('li', { class: 'pending', text: 'could not load' }));
     }
@@ -295,8 +342,13 @@
       const res = await fetch(`/api/memo/${encodeURIComponent(id)}`);
       if (!res.ok) throw new Error('no stored memo with that id');
       const stored = await res.json();
-      setMode(stored.memo.input.mode);
-      fill({ chain: stored.memo.input.chain, token: stored.memo.input.token, pool: stored.memo.input.pool || '', tradeUsd: stored.memo.input.tradeUsd ?? '1000', issuer: stored.memo.input.issuer || '', treasury: stored.memo.input.treasury || '' });
+      const input = stored.memo.input;
+      setMode(input.mode);
+      if (input.mode === 'holdings') {
+        fill({ chain: input.chain, wallet: input.wallet || '', holdings: (input.holdings || []).map((h) => [h.token, h.claimed, h.pool].filter(Boolean).join(', ')).join('\n') });
+      } else {
+        fill({ chain: input.chain, token: input.token, pool: input.pool || '', tradeUsd: input.tradeUsd ?? '1000', issuer: input.issuer || '', treasury: input.treasury || '' });
+      }
       $('out').classList.remove('hidden');
       renderMemo(stored);
     } catch (e) { showError(e.message); }
