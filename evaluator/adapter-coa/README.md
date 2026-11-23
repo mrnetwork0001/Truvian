@@ -13,6 +13,13 @@ team's adapter, registration 210, became the first canonical champion at
 18:17 UTC with 82.76% on 29 hidden pairs. A new adapter has to beat it by 2
 points.
 
+**Status, 2026-11-23 22:10 UTC: v1 registered as id 219** (tx
+`0xf6ad7d312e910f92134f0fa40173e47c0833c478f94978409580ec787c1e088b`,
+package URL pinned to commit `4f8674f`, runnable URL
+`https://scorer.truvian.xyz/coa/runnable`). Next: the node's public-pair
+check (11 of 15) and the hidden round against 210. Progress:
+`GET https://devnode.telegraphprotocol.com/api/wasm/219`.
+
 ## Training data: `generate_pairs.py`
 
 A pair is (contract, better audit, worse audit). The better audit is right by
