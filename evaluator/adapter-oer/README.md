@@ -15,6 +15,19 @@ package URL pinned to commit `36e46e0`, runnable URL
 public-pair check (needs 11 of 15) and the hidden benchmark (70% floor with no
 incumbent). Progress: `GET https://devnode.telegraphprotocol.com/api/wasm/209`.
 
+**What the node's material looks like (captured 2026-11-23 15:15 UTC).** The
+node sent 9 public pairs to the runnable URL (18 texts, `input_root e5bfdbd1…`;
+logged, not copied here, because the pool does not publish its rows). They
+are unlike our training data: most pairs are two copies of one JSON answer
+that differ only in `amount_out` or `gas`, and the better figure can only be
+told by working out a Uniswap V3 or constant-product swap from the reserves
+in the prompt; two are long explanations of routing trade-offs. Replayed
+through our executor, v1 scores the first text of a pair higher in 2 of 9.
+If the node sends the better answer first, as it did for SMART_CONTRACT_AUDIT,
+v1 will be rejected at this check. The node's stage is
+`awaiting_compatible_material`, so it may also be waiting for more pairs.
+Replay: `python3 /opt/truvian-scorer/replay-log.py /var/log/nginx/scorer-oer-body.log 3 http://127.0.0.1:8090/oer/runnable`.
+
 ## The intent
 
 Sell exactly 1 ETH for USDC on Ethereum mainnet; the scored field is
