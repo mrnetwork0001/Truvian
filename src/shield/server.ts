@@ -9,6 +9,8 @@
  *   POST /api/check            {chain?, to?, valueEth?, txHash?, protocol?} -> CheckReport
  *   POST /api/preflight        {mode: trade|listing, chain, token, pool?, tradeUsd?, issuer?, treasury?}
  *                              -> signed HOLD/LIST/REVIEW/REJECT memo (preflight.ts, memo.ts)
+ *                              {mode: holdings, chain, wallet, holdings: [{token, claimed, pool?}]}
+ *                              -> signed VERIFIED/REVIEW/REJECT holdings proof (holdings.ts)
  *   GET  /api/memo/:id         a stored memo with its sha256 and signature
  *   POST /api/memo/verify      {memo, signature} -> digest and recovered signer
  *   GET  /api/verify/:txHash   single ONCHAIN_TX_LOOKUP-based verification report
@@ -35,6 +37,7 @@ import {
 import { createLimiter, type Limiter, type LimiterState } from './limits.js';
 import { createReceiptStore } from './receipts.js';
 import { normalizePreflightRequest, PreflightInputError, runPreflight, type PreflightRequest } from './preflight.js';
+import { normalizeHoldingsRequest, runHoldings, type HoldingsRequest } from './holdings.js';
 import { createMemoStore, memoSigner, signMemo, verifyMemo } from './memo.js';
 import { TokenFactsError } from './tokenFacts.js';
 import { payerAddress, payerUsdcBalance } from './payer.js';
@@ -521,14 +524,15 @@ export function buildShieldServer() {
   });
 
   /**
-   * Token preflight (trade) and listing review (listing): direct chain reads,
+   * Token preflight (trade), listing review (listing) and holdings proof (holdings): direct chain reads,
    * one routed Telegraph request per fact, fixed rules, and a signed memo.
    * Draws on the same free allowance (or x402 payment) as a check.
    */
   app.post('/api/preflight', async (req, reply) => {
-    let parsed: PreflightRequest;
+    let parsed: PreflightRequest | HoldingsRequest;
     try {
-      parsed = normalizePreflightRequest(req.body ?? {});
+      const raw = (req.body ?? {}) as Record<string, unknown>;
+      parsed = String(raw.mode ?? '').trim().toLowerCase() === 'holdings' ? normalizeHoldingsRequest(raw) : normalizePreflightRequest(raw);
     } catch (err) {
       if (err instanceof PreflightInputError) return reply.status(400).send({ error: 'INVALID_INPUT', message: err.message });
       throw err;
@@ -557,11 +561,17 @@ export function buildShieldServer() {
     let result: Record<string, unknown>;
     let status = 200;
     try {
-      const memo = await runPreflight(parsed, {
-        onChainRead: (facts) => emit({ type: 'chain', facts }),
-        onPlan: (plan, escrowUsd) => emit({ type: 'plan', plan, escrowUsd }),
-        onPurchase: (purchase) => emit({ type: 'purchase', purchase }),
-      });
+      const memo = 'wallet' in parsed
+        ? await runHoldings(parsed, {
+          onHoldingsRead: (reads) => emit({ type: 'holdings', reads }),
+          onPlan: (plan, escrowUsd) => emit({ type: 'plan', plan, escrowUsd }),
+          onPurchase: (purchase) => emit({ type: 'purchase', purchase }),
+        })
+        : await runPreflight(parsed, {
+          onChainRead: (facts) => emit({ type: 'chain', facts }),
+          onPlan: (plan, escrowUsd) => emit({ type: 'plan', plan, escrowUsd }),
+          onPurchase: (purchase) => emit({ type: 'purchase', purchase }),
+        });
       stats.preflightsRun++;
       stats.telegraphRequests += memo.cost.paidRequests + memo.cost.failedRequests;
       stats.paidUsd = Number((stats.paidUsd + memo.cost.telegraphUsd).toFixed(6));
@@ -675,7 +685,7 @@ export function buildShieldServer() {
     return reply.type('text/html; charset=utf-8').send(FALLBACK_HTML);
   });
 
-  // Token preflight and listing review desks.
+  // Token preflight, listing review and holdings proof desks.
   app.get('/preflight', async (_req, reply) => {
     if (await sendPublicFile(reply, 'preflight.html')) return reply;
     return reply.type('text/html; charset=utf-8').send(FALLBACK_HTML);
