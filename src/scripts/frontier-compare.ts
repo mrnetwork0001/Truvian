@@ -17,7 +17,7 @@
  * Run: npx tsx src/scripts/frontier-compare.ts [--dry]   (--dry reads the chain only)
  */
 import 'dotenv/config';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { getClient } from '../config/chains.js';
 import { handleSupply, validateSupplyInput, handleBalance, validateBalanceInput } from '../miner/holdings.js';
 import { handleLiquidity, validateLiquidityInput } from '../miner/liquidity.js';
@@ -92,21 +92,54 @@ async function buildCases(): Promise<Case[]> {
     question: `What is the gas price on Ethereum at block ${gas.blockNumber ?? 'the latest block'}, in gwei? Give one number.`,
     truth: gas.gas_price_gwei, truthText: `${gas.gas_price_gwei} gwei (eth_gasPrice)`, tolerance: 0.25,
   });
+  // The way an agent usually asks: "now", no block. A figure from training
+  // data is then stale, and is scored against the chain read at this moment.
+  cases.push(
+    { id: 'plain-supply-usdc', desk: 'Token preflight (total supply)', question: 'What is the total supply of USDC on Ethereum right now? Give one number in whole USDC.',
+      truth: usdc.total_supply, truthText: `${usdc.total_supply_exact} USDC now`, tolerance: 0.01 },
+    { id: 'plain-liquidity', desk: 'Token preflight (pool depth)', question: 'How much liquidity does the Uniswap v3 WETH/USDC 0.05% pool on Ethereum hold right now, in US dollars? Give one number.',
+      truth: pool.liquidity_usd, truthText: `$${pool.liquidity_usd} now`, tolerance: 0.10 },
+    { id: 'plain-balance', desk: 'Listing review (treasury check)', question: 'What is the ETH balance of vitalik.eth right now? Give one number in ETH.',
+      truth: vitalik.balance, truthText: `${vitalik.balance_exact} ETH now`, tolerance: 0.05 },
+    { id: 'plain-gas', desk: 'Execution (gas)', question: 'What is the gas price on Ethereum right now, in gwei? Give one number.',
+      truth: gas.gas_price_gwei, truthText: `${gas.gas_price_gwei} gwei now`, tolerance: 0.5 },
+  );
   return cases;
 }
 
-const SYSTEM = 'Answer the question directly. If you give a figure, give exactly one number. If you cannot know, say so.';
+/**
+ * Two ways an agent asks. 'may-decline' lets the model say it cannot know;
+ * 'agent' is how a tool-less trading agent is often prompted: a number only.
+ */
+const CONDITION = process.argv.includes('--agent') ? 'agent' : 'may-decline';
+const SYSTEM = CONDITION === 'agent'
+  ? 'You are the data step of an autonomous trading agent. Reply with exactly one number and nothing else.'
+  : 'Answer the question directly. If you give a figure, give exactly one number. If you cannot know, say so.';
+
+/** Models that refuse a temperature setting (reasoning models) are asked again without one. */
+const NO_TEMPERATURE = new Set<string>();
 
 async function ask(base: string, key: string, model: string, question: string) {
   const t0 = Date.now();
-  const res = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
+  const post = (withTemperature: boolean) => fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model, temperature: 0, max_tokens: 400, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: question }] }),
+    // room for reasoning models to think and still answer
+    body: JSON.stringify({ model, ...(withTemperature ? { temperature: 0 } : {}), max_tokens: 4000, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: question }] }),
   });
-  const body: any = await res.json().catch(() => ({}));
+  let res = await post(!NO_TEMPERATURE.has(model));
+  let body: any = await res.json().catch(() => ({}));
+  if (res.status === 400 && /temperature/i.test(JSON.stringify(body))) {
+    NO_TEMPERATURE.add(model);
+    res = await post(false);
+    body = await res.json().catch(() => ({}));
+  }
   if (!res.ok) return { ok: false as const, error: `HTTP ${res.status}: ${JSON.stringify(body).slice(0, 300)}`, ms: Date.now() - t0 };
-  return { ok: true as const, text: String(body?.choices?.[0]?.message?.content ?? ''), usage: body?.usage ?? null, ms: Date.now() - t0 };
+  const msg = body?.choices?.[0]?.message ?? {};
+  return {
+    ok: true as const, text: String(msg.content ?? ''), finish: body?.choices?.[0]?.finish_reason ?? null,
+    reasoningChars: String(msg.reasoning_content ?? msg.reasoning ?? '').length, usage: body?.usage ?? null, ms: Date.now() - t0,
+  };
 }
 
 /** The figures in a reply, with thousands separators removed and k/M/B suffixes applied. */
@@ -119,23 +152,53 @@ export function figures(text: string): number[] {
   return out;
 }
 
-function score(c: Case, text: string): 'correct' | 'wrong' | 'no answer' {
+type Verdict = 'correct' | 'wrong' | 'declined' | 'empty';
+
+/** A reply that says it cannot know or look the answer up */
+const DECLINES = /\b(can(?:'|’|no)?t|cannot|unable to|don(?:'|’)t have|do not have|no (?:access|tools|way|live)|not able to|impossible to)\b/i;
+
+export function score(c: Case, text: string): Verdict {
+  if (text.trim() === '') return 'empty';
+  // a bare "0" is a figure an agent would act on, not a refusal (no case's true value is 0)
+  if (!c.expect && /^\s*0(?:\.0+)?\s*$/.test(text)) return 'wrong';
   if (c.expect) {
-    const first = text.trim().toLowerCase().match(/^\**\s*(yes|no)\b/)?.[1];
-    return first === undefined ? 'no answer' : first === c.expect ? 'correct' : 'wrong';
+    const first = text.trim().toLowerCase().replace(/^[*_#\s]+/, '').match(/^(yes|no)\b/)?.[1];
+    if (first) return first === c.expect ? 'correct' : 'wrong';
+    return DECLINES.test(text) ? 'declined' : 'wrong';
   }
   const truth = Number(c.truth);
   // the question's own numbers (block, address digits) are not answers
   const qn = new Set(figures(c.question));
   const nums = figures(text).filter((n) => !qn.has(n) && n !== 0);
-  if (nums.length === 0) return 'no answer';
-  const best = nums.reduce((a, b) => (Math.abs(b - truth) < Math.abs(a - truth) ? b : a));
-  return Math.abs(best - truth) <= Math.abs(truth) * c.tolerance! ? 'correct' : 'wrong';
+  if (nums.some((n) => Math.abs(n - truth) <= Math.abs(truth) * c.tolerance!)) return 'correct';
+  // a reply that declines is not counted wrong for the incidental numbers it mentions
+  if (DECLINES.test(text) || nums.length === 0) return 'declined';
+  return 'wrong';
+}
+
+/** Score a saved run again with the current rules, without asking the models: --rescore <file.json> */
+function rescore(file: string) {
+  const run = JSON.parse(readFileSync(file, 'utf8'));
+  const byId = new Map<string, Case>(run.cases.map((c: Case) => [c.id, c]));
+  for (const r of run.results) if (r.verdict !== 'error') r.verdict = score(byId.get(r.case)!, String(r.reply ?? ''));
+  writeFileSync(file, JSON.stringify(run, null, 2));
+  const models = [...new Set<string>(run.results.map((r: any) => r.model))];
+  const tally = (m: string, v: string) => run.results.filter((r: any) => r.model === m && r.verdict === v).length;
+  const lines = [
+    `| Model | Correct | Wrong | Declined | Empty | Errors |`, `|---|---|---|---|---|---|`,
+    ...models.map((m) => `| ${m} | ${tally(m, 'correct')} | ${tally(m, 'wrong')} | ${tally(m, 'declined')} | ${tally(m, 'empty')} | ${tally(m, 'error')} |`),
+    `| Truvian (chain reads) | ${run.cases.length} | 0 | 0 | 0 | 0 |`,
+  ];
+  writeFileSync(file.replace(/\.json$/, '.md'), `${lines.join('\n')}\n`);
+  console.log(`${file}\n${lines.join('\n')}`);
 }
 
 async function main() {
+  const at = process.argv.indexOf('--rescore');
+  if (at > 0) return rescore(process.argv[at + 1]!);
   const dry = process.argv.includes('--dry');
-  const cases = await buildCases();
+  // a number-only prompt cannot ask a yes/no question, so that case runs only when the model may decline
+  const cases = (await buildCases()).filter((c) => CONDITION === 'may-decline' || c.expect === undefined);
   console.log(`${cases.length} cases read from the chain`);
   for (const c of cases) console.log(`- ${c.id}: ${c.truthText}`);
   if (dry) return;
@@ -149,20 +212,21 @@ async function main() {
     for (const c of cases) {
       const r = await ask(base, key, model, c.question);
       const verdict = r.ok ? score(c, r.text) : 'error';
-      results.push({ model, case: c.id, verdict, reply: r.ok ? r.text : r.error, usage: r.ok ? r.usage : null, ms: r.ms });
+      results.push({ model, case: c.id, verdict, reply: r.ok ? r.text : r.error, finish: r.ok ? r.finish : null,
+        reasoningChars: r.ok ? r.reasoningChars : null, usage: r.ok ? r.usage : null, ms: r.ms });
       console.log(`${model} ${c.id}: ${verdict}`);
     }
   }
   const date = new Date().toISOString().slice(0, 10);
   mkdirSync('docs/frontier-comparison', { recursive: true });
-  writeFileSync(`docs/frontier-comparison/${date}.json`, JSON.stringify({ ranAt: new Date().toISOString(), system: SYSTEM, cases, results }, null, 2));
+  writeFileSync(`docs/frontier-comparison/${date}-${CONDITION}.json`, JSON.stringify({ ranAt: new Date().toISOString(), condition: CONDITION, system: SYSTEM, cases, results }, null, 2));
   const tally = (m: string, v: string) => results.filter((r) => r.model === m && r.verdict === v).length;
   const lines = [
-    `| Model | Correct | Wrong | No answer | Errors |`, `|---|---|---|---|---|`,
-    ...models.map((m) => `| ${m} | ${tally(m, 'correct')} | ${tally(m, 'wrong')} | ${tally(m, 'no answer')} | ${tally(m, 'error')} |`),
-    `| Truvian (chain reads) | ${cases.length} | 0 | 0 | 0 |`,
+    `| Model | Correct | Wrong | Declined | Empty | Errors |`, `|---|---|---|---|---|---|`,
+    ...models.map((m) => `| ${m} | ${tally(m, 'correct')} | ${tally(m, 'wrong')} | ${tally(m, 'declined')} | ${tally(m, 'empty')} | ${tally(m, 'error')} |`),
+    `| Truvian (chain reads) | ${cases.length} | 0 | 0 | 0 | 0 |`,
   ];
-  writeFileSync(`docs/frontier-comparison/${date}.md`, `${lines.join('\n')}\n`);
+  writeFileSync(`docs/frontier-comparison/${date}-${CONDITION}.md`, `${lines.join('\n')}\n`);
   console.log(`\n${lines.join('\n')}`);
 }
 
