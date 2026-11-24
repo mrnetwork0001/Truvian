@@ -5,6 +5,49 @@ same day, tagged **@Telegraphprotoc**. This file logs drafts and what was posted
 
 ---
 
+## SEASON II - four posts, one per date (none posted as of 2026-11-24)
+
+Growth (20 points) needs at least three original updates on separate dates,
+and every post must disclose hackathon participation and the prize incentive
+(a Telegraph tag alone is not enough). Each post below does both and fits 280
+characters. Post from the same handle you give on the Anjoman submission.
+
+### Post 1 - 24 Nov  *(attach: `docs/social/2026-11-21-day21.png`)*
+
+> Building Truvian for the @Telegraphprotoc Season II hackathon, competing for its $10K prize pool.
+>
+> Shield checks a token before an agent signs: it buys each fact through Telegraph at $0.01, checks it on-chain, and signs HOLD, REVIEW or REJECT.
+>
+> truvian.xyz/preflight
+
+### Post 2 - 26 Nov  *(attach: `docs/social/2026-11-23-adapter-champion.png`)*
+
+> Our adapter is now the canonical judge for SMART_CONTRACT_AUDIT on @Telegraphprotoc: 25 of 30 hidden pairs (83.33%), graded by the node.
+>
+> Versions 1 and 2 were rejected. Version 3 cleared the 70% floor.
+>
+> Season II hackathon entry; I'm competing for a prize.
+
+### Post 3 - 28 Nov  *(attach: `docs/social/2026-11-20-truth-api.png`)*
+
+> No free API gave a wallet's past-block balance on Polygon or Arbitrum, so we built one: two archive nodes must agree to the wei, or it errors. No guesses.
+>
+> Now an eligible @Telegraphprotoc truth source.
+>
+> truth.truvian.xyz · Season II hackathon entry, competing for a prize
+
+### Post 4 - 30 Nov  *(attach: `docs/social/2026-11-21-day21.png (or no image)`)*
+
+> @Telegraphprotoc Season II ends tomorrow. Truvian:
+> - miner live, six intents
+> - SMART_CONTRACT_AUDIT judge: 83.33%, champion
+> - Shield: three mission desks, every fact paid with a receipt
+>
+> All open: github.com/mrnetwork0001/Truvian
+> Hackathon entry, competing for a prize.
+
+---
+
 ## FINAL THREAD - the whole arc, Aug 23 → 30 (post this one; supersedes posts 1–4 below)
 
 Enter the same handle on submissions.telegraphprotocol.com - the judges'
