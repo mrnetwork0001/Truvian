@@ -22,6 +22,25 @@ package URL pinned to commit `0e4dc56`, runnable URL
 `https://scorer.truvian.xyz/crl/runnable`). Progress:
 `GET https://devnode.telegraphprotocol.com/api/wasm/227`.
 
+**v1 rejected at the public check, 2026-11-24 07:21 UTC:** it ordered 10 of
+the 15 public pairs and needed 11. The public batch (decoded from the
+executor's request log; it is the open check, not the hidden benchmark)
+showed why: the node's pairs are not company-registry extracts but lookups
+against the GLEIF LEI register. A name, usually an LEI, a short question
+about status, jurisdiction, city, address, registration number or legal
+form, and a one-sentence or JSON answer. The faults are mostly visible in the
+answer itself: a city with another country's code (`MUMBAI (GB)`), a
+jurisdiction that does not fit the legal form (`CEBA S.R.L.` under `GB`), an
+address in another country, ACTIVE flipped to INACTIVE, a requested field
+left out, or the LEI of a similarly named entity from the search results.
+Version 1 had seen none of that shape.
+
+**Version 2 (training since 2026-11-24 08:00 UTC):** a new generator,
+[`generate_pairs_v2.py`](generate_pairs_v2.py), builds that shape from its
+own synthetic records (16 jurisdictions, made-up names and addresses, LEIs
+with valid ISO 17442 check digits). None of the node's pairs are in the
+training data; the 15 public pairs are kept as a replay check only.
+
 ## Training data: `generate_pairs.py`
 
 A pair is (question, better answer, worse answer). Each case is built from a
@@ -91,3 +110,23 @@ and stopped after 15 idle minutes. Requests are logged to
 `/var/log/nginx/scorer-crl-body.log`. Checked through the public URL with the
 last 60 held-out pairs, tokenised as the node does: 48 of 60 ordered (80%),
 751 s; an earlier run on the last 10 alone ordered 6.
+
+## Version 2 training data
+
+```
+python3 generate_pairs_v2.py --n 1800 --seed 7 --out v2raw.jsonl
+python3 ../adapter-coa/fit512.py tokenizer.json v2raw.jsonl pairs.jsonl 1500
+python3 generate_pairs_v2.py --n 360 --seed 97 --out v2rawtest.jsonl
+python3 ../adapter-coa/fit512.py tokenizer.json v2rawtest.jsonl test0.jsonl 360
+python3 ../adapter-llm-eval/dedupe_test.py pairs.jsonl test0.jsonl test.jsonl 240
+```
+
+Faults in the 1,800 raw pairs: flip_status 403, dropped_field 340, city 275,
+jurisdiction 191, other_entity 147, country_code 127, bad_lei 123,
+impossible_date 80, address 64, contradiction 50. With no evidence in the
+question, 86% of records are ACTIVE, so a flipped status is judged by the
+prior that a looked-up entity is usually live.
+
+Kit dataset gate on the 1,500 training pairs: PASS (surface probe 63.3%,
+limit 65%; length shortcut 51.7%; unique rejected answers 100%; held-out
+leak 0%).
