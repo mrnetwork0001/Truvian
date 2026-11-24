@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "builder": "github.com/telegraphprotocol/telegraph-wasm-baseline/cmd/adapterbuild",
+  "builder_version": "adapterbuild/2",
+  "intent": "CORPORATE_REGISTRY_LOOKUP",
+  "class": "judgment",
+  "abi": "lora-v1",
+  "foundation": {
+    "hash": "0a49b325304bb4cf292e683929689d0457966be264f60bfc94d0072b614bf8e6",
+    "version": "modernbert-base-lora16-v1"
+  },
+  "tokenizer_hash": "67bc76f8b9386efba1a761c1c8e5ad439fd0eaf1c2826e9dd1a205c7af4dc456",
+  "rank": 8,
+  "alpha": 32,
+  "target_modules": [
+    "Wi",
+    "Wo",
+    "Wqkv"
+  ],
+  "max_tokens": 512,
+  "tensors": 178,
+  "delta_bytes": 6761476,
+  "package": {
+    "file": "CORPORATE_REGISTRY_LOOKUP.safetensors",
+    "sha256": "49b417e1bf57e01a5b96fc5c91f705d6a43e26f53ca2a17884168c97538fab1c",
+    "bytes": 6776916
+  },
+  "keccak256": "0x5930229fe10d949c6dfc67df3a4c65a33d2b9c353247f72f538887e562ac957e",
+  "verification": {
+    "stage1": true,
+    "loaded": true,
+    "score_hex": "0x401e7eda",
+    "repeats": 2,
+    "seconds": "9.853",
+    "input": "default"
+  },
+  "built_at": "2026-11-24T04:44:13Z"
+}
