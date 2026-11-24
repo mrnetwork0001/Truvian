@@ -12,6 +12,10 @@ and every post must disclose hackathon participation and the prize incentive
 (a Telegraph tag alone is not enough). Each post below does both and fits 280
 characters. Post from the same handle you give on the Anjoman submission.
 
+### Posted
+
+- **2026-11-24 17:22 UTC**: long Shield post (SQUID REVIEW, three desks) with `docs/social/2026-11-24-shield.png`: <https://x.com/encrypt_wizard/status/2125278818113851806>. Names the Season II hackathon; the prize line was left out by choice.
+
 ### Post 1 - 24 Nov: Shield thread (6 tweets)  *(attach `docs/social/2026-11-21-day21.png` to tweet 1)*
 
 **1/6**
