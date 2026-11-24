@@ -1,0 +1,91 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  :root { --bg:#0a0a0a; --panel:#131313; --panel2:#181818; --line:#262626; --text:#ededed; --dim:#8f8f8f; --gold:#d4a53a; --gold-soft:#f0cf7a; --ok:#6fcf97; --warn:#e0a84b; --bad:#e07a7a; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { width:1600px; height:900px; background:var(--bg); color:var(--text); font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif; overflow:hidden; }
+  .mono { font-family:"SF Mono",Menlo,Monaco,monospace; }
+  .page { position:relative; width:1600px; height:900px; padding:46px 72px 0; background:
+     radial-gradient(900px 520px at 88% -8%, rgba(212,165,58,.16), transparent 62%),
+     radial-gradient(700px 480px at -6% 108%, rgba(212,165,58,.08), transparent 60%), var(--bg); }
+  .grid { position:absolute; inset:0; background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px); background-size:80px 80px; opacity:.22; mask-image:linear-gradient(180deg,rgba(0,0,0,.9),transparent 78%); }
+  .top { position:relative; display:flex; align-items:center; justify-content:space-between; }
+  .logo { height:78px; width:auto; display:block; margin-left:-6px; }
+  .tag { font-size:16px; letter-spacing:.2em; color:var(--gold); border:1px solid rgba(212,165,58,.45); padding:10px 18px; border-radius:999px; text-transform:uppercase; }
+  .cols { position:relative; display:grid; grid-template-columns:1.05fr .95fr; gap:52px; margin-top:40px; }
+  h1 { font-size:56px; line-height:1.06; font-weight:700; letter-spacing:-.022em; }
+  h1 span { color:var(--gold); }
+  .lede { margin-top:18px; font-size:21px; line-height:1.45; color:#bdbdbd; }
+  .lede b { color:var(--text); font-weight:600; }
+
+  .memo { margin-top:26px; background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .memo .head { display:flex; justify-content:space-between; align-items:center; padding:14px 22px; border-bottom:1px solid var(--line); font-size:15px; color:var(--dim); letter-spacing:.08em; text-transform:uppercase; }
+  .memo .head b { color:var(--text); letter-spacing:0; text-transform:none; font-size:17px; }
+  .row { display:grid; grid-template-columns:200px 1fr; gap:16px; padding:13px 22px; border-bottom:1px solid #1d1d1d; font-size:18px; align-items:center; }
+  .row .k { color:var(--dim); font-size:14px; letter-spacing:.06em; }
+  .row .bad { color:var(--bad); font-weight:600; }
+  .row .note { color:#a8a8a8; }
+  .verdict { display:flex; justify-content:space-between; align-items:center; padding:16px 22px; background:rgba(224,168,75,.08); border-left:4px solid var(--warn); }
+  .verdict .w { font-size:30px; font-weight:800; letter-spacing:.06em; color:var(--warn); }
+  .verdict .s { font-size:18px; color:#d9d9d9; }
+
+  .desks { display:flex; flex-direction:column; gap:16px; }
+  .label { font-size:14px; letter-spacing:.18em; text-transform:uppercase; color:var(--gold); margin-bottom:2px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 22px; }
+  .card .t { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
+  .card .n { font-size:23px; font-weight:700; }
+  .card .who { font-size:14px; color:var(--dim); letter-spacing:.06em; text-transform:uppercase; }
+  .card .v { margin-top:8px; font-size:18px; line-height:1.42; color:#c9c9c9; }
+  .card .v b { color:var(--gold-soft); font-weight:600; }
+  .chips { margin-top:10px; display:flex; gap:8px; }
+  .chip { font-size:13px; font-weight:700; letter-spacing:.08em; padding:4px 10px; border-radius:5px; border:1px solid currentColor; }
+  .g { color:var(--ok); } .y { color:var(--warn); } .r { color:var(--bad); }
+  .paid { background:linear-gradient(90deg, rgba(212,165,58,.12), rgba(212,165,58,.03)); border:1px solid rgba(212,165,58,.35); border-radius:12px; padding:16px 22px; font-size:19px; line-height:1.4; }
+  .paid b { color:var(--gold-soft); }
+
+  .foot { position:absolute; left:72px; right:72px; bottom:30px; display:flex; justify-content:space-between; align-items:flex-end; font-size:16px; color:var(--dim); }
+  .foot .url { font-size:28px; color:var(--text); font-weight:600; }
+  .foot .url span { color:var(--gold); }
+</style></head>
+<body><div class="page"><div class="grid"></div>
+  <div class="top">
+    <img class="logo" src="../../src/shield/public/brand/truvian-header.png" alt="Truvian">
+    <div class="tag">Telegraph Season II · Truvian Shield</div>
+  </div>
+  <div class="cols">
+    <div>
+      <h1>A miner can call a rug pull Secure. <span>It can't clear one.</span></h1>
+      <p class="lede">Shield buys every fact through Telegraph, <b>checks it against the chain</b>, and signs the decision before an agent acts.</p>
+      <div class="memo">
+        <div class="head"><span>Token preflight · $1,000 buy</span><b>SQUID, the 2021 rug pull</b></div>
+        <div class="row"><span class="k">SECURITY REVIEW</span><span><span class="bad">"Secure"</span> <span class="note">· examined no code</span></span></div>
+        <div class="row"><span class="k">TOTAL SUPPLY</span><span><span class="bad">514 bps off</span> <span class="note">the chain read</span></span></div>
+        <div class="row"><span class="k">COST</span><span class="note">$0.01 per answer · receipt for each</span></div>
+        <div class="verdict"><span class="w">REVIEW</span><span class="s">Not cleared.</span></div>
+      </div>
+    </div>
+    <div class="desks">
+      <div class="label">Three desks</div>
+      <div class="card">
+        <div class="t"><span class="n">Token preflight</span><span class="who">Trading agents</span></div>
+        <div class="v">"May I buy this token through this pool?" Security, supply, wash trading and pool depth.</div>
+        <div class="chips"><span class="chip g">HOLD</span><span class="chip y">REVIEW</span><span class="chip r">REJECT</span></div>
+      </div>
+      <div class="card">
+        <div class="t"><span class="n">Listing review</span><span class="who">Exchanges</span></div>
+        <div class="v">Issuer screened against <b>sanctions lists</b>; treasury balance must match Shield's own read within <b>5 bps</b>.</div>
+        <div class="chips"><span class="chip g">LIST</span><span class="chip y">REVIEW</span><span class="chip r">REJECT</span></div>
+      </div>
+      <div class="card">
+        <div class="t"><span class="n">Holdings proof</span><span class="who">Funds &amp; index issuers</span></div>
+        <div class="v">ENS DAO treasury: the routed balance miner <b>answered for a different address</b>. The chain read caught it.</div>
+        <div class="chips"><span class="chip g">VERIFIED</span><span class="chip y">REVIEW</span><span class="chip r">REJECT</span></div>
+      </div>
+      <div class="paid">Every decision is a <b>signed memo</b>: verdict, each answer, its receipt and what it cost.</div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="url">truvian.xyz<span>/preflight</span></div>
+    <div>No wallet needed · Season II hackathon entry · paid in test USDC on testnet</div>
+  </div>
+</div></body></html>
