@@ -16,6 +16,12 @@ any pair was scored: their executors refused the node's batch request
 pool holds 41 eligible rows from one submitter. With no incumbent, an
 adapter needs 11 of 15 public pairs and at least 70% on the hidden sample.
 
+**Status, 2026-11-24 06:45 UTC: v1 registered as id 227** (tx
+`0xbc9ca0592f72fb292ebf2883f53aff21d4592f48793a53513024cc0687c5bf21`,
+package URL pinned to commit `0e4dc56`, runnable URL
+`https://scorer.truvian.xyz/crl/runnable`). Progress:
+`GET https://devnode.telegraphprotocol.com/api/wasm/227`.
+
 ## Training data: `generate_pairs.py`
 
 A pair is (question, better answer, worse answer). Each case is built from a
