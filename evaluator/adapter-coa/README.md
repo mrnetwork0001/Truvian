@@ -25,10 +25,19 @@ check, then ordered **86.21%** of the node's 29-pair hidden sample, the same
 win rate as the champion (210) on the same sample. A challenger has to beat
 the incumbent by 2 points, so a tie is a loss (node:
 `lost the competition … did not beat the incumbent (registration 210) at
-86.21% by the replacement margin 2.00 points`). The hidden batch is in the
-executor's request log, but we do not train or tune against it: it is the
-benchmark, not training material. A v2 has to gain on our own held-out
-pairs (v1: 77.08%) and then on a fresh hidden sample.
+86.21% by the replacement margin 2.00 points`). The node scores the hidden
+sample inside its own runtime on the downloaded package, so it never passes
+through our executor; the only node request in our log is the 15-pair public
+check. We do not train or tune on node pairs either way. A v2 has to gain on
+our own held-out pairs (v1: 77.08%) and then on a fresh hidden sample.
+
+**What the public check showed (decoded from the executor log):** 13 of the
+15 public pairs are clause extraction, not full audits. The prompt quotes a
+contract excerpt and asks for one provision (Document Name, Parties,
+Agreement Date, Governing Law, Exclusivity, Cap On Liability…); the answer
+is `{"clause": …, "value": …, "found": true}`. The worse answer carries a
+value from another contract, the wrong clause label, or a sentence from
+another provision. Version 2 trains on that shape.
 
 ## Training data: `generate_pairs.py`
 
@@ -96,3 +105,25 @@ and stopped after 15 idle minutes. Requests are logged to
 replayed against a later version. Checked through the public URL with 10
 held-out pairs, tokenised as the node does: 8 of 10 ordered, 287 s (cold
 start, with a training run on the same CPU).
+
+## Version 2 training data (queued 2026-11-24)
+
+[`generate_pairs_v2.py`](generate_pairs_v2.py) writes synthetic contracts
+(made-up parties, titles, laws, products and amounts; 24 provision types
+plus the header fields) and cuts an excerpt around the provision asked for.
+The better answer quotes what the excerpt shows; the worse one has one
+fault: foreign_value (a value from another contract), wrong_label,
+other_span (a sentence of another provision in the same excerpt) or
+found_flip. 12% of questions ask for a provision the contract lacks, where
+`"found": false` is right.
+
+v1's own held-out pairs, scored by fault kind through the public URL
+(185 of 240): misread_record 37.5%, wrong_obligor 60.6%, wrong_verdict
+63.4%, misquote 88%, missed_obligation 93.1%, wrong_deadline 94.4%,
+invented_obligation and wrong_amount 100%.
+
+Training set: 1,400 extraction pairs plus 450 of v1's audit pairs, so the
+audit shape stays covered; held-out: 220 pairs (extraction and v1 audit,
+deduplicated against training). Kit dataset gate: PASS (surface probe
+57.5%, length shortcut 53.6%, unique rejected answers 100%, held-out leak
+0%).
