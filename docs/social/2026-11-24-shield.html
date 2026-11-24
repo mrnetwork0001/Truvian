@@ -13,7 +13,7 @@
   .logo { height:78px; width:auto; display:block; margin-left:-6px; }
   .tag { font-size:16px; letter-spacing:.2em; color:var(--gold); border:1px solid rgba(212,165,58,.45); padding:10px 18px; border-radius:999px; text-transform:uppercase; }
   .cols { position:relative; display:grid; grid-template-columns:1.05fr .95fr; gap:52px; margin-top:40px; }
-  h1 { font-size:56px; line-height:1.06; font-weight:700; letter-spacing:-.022em; }
+  h1 { font-size:72px; line-height:1.06; font-weight:700; letter-spacing:-.022em; }
   h1 span { color:var(--gold); }
   .lede { margin-top:18px; font-size:21px; line-height:1.45; color:#bdbdbd; }
   .lede b { color:var(--text); font-weight:600; }
@@ -46,46 +46,40 @@
   .foot { position:absolute; left:72px; right:72px; bottom:30px; display:flex; justify-content:space-between; align-items:flex-end; font-size:16px; color:var(--dim); }
   .foot .url { font-size:28px; color:var(--text); font-weight:600; }
   .foot .url span { color:var(--gold); }
+  .one { position:relative; display:grid; grid-template-columns:1.1fr .9fr; gap:70px; margin-top:100px; align-items:center; }
+  .big { background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .big .row { grid-template-columns:1fr auto; padding:20px 26px; font-size:24px; }
+  .big .row .k { font-size:16px; }
+  .big .verdict { padding:22px 26px; }
+  .big .verdict .w { font-size:42px; }
+  .big .verdict .s { font-size:22px; }
+  .desk3 { position:relative; display:flex; gap:18px; margin-top:96px; }
+  .bhead { display:flex; justify-content:space-between; align-items:center; padding:16px 26px; border-bottom:1px solid var(--line); font-size:15px; color:var(--dim); letter-spacing:.12em; text-transform:uppercase; }
+  .bhead b { color:var(--text); font-size:19px; letter-spacing:0; text-transform:none; }
+  .desk3 div { flex:1; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 22px; font-size:22px; font-weight:600; }
+  .desk3 small { display:block; font-size:14px; color:var(--dim); letter-spacing:.12em; text-transform:uppercase; font-weight:500; margin-top:4px; }
 </style></head>
 <body><div class="page"><div class="grid"></div>
   <div class="top">
     <img class="logo" src="../../src/shield/public/brand/truvian-header.png" alt="Truvian">
-    <div class="tag">Telegraph Season II · Truvian Shield</div>
+    <div class="tag">Telegraph Season II</div>
   </div>
-  <div class="cols">
-    <div>
-      <h1>A miner can call a rug pull Secure. <span>It can't clear one.</span></h1>
-      <p class="lede">Shield buys every fact through Telegraph, <b>checks it against the chain</b>, and signs the decision before an agent acts.</p>
-      <div class="memo">
-        <div class="head"><span>Token preflight · $1,000 buy</span><b>SQUID, the 2021 rug pull</b></div>
-        <div class="row"><span class="k">SECURITY REVIEW</span><span><span class="bad">"Secure"</span> <span class="note">· examined no code</span></span></div>
-        <div class="row"><span class="k">TOTAL SUPPLY</span><span><span class="bad">514 bps off</span> <span class="note">the chain read</span></span></div>
-        <div class="row"><span class="k">COST</span><span class="note">$0.01 per answer · receipt for each</span></div>
-        <div class="verdict"><span class="w">REVIEW</span><span class="s">Not cleared.</span></div>
-      </div>
+  <div class="one">
+    <h1>A miner can call a rug pull Secure. <span>It can't clear one.</span></h1>
+    <div class="big">
+      <div class="bhead"><span>Token preflight</span><b>SQUID rug pull</b></div>
+      <div class="row"><span class="k">SECURITY REVIEW</span><span class="bad">"Secure"</span></div>
+      <div class="row"><span class="k">CHAIN CHECK</span><span class="bad">supply 514 bps off</span></div>
+      <div class="verdict"><span class="w">REVIEW</span><span class="s">Not cleared.</span></div>
     </div>
-    <div class="desks">
-      <div class="label">Three desks</div>
-      <div class="card">
-        <div class="t"><span class="n">Token preflight</span><span class="who">Trading agents</span></div>
-        <div class="v">"May I buy this token through this pool?" Security, supply, wash trading and pool depth.</div>
-        <div class="chips"><span class="chip g">HOLD</span><span class="chip y">REVIEW</span><span class="chip r">REJECT</span></div>
-      </div>
-      <div class="card">
-        <div class="t"><span class="n">Listing review</span><span class="who">Exchanges</span></div>
-        <div class="v">Issuer screened against <b>sanctions lists</b>; treasury balance must match Shield's own read within <b>5 bps</b>.</div>
-        <div class="chips"><span class="chip g">LIST</span><span class="chip y">REVIEW</span><span class="chip r">REJECT</span></div>
-      </div>
-      <div class="card">
-        <div class="t"><span class="n">Holdings proof</span><span class="who">Funds &amp; index issuers</span></div>
-        <div class="v">ENS DAO treasury: the routed balance miner <b>answered for a different address</b>. The chain read caught it.</div>
-        <div class="chips"><span class="chip g">VERIFIED</span><span class="chip y">REVIEW</span><span class="chip r">REJECT</span></div>
-      </div>
-      <div class="paid">Every decision is a <b>signed memo</b>: verdict, each answer, its receipt and what it cost.</div>
-    </div>
+  </div>
+  <div class="desk3">
+    <div>Token preflight<small>Trading agents</small></div>
+    <div>Listing review<small>Exchanges</small></div>
+    <div>Holdings proof<small>Funds</small></div>
   </div>
   <div class="foot">
     <div class="url">truvian.xyz<span>/preflight</span></div>
-    <div>No wallet needed · Season II hackathon entry · paid in test USDC on testnet</div>
+    <div>Season II hackathon entry</div>
   </div>
 </div></body></html>
