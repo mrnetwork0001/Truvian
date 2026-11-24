@@ -127,3 +127,23 @@ audit shape stays covered; held-out: 220 pairs (extraction and v1 audit,
 deduplicated against training). Kit dataset gate: PASS (surface probe
 57.5%, length shortcut 53.6%, unique rejected answers 100%, held-out leak
 0%).
+
+## Version 2 result
+
+Trained 2026-11-24 11:01-16:36 UTC (3 epochs, 1,573 training pairs;
+validation accuracy by epoch 85.2%, 89.9%, 90.3%): **87.73% on 220
+held-out pairs** (length baseline 50.68%), verdict PASS; full record in
+[`package-v2/train-result.json`](package-v2/train-result.json).
+
+Replayed through the executor on the node's 15 public pairs (decoded from
+the request log; a replay check, never training data): **15 of 15
+ordered**, against v1's 13. Every pair separated by at least 3 points.
+
+Package: [`package-v2/CONTRACT_OBLIGATION_AUDIT.safetensors`](package-v2/),
+6,776,916 bytes, keccak256
+`0xd9e343db51112dfb8183b58e7931961c3f758a7dbd70236200ff1b1df50132f9`, sha256
+`e6eb46bd7a7a94712395dd0c76abbc643d84e297426835d7f1760f154b93e43f`, class
+`judgment`; `adapterbuild lora` Stage 1 passed. The executor at
+`https://scorer.truvian.xyz/coa/runnable` now serves this package (v1 is
+kept on the scorer VPS as a backup). The champion holds 86.21% on the hidden
+sample, so v2 needs at least 88.21% there to win.
