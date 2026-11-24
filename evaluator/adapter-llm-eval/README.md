@@ -43,6 +43,20 @@ probe 59.2%, length shortcut 56.5%, unique negatives 100%, held-out leak 0%
 v2 is registered, the logged batch is replayed against it with
 [`replay-log.py`](../../deploy/scorer/replay-log.py).
 
+**v2 not registered, 2026-11-24 00:30 UTC.** Trained on the 1,400 pairs
+(3 epochs, 2 h 30 min; 72.5% on its held-out pairs, length baseline 55%,
+verdict PASS; `adapterbuild` Stage 1 passed, keccak256
+`0x5a616071…10bb6b`). Replayed on a temporary executor against the node's
+logged batch, it ordered **8 of the 15** pairs (v1: 7), so it would fail the
+same check. It ordered every passage-extraction pair and three of the four
+workflow pairs. It missed both direct factual answers and four of the seven
+evaluations. In each of those, the right answer depends on knowing a fact
+about the world (who directed a film, the year of a prize, where a tune came
+from), which a rank-8 adapter on ModernBERT-base cannot learn from generated
+pairs. We stopped work on this intent there and used the server's CPU for
+intents with no champion. The package stays on the scorer server, not here,
+because it was never registered.
+
 ## Training data: `generate_pairs.py`
 
 A pair is (question, better evaluation, worse evaluation). The better one is
