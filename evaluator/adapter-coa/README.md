@@ -147,3 +147,12 @@ Package: [`package-v2/CONTRACT_OBLIGATION_AUDIT.safetensors`](package-v2/),
 `https://scorer.truvian.xyz/coa/runnable` now serves this package (v1 is
 kept on the scorer VPS as a backup). The champion holds 86.21% on the hidden
 sample, so v2 needs at least 88.21% there to win.
+
+**Registered as id 234 and rejected, 2026-11-24 21:12 UTC** (tx
+`0xb3118923a514b0cf129f66f3e3325024a7d8381a9e09a8c5b0a4704ec4b9fd16`): on the
+node's 29-pair hidden sample (epoch 50 seed) it ordered **79.31%** (23 of 29)
+against the champion's (registration 210) 86.21%; v1 had tied the champion on
+an earlier sample. Training on extraction-shaped pairs fixed the public check
+(15/15) but cost accuracy on the hidden sample, which is not drawn the same
+way as the 15 public pairs. The executor serves v1 again; v2 is kept on the
+scorer VPS.
