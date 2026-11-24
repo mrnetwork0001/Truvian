@@ -20,6 +20,16 @@ package URL pinned to commit `4f8674f`, runnable URL
 check (11 of 15) and the hidden round against 210. Progress:
 `GET https://devnode.telegraphprotocol.com/api/wasm/219`.
 
+**v1 lost on the margin, 2026-11-24 02:14 UTC.** It passed the public-pair
+check, then ordered **86.21%** of the node's 29-pair hidden sample, the same
+win rate as the champion (210) on the same sample. A challenger has to beat
+the incumbent by 2 points, so a tie is a loss (node:
+`lost the competition … did not beat the incumbent (registration 210) at
+86.21% by the replacement margin 2.00 points`). The hidden batch is in the
+executor's request log, but we do not train or tune against it: it is the
+benchmark, not training material. A v2 has to gain on our own held-out
+pairs (v1: 77.08%) and then on a fresh hidden sample.
+
 ## Training data: `generate_pairs.py`
 
 A pair is (contract, better audit, worse audit). The better audit is right by
