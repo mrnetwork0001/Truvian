@@ -28,6 +28,7 @@ ROUTES = [
     ("/oer/", "truvian-scorer-oer", 8082, True),
     ("/lle/", "truvian-scorer-lle", 8083, True),
     ("/coa/", "truvian-scorer-coa", 8084, True),
+    ("/crl/", "truvian-scorer-crl", 8085, True),
     ("/", "truvian-scorer", 8080, False),
 ]
 LISTEN = ("127.0.0.1", 8090)
@@ -51,6 +52,19 @@ def listening(port):
             return True
     except OSError:
         return False
+
+
+def batch_like(body):
+    """True for no body or a JSON object carrying a batch list; the node's
+    liveness check may send either, so only a non-empty non-batch body (the
+    form posts scanners send) is refused."""
+    if not body:
+        return True
+    try:
+        obj = json.loads(body or b"")
+    except ValueError:
+        return False
+    return isinstance(obj, dict) and isinstance(obj.get("batch"), list)
 
 
 def ensure_running(unit, port):
@@ -108,6 +122,9 @@ class Gate(BaseHTTPRequestHandler):
         unit, port, path = r
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else None
+        # scanners POST forms and junk here; only a JSON batch may start an executor
+        if not batch_like(body):
+            return self.reply(400, {"error": "POST a JSON body with a batch"})
         with lock:
             state[unit]["inflight"] += 1
             state[unit]["last"] = time.time()
