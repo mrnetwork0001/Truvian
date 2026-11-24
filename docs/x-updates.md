@@ -5,20 +5,60 @@ same day, tagged **@Telegraphprotoc**. This file logs drafts and what was posted
 
 ---
 
-## SEASON II - four posts, one per date (none posted as of 2026-11-24)
+## SEASON II - app progress posts, one per date (none posted as of 2026-11-24)
 
 Growth (20 points) needs at least three original updates on separate dates,
 and every post must disclose hackathon participation and the prize incentive
 (a Telegraph tag alone is not enough). Each post below does both and fits 280
 characters. Post from the same handle you give on the Anjoman submission.
 
-### Post 1 - 24 Nov  *(attach: `docs/social/2026-11-21-day21.png`)*
+### Post 1 - 24 Nov: Shield thread (6 tweets)  *(attach `docs/social/2026-11-21-day21.png` to tweet 1)*
 
-> Building Truvian for the @Telegraphprotoc Season II hackathon, competing for its $10K prize pool.
+**1/6**
+
+> A ranked miner called SQUID, the 2021 rug pull, "Secure". It had never seen the code.
 >
-> Shield checks a token before an agent signs: it buys each fact through Telegraph at $0.01, checks it on-chain, and signs HOLD, REVIEW or REJECT.
+> I'm building Truvian Shield for the @Telegraphprotoc Season II hackathon (competing for a share of the $10K prize). Its job: make sure an answer like that never clears a trade. 🧵
+
+**2/6**
+
+> An agent asks: may I buy $1,000 of this token through this pool?
 >
-> truvian.xyz/preflight
+> Shield reads the contract on-chain, then buys four facts through Telegraph at $0.01 each (test USDC for now): security review, total supply, wash trading, pool depth.
+>
+> Each answer comes with a payment receipt.
+
+**3/6**
+
+> Then it checks what it bought against the chain.
+>
+> SQUID: the "Secure" review examined nothing, and the supply it bought was 514 bps off the chain read.
+>
+> Verdict: REVIEW. Not cleared.
+>
+> A miner can call a rug pull Secure. It can't clear one.
+
+**4/6**
+
+> Second desk, exchange listings: LIST, REVIEW or REJECT for a token, its issuer and its treasury.
+>
+> It screens the issuer's legal name against sanctions lists, and the treasury balance it buys must match Shield's own read within 5 bps.
+
+**5/6**
+
+> Third desk, fund holdings: an investor agent checks what a treasury claims to hold, without trusting the issuer.
+>
+> ENS DAO treasury: REVIEW. The balance miner the network routed to answered for a different address. The chain read caught it.
+>
+> truvian.xyz/preflight?m=JYjvJrmy
+
+**6/6**
+
+> Every decision is a signed memo: the verdict, each answer, its receipt, and what it cost.
+>
+> Try it, no wallet needed: truvian.xyz/preflight → pick an example → Run preflight.
+>
+> Code and memos: github.com/mrnetwork0001/Truvian
 
 ### Post 2 - 26 Nov  *(attach: `docs/social/2026-11-23-adapter-champion.png`)*
 
