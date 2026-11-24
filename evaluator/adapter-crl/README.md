@@ -130,3 +130,33 @@ prior that a looked-up entity is usually live.
 Kit dataset gate on the 1,500 training pairs: PASS (surface probe 63.3%,
 limit 65%; length shortcut 51.7%; unique rejected answers 100%; held-out
 leak 0%).
+
+## Version 2 result: not registered
+
+Trained 2026-11-24 08:00-11:01 UTC (early stopping; 1,275 training pairs):
+**79.17% on 240 held-out pairs** (length baseline 51.25%), verdict PASS.
+Package sha256 `0232f0ece1be80ac6975fe178f5213ff7dd826732363866707391e5413f36af5`
+(kept on the scorer VPS, not committed). Replayed through the executor on
+the node's 15 public pairs it ordered **8**, below v1's 10, so it was not
+registered.
+
+Held-out accuracy by fault kind shows why: it learned the faults the node
+rarely uses (dropped_field 38/39, contradiction 5/5, flip_status 45/52) and
+not the geography faults it uses most: city 16/31 (52%), country_code
+11/15, jurisdiction 21/27, other_entity 11/20. Six cities per country let
+it memorise a list instead of learning which city belongs where.
+
+## Version 3 (queued after COA v2)
+
+[`generate_pairs_v3.py`](generate_pairs_v3.py): version 2 with about 25
+real cities per country and the geography faults weighted to about 60% of
+pairs (2,000 raw: city 504, jurisdiction 388, flip_status 374, country_code
+249, dropped_field 132, other_entity 127, address 91, bad_lei 63,
+impossible_date 43, contradiction 29). 1,700 training pairs after the
+512-token fit, 240 held-out. Kit dataset gate: PASS (surface probe 57.5%,
+length shortcut 53.6%).
+
+```
+python3 generate_pairs_v3.py --n 2000 --seed 11 --out v3raw.jsonl
+python3 generate_pairs_v3.py --n 360 --seed 97 --out v3rawtest.jsonl
+```
