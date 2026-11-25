@@ -721,7 +721,9 @@ export function buildShieldServer() {
       }
       return { success: settlement.success, transaction: settlement.transaction ?? null, reason: settlement.reason };
     },
+    // Called once per resolution, so a resolution counts as a desk decision like a preflight
     recordSpend: (usd, requests) => {
+      stats.preflightsRun++;
       stats.telegraphRequests += requests;
       stats.paidUsd = Number((stats.paidUsd + usd).toFixed(6));
       limiter.recordSpend(usd);
