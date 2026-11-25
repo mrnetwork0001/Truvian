@@ -26,7 +26,7 @@
   // Colours per theme (theme.js sets data-theme="light" on <html> and fires "themechange")
   var PALETTES = {
     dark: { gold: '202,165,61', bone: '236,229,214', ok: '127,174,115', rev: '217,164,65', rej: '208,100,90', glow: 0.07, line: 0.035, dot: 0.16, mark: 0.5 },
-    light: { gold: '127,96,15', bone: '28,26,22', ok: '47,95,43', rev: '122,79,0', rej: '139,34,25', glow: 0.10, line: 0.05, dot: 0.2, mark: 0.62 },
+    light: { gold: '127,96,15', bone: '28,26,22', ok: '47,95,43', rev: '122,79,0', rej: '139,34,25', glow: 0.10, line: 0.05, dot: 0.18, mark: 0.45 },
   };
   var P = PALETTES.dark;
   function readTheme() {

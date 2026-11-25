@@ -244,3 +244,6 @@ code, .mono { font-family: var(--mono); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* the animated background stays behind figures, never under their text */
+.fig-frame { background-color: var(--ink); }
