@@ -69,6 +69,10 @@
   function setMode(next) {
     mode = next;
     for (const tab of document.querySelectorAll('.tab')) tab.setAttribute('aria-selected', String(tab.dataset.mode === mode));
+    // the phone desk bar marks the same desk as the tabs
+    for (const b of document.querySelectorAll('.db-item[data-mode]')) {
+      if (b.dataset.mode === mode) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    }
     for (const f of document.querySelectorAll('.mode-trade')) f.classList.toggle('hidden', mode !== 'trade');
     for (const f of document.querySelectorAll('.mode-listing')) f.classList.toggle('hidden', mode !== 'listing');
     for (const f of document.querySelectorAll('.mode-holdings')) f.classList.toggle('hidden', mode !== 'holdings');
@@ -401,6 +405,19 @@
   const desk = ['trade', 'listing', 'holdings', 'settlement'].includes(params.get('desk')) ? params.get('desk') : 'trade';
   setMode(desk);
   fill(FIXTURES[desk][0].v);
+  // Phone desk bar: switch desk in place (no reload), keep ?desk= in the URL, back to the top.
+  for (const b of document.querySelectorAll('.db-item[data-mode]')) {
+    b.addEventListener('click', (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button > 0) return; // let new-tab clicks through
+      e.preventDefault();
+      const m = b.dataset.mode;
+      setMode(m);
+      fill(FIXTURES[m][0].v);
+      showError('');
+      history.replaceState(null, '', `/preflight?desk=${m}`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
   const id = params.get('m');
   if (id) loadPermalink(id);
   loadRecent();

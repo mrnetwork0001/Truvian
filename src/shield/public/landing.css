@@ -286,7 +286,7 @@
 .grid-safe > * { min-width: 0; }
 @media (max-width: 900px) {
   html, body { overflow-x: clip; }
-  .top { z-index: 40; background: rgba(13,12,10,.82); backdrop-filter: saturate(140%) blur(12px); -webkit-backdrop-filter: saturate(140%) blur(12px); }
+  .top { z-index: 40; background: rgba(13,12,10,.95); backdrop-filter: saturate(140%) blur(12px); -webkit-backdrop-filter: saturate(140%) blur(12px); }
   .top-inner { height: 60px; gap: 1rem; }
   .brand-logo { height: 30px; }
   .topnav { display: none; }
