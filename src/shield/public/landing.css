@@ -10,9 +10,7 @@
 .brand-logo { height: 34px; width: auto; display: block; }
 .topnav { display: flex; gap: 1.6rem; margin-left: auto; }
 .topnav a { font: 500 .74rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bone-dim); text-decoration: none; padding: .4rem 0; border-bottom: 1px solid transparent; }
-.topnav a i { font-style: normal; color: var(--gold); margin-right: .45rem; }
 .topnav a:hover { color: var(--bone); border-bottom-color: var(--gold); }
-.top-cta { padding: .7rem 1rem; font-size: .82rem; }
 
 /* ---------- hero ---------- */
 .hero { padding: clamp(48px, 8vw, 112px) 0 0; border-bottom: 1px solid var(--rule-soft); }
@@ -179,7 +177,7 @@
 .mini .num { text-align: right; color: var(--gold-soft); font-size: .9rem; padding-right: 0; }
 
 /* agents */
-.agents-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 48px); align-items: start; }
+.agents-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 48px); align-items: center; }
 .code { margin: 0; background-color: var(--ink-2); min-width: 0; }
 .code pre { margin: 0; overflow-x: auto; font: 400 .78rem/1.7 var(--mono); color: var(--bone-dim); }
 .code .c { color: var(--bone-faint); }
@@ -224,8 +222,7 @@
 
 /* ---------- responsive ---------- */
 @media (max-width: 1080px) {
-  .topnav { display: none; }
-  .top-cta { margin-left: auto; }
+  .topnav { gap: 1.2rem; }
   .flow-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 2rem; }
   .flow-steps li { border-right: 0; margin-right: 0; padding-right: 1.2rem; }
   .cases a { grid-template-columns: 2.4rem 7rem minmax(0, 1fr); }
@@ -250,7 +247,9 @@
 @media (max-width: 560px) {
   .top-inner { height: 60px; gap: 1rem; }
   .brand-logo { height: 28px; }
-  .top-cta { padding: .6rem .75rem; font-size: .76rem; }
+  .topnav { gap: 1rem; }
+  .topnav .nav-opt { display: none; }
+  .topnav a { font-size: .66rem; letter-spacing: .08em; }
   .flow-steps { grid-template-columns: minmax(0, 1fr); }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stats > div { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); }
