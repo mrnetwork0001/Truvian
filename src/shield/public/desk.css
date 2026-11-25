@@ -283,3 +283,24 @@ table.grid a { color: var(--bone); text-decoration-color: var(--gold); text-unde
   .tabs { grid-template-columns: minmax(0, 1fr); }
   .foot-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- hover and focus: consistent with the landing page ---------- */
+.tab::after { content: ""; position: absolute; left: -1px; right: -1px; top: -1px; height: 2px; background: var(--gold); transform: scaleX(0); transform-origin: left; transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+.tab:hover::after, .tab:focus-visible::after { transform: scaleX(1); }
+.tab[aria-selected="true"]::after { display: none; }
+.tab:focus-visible { outline-offset: -2px; }
+.preset-btn { transition: border-color .15s, color .15s, transform .2s cubic-bezier(.2,.8,.2,1), background .15s; }
+.preset-btn:hover, .preset-btn:focus-visible { transform: translate3d(0, -2px, 0); border-color: var(--gold); background: var(--ink-2); }
+.preset-btn:active { transform: none; }
+table.grid tbody tr { transition: background .15s, box-shadow .15s; }
+table.grid tbody tr:hover { background: var(--ink-2); box-shadow: inset 3px 0 0 var(--gold); }
+table.grid tbody tr:hover td { background: transparent; }
+table.grid tbody tr:hover td:first-child { padding-left: .6rem; transition: padding .2s; }
+table.grid td:first-child { transition: padding .2s; }
+.recent li { transition: background .15s, padding .2s; }
+.recent li:hover { background: var(--ink-2); padding-left: .6rem; }
+.actions button, .actions a.btnlike { transition: background .15s, color .15s, transform .2s; }
+.actions button:hover, .actions a.btnlike:hover { transform: translate3d(0, -1px, 0); }
+@media (prefers-reduced-motion: reduce) {
+  .preset-btn:hover, .preset-btn:focus-visible, .actions button:hover, .actions a.btnlike:hover { transform: none; }
+}

@@ -230,3 +230,91 @@
   setInterval(stats, 30000);
   setInterval(function () { tape(false); }, 45000);
 })();
+
+/* Scroll effects: one IntersectionObserver marks each element .in once. All
+   hidden-before-reveal CSS is scoped to html.js-reveal (landing-motion.css),
+   which is only set here, so without JS or with reduced motion the page is
+   fully visible and still. Also: word masks for headlines, counting figures,
+   and the copy button on FIG. 02 (which works with reduced motion too). */
+(function () {
+  'use strict';
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // copy button for the request examples (no motion involved)
+  var code = document.querySelector('.code');
+  if (code && navigator.clipboard) {
+    var cap = code.querySelector('.fig-cap span:last-child');
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'copy-btn'; btn.textContent = 'Copy';
+    btn.addEventListener('click', function () {
+      navigator.clipboard.writeText(code.querySelector('pre').textContent).then(function () {
+        btn.textContent = 'Copied'; btn.classList.add('done');
+        setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1600);
+      });
+    });
+    if (cap) cap.replaceWith(btn);
+  }
+
+  if (reduce || !('IntersectionObserver' in window)) return;
+  document.documentElement.classList.add('js-reveal');
+
+  // headlines: wrap each word (and the serif accent as one unit) in a line mask
+  Array.prototype.forEach.call(document.querySelectorAll('.sec-head h2, .final h2'), function (h) {
+    var w = 0;
+    Array.prototype.slice.call(h.childNodes).forEach(function (n) {
+      var ref = n.nextSibling;
+      var parts = n.nodeType === 3 ? n.textContent.split(/(\s+)/) : [n];
+      var frag = document.createDocumentFragment();
+      parts.forEach(function (p) {
+        if (typeof p === 'string' && (p === '' || /^\s+$/.test(p))) { if (p) frag.appendChild(document.createTextNode(p)); return; }
+        var outer = document.createElement('span'); outer.className = 'rw';
+        var inner = document.createElement('span'); inner.style.setProperty('--w', String(w++));
+        inner.appendChild(typeof p === 'string' ? document.createTextNode(p) : p);
+        outer.appendChild(inner); frag.appendChild(outer);
+      });
+      if (n.nodeType === 3) h.removeChild(n); // an element was moved into its mask already
+      h.insertBefore(frag, ref);
+    });
+  });
+
+  // stagger indexes
+  [['.desks', '.desk'], ['.cases', 'li'], ['.flow-steps', 'li'], ['.tracks', '.track'], ['.endpoints', 'tr'], ['.limits', 'li']].forEach(function (g) {
+    Array.prototype.forEach.call(document.querySelectorAll(g[0]), function (box) {
+      Array.prototype.forEach.call(box.querySelectorAll(':scope > ' + g[1] + ', :scope > tbody > ' + g[1]), function (el, i) { el.style.setProperty('--i', String(i)); });
+    });
+  });
+
+  // figures that count up once from 0 to the value already on the page
+  function countUp(el) {
+    var node = null;
+    for (var i = 0; i < el.childNodes.length; i++) if (el.childNodes[i].nodeType === 3 && /\d/.test(el.childNodes[i].textContent)) { node = el.childNodes[i]; break; }
+    if (!node) return;
+    var m = node.textContent.match(/^(\s*\$?)([\d,]*\.?\d+)(.*)$/);
+    if (!m) return;
+    var target = Number(m[2].replace(/,/g, ''));
+    var dec = (m[2].split('.')[1] || '').length;
+    var grouped = m[2].indexOf(',') >= 0;
+    var t0 = null, dur = 1100;
+    function fmt(v) { var s = v.toFixed(dec); return grouped ? Number(s).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec }) : s; }
+    function step(ts) {
+      if (t0 === null) t0 = ts;
+      var k = Math.min(1, (ts - t0) / dur); k = 1 - Math.pow(1 - k, 3);
+      if (!node.parentNode) return; // the live stats replaced it: keep theirs
+      node.textContent = m[1] + fmt(target * k) + m[3];
+      if (k < 1) requestAnimationFrame(step);
+    }
+    node.textContent = m[1] + fmt(0) + m[3];
+    requestAnimationFrame(step);
+  }
+
+  var targets = document.querySelectorAll('.sec-head, .final, .desk, .cases li, .flow, .track, .code, .endpoints, .limits, .stats dd, .track-fig');
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      io.unobserve(e.target);
+      e.target.classList.add('in');
+      if (e.target.matches('.stats dd, .track-fig')) countUp(e.target);
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 });
+  Array.prototype.forEach.call(targets, function (el) { io.observe(el); });
+})();
