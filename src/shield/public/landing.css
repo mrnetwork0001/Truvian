@@ -54,15 +54,13 @@
 .sig-line .mono { font-size: .82rem; }
 .sig-meta { margin-top: .45rem; font-size: .66rem; color: var(--paper-dim); word-break: break-word; }
 .memo-stamp { position: absolute; left: 50%; margin-left: -6.6rem; bottom: 88px; transform: rotate(-7deg); mix-blend-mode: multiply; opacity: .92; animation: press .55s cubic-bezier(.2,.8,.2,1) .45s both; }
-.memo-body { transition: opacity .45s ease, transform .45s ease; }
 /* memos differ in length: a fixed floor keeps the hero still while they cycle */
 @media (min-width: 861px) { .memo { min-height: 640px; display: flex; flex-direction: column; } .memo-body { flex: 1; display: flex; flex-direction: column; } .memo-sign { margin-top: auto; padding-top: 5.6rem; } }
-.memo.swapping .memo-body { opacity: 0; transform: translate3d(0, 6px, 0); }
-.memo.swapping .memo-stamp { opacity: 0; transition: opacity .2s; }
-.memo-stamp.repress { animation: press .55s cubic-bezier(.2,.8,.2,1) both; }
-.memo-cycle { display: flex; gap: 6px; margin-top: .9rem; }
-.memo-cycle i { display: block; width: 18px; height: 2px; background: var(--rule); transition: background .3s; }
-.memo-cycle i.on { background: var(--gold); }
+.memo-cycle { display: flex; gap: 2px; margin-top: .5rem; }
+.memo-cycle button { display: block; width: 24px; height: 22px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.memo-cycle button::before { content: ""; display: block; height: 2px; margin: 0 3px; background: var(--rule); transition: background .3s; }
+.memo-cycle button.on::before { background: var(--gold); }
+.memo-cycle button:hover::before, .memo-cycle button:focus-visible::before { background: var(--gold-soft); }
 .hero-memo figcaption { margin: 1.3rem 0 0; font-size: .84rem; color: var(--bone-faint); max-width: 30rem; }
 .hero-memo figcaption a { color: var(--bone); text-decoration-color: var(--gold); text-underline-offset: 3px; }
 

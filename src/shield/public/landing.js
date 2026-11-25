@@ -118,17 +118,25 @@
     });
   }
 
-  /* ---------------- the featured memo cycles through real memos ----------------
-     Every 7 s the paper memo fades to the next recent decision (fetched from
-     /api/memo/<id>, the signed record itself) and its verdict is stamped again.
-     Pauses on hover/focus and while the tab is hidden. */
+  /* ---------------- the featured memo: always in motion, always a real memo ----------------
+     The paper floats (a slow sway, CSS), a gold hairline sweeps down it as if
+     the hash were being recomputed (CSS), and every 7 s the current memo
+     tears off and the next recent decision (fetched from /api/memo/<id>, the
+     signed record itself) prints underneath: header, each row in turn, the
+     values, the verdict stamp pressed down, the signature line drawn, then
+     the hash and cost. The old memo lifts away over the new one, so the paper
+     is never blank. Hover, keyboard focus or a hidden tab pause it. With
+     reduced motion: no sway, no scan, no printing; the dots still switch. */
   var memoEl = $('memo');
   var body = $('memo-body');
   var stampEl = $('memo-stamp');
+  var fig = memoEl ? memoEl.parentNode.parentNode : null; // figure > .memo-float > article
   var cache = {};
   var idx = 0;
   var timer = null;
   var paused = false;
+  var STEP = 120; // ms between printed rows
+
 
   function severityWord(s) { return s === 'block' ? 'blocks' : s === 'review' ? 'review' : s === 'pass' ? 'pass' : 'noted'; }
   function minerFor(memo, f) {
@@ -182,10 +190,41 @@
     var link = $('memo-link'); link.href = '/preflight?m=' + encodeURIComponent(rec.id);
   }
 
+  /* number the printed parts so CSS can stagger them: header, title, each row */
+  function indexMemo() {
+    var parts = [body.querySelector('.memo-top'), body.querySelector('.memo-title')].concat(Array.prototype.slice.call(body.querySelectorAll('.memo-fields > div')));
+    parts.forEach(function (p, i) { if (p) p.style.setProperty('--i', i); });
+    memoEl.style.setProperty('--n', parts.length);
+  }
+
+  function print() {
+    indexMemo();
+    memoEl.classList.remove('printing');
+    void memoEl.offsetWidth; // restart every staggered animation
+    memoEl.classList.add('printing');
+  }
+
+  /* the memo on show lifts off as a copy, over the next one printing beneath it */
+  function tearOff() {
+    var ghost = el('div', 'memo-ghost paper');
+    var b = body.cloneNode(true); b.removeAttribute('id'); ghost.appendChild(b);
+    var st = stampEl.cloneNode(true); st.removeAttribute('id'); st.classList.remove('repress'); ghost.appendChild(st);
+    ghost.setAttribute('aria-hidden', 'true');
+    memoEl.appendChild(ghost);
+    setTimeout(function () { if (ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 900);
+  }
+
   function dots() {
     var c = $('memo-cycle');
     c.hidden = false; c.textContent = '';
-    memoList.forEach(function (m, i) { c.appendChild(el('i', i === idx ? 'on' : null)); });
+    memoList.forEach(function (m, i) {
+      var b = el('button', i === idx ? 'on' : null);
+      b.type = 'button';
+      b.setAttribute('aria-label', 'Show memo ' + m.id);
+      if (i === idx) b.setAttribute('aria-current', 'true');
+      b.addEventListener('click', function () { show(i); restart(); });
+      c.appendChild(b);
+    });
   }
 
   function show(i) {
@@ -194,15 +233,10 @@
     var got = cache[m.id] ? Promise.resolve(cache[m.id]) : json('/api/memo/' + encodeURIComponent(m.id)).then(function (r) { cache[m.id] = r; return r; });
     got.then(function (rec) {
       if (!rec || !rec.memo) return;
-      memoEl.classList.add('swapping');
-      setTimeout(function () {
-        renderMemo(rec);
-        idx = i; dots();
-        memoEl.classList.remove('swapping');
-        stampEl.classList.remove('repress');
-        void stampEl.offsetWidth; // restart the press
-        stampEl.classList.add('repress');
-      }, 450);
+      if (MOTION) tearOff();
+      renderMemo(rec);
+      idx = i; dots();
+      if (MOTION) print();
     }).catch(function () { idx = i; /* unreadable: keep the memo on show, move on next tick */ });
   }
 
@@ -210,18 +244,24 @@
     if (paused || document.hidden || !memoList.length) return;
     show((idx + 1) % memoList.length);
   }
+  function restart() { if (timer) { clearInterval(timer); timer = setInterval(tick, 7000); } }
+  function hold(on) { paused = on; if (fig) fig.classList.toggle('held', on); }
 
   function startMemoCycle() {
-    if (!MOTION || !memoEl || memoList.length < 2) return;
+    if (!memoEl || memoList.length < 2) return;
     // start on the memo already printed in the HTML, if it is in the feed
     var at = memoList.map(function (m) { return m.id; }).indexOf('Py5ehwTL');
-    idx = at >= 0 ? at : -1;
-    if (idx < 0) { idx = 0; show(0); } else dots();
-    memoEl.addEventListener('mouseenter', function () { paused = true; });
-    memoEl.addEventListener('mouseleave', function () { paused = false; });
-    var fig = memoEl.parentNode;
-    fig.addEventListener('focusin', function () { paused = true; });
-    fig.addEventListener('focusout', function () { paused = false; });
+    idx = at >= 0 ? at : 0;
+    dots();
+    if (at < 0) show(0);
+    if (!MOTION) return; // reduced motion: still, but the dots switch memos
+    fig.classList.add('memo-live');
+    if (at >= 0) print();
+    memoEl.addEventListener('mouseenter', function () { hold(true); });
+    memoEl.addEventListener('mouseleave', function () { hold(false); });
+    fig.addEventListener('focusin', function () { hold(true); });
+    fig.addEventListener('focusout', function () { hold(false); });
+    document.addEventListener('visibilitychange', function () { if (fig) fig.classList.toggle('held', document.hidden || paused); });
     if (!timer) timer = setInterval(tick, 7000);
   }
 
