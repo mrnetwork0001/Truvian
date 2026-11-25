@@ -16,7 +16,7 @@ any pair was scored: their executors refused the node's batch request
 pool holds 41 eligible rows from one submitter. With no incumbent, an
 adapter needs 11 of 15 public pairs and at least 70% on the hidden sample.
 
-**Status, 2026-11-24 06:45 UTC: v1 registered as id 227** (tx
+**Status, 2026-11-25 09:24 UTC: v3 (registration 242) is the champion, 76.67% on 30 hidden pairs.** Earlier: **v1 registered as id 227** on 2026-11-24 06:45 UTC (tx
 `0xbc9ca0592f72fb292ebf2883f53aff21d4592f48793a53513024cc0687c5bf21`,
 package URL pinned to commit `0e4dc56`, runnable URL
 `https://scorer.truvian.xyz/crl/runnable`). Progress:
@@ -161,7 +161,7 @@ python3 generate_pairs_v3.py --n 2000 --seed 11 --out v3raw.jsonl
 python3 generate_pairs_v3.py --n 360 --seed 97 --out v3rawtest.jsonl
 ```
 
-## Version 3 result: registered
+## Version 3 result: champion
 
 Trained 2026-11-24 16:40-20:13 UTC (3 epochs, 1,445 training pairs;
 validation accuracy 79.6% at the last epoch): **70.83% on 240 held-out
@@ -180,3 +180,9 @@ Package: [`package-v3/CORPORATE_REGISTRY_LOOKUP.safetensors`](package-v3/),
 catalog patch). The executor at `https://scorer.truvian.xyz/crl/runnable`
 serves it (v1 and v2 kept on the scorer VPS). With no champion, it needs at
 least 70% on the hidden sample.
+
+**Promoted, 2026-11-25 09:24 UTC: registration 242 is the first Canonical
+scorer for CORPORATE_REGISTRY_LOOKUP**, at **76.67% on 30 hidden pairs**
+(23 of 30; floor 70%, corpus `0601b6784539`). Registration tx
+`0x389592818194ea1438018454451b81bb5d2d8e6ae0b63040926fa2e64ee49e8d`.
+Progress: `GET https://devnode.telegraphprotocol.com/api/wasm/242`.
