@@ -11,7 +11,6 @@
 .brand { margin: 0; line-height: 0; }
 .brand a { display: inline-block; }
 .brand-logo { height: 34px; width: auto; display: block; }
-.tagline { margin: 0; padding-left: 1.4rem; border-left: 1px solid var(--rule); font: 400 .72rem/1.5 var(--mono); letter-spacing: .04em; color: var(--bone-faint); max-width: 19rem; }
 .badge-row { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; font: 500 .66rem var(--mono); letter-spacing: .1em; text-transform: uppercase; }
 .badge { color: var(--gold); border: 1px solid rgba(202,165,61,.45); padding: .45rem .7rem; }
 .badge-row a { color: var(--bone-dim); text-decoration: none; border-bottom: 1px solid transparent; }
@@ -259,7 +258,6 @@ table.grid a { color: var(--bone); text-decoration-color: var(--gold); text-unde
 /* ---------- responsive ---------- */
 @media (max-width: 960px) {
   .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tagline { display: none; }
   .foot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .foot-brand-col { grid-column: 1 / -1; }
 }
@@ -300,7 +298,7 @@ table.grid a { color: var(--bone); text-decoration-color: var(--gold); text-unde
     background: rgba(13,12,10,.96); backdrop-filter: saturate(140%) blur(12px); -webkit-backdrop-filter: saturate(140%) blur(12px);
   }
   .brand-logo { height: 28px; }
-  .tagline, .header-right { display: none; }
+  .header-right { display: none; }
   .home-link { display: inline-flex; align-items: center; min-height: 44px; margin-left: auto; font: 500 .7rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--bone-dim); text-decoration: none; }
   .home-link:active { color: var(--gold); }
 
