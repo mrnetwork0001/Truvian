@@ -13,6 +13,10 @@ import { handleTransferVerify, validateTransferInput } from './transfer.js';
 import { handleLiquidity, validateLiquidityInput } from './liquidity.js';
 import { handleBalance, handleSupply, validateBalanceInput, validateSupplyInput } from './holdings.js';
 import { preloadTokenList } from './tokenList.js';
+import {
+  handleSolanaBalance, handleSolanaSupply, handleSolanaTransfer, solanaBalanceCluster, solanaSupplyCluster, solanaTransferRequest,
+  validateSolanaBalanceInput, validateSolanaSupplyInput,
+} from './solana.js';
 import { IntentError } from '../types/index.js';
 
 const MINER_ID = process.env.TRUVIAN_MINER_ID ?? 'truvian-miner-01';
@@ -64,7 +68,7 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
 </style></head><body><main>
 <h1>🛡️ Truvian</h1>
 <div class="badge">Telegraph miner · truvian-onchain-truth</div>
-<p>Exact onchain answers read live from public JSON-RPC on Base, Ethereum, Arbitrum One, OP Mainnet, Polygon, BNB Smart Chain, Avalanche, Scroll, Linea, Gnosis, ZKsync Era, X Layer, Ethereum Sepolia and Base Sepolia. Serves the Telegraph intents <code>ONCHAIN_TX_LOOKUP_GENERAL</code>, <code>GAS_PRICE_GENERAL</code>, <code>WALLET_BALANCE_CHECK_GENERAL</code>, <code>TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL</code>, <code>CRYPTO_TRANSFER_VERIFY_GENERAL</code> and <code>LIQUIDITY_DEPTH_VERIFY_GENERAL</code>.</p>
+<p>Exact onchain answers read live from public JSON-RPC on Base, Ethereum, Arbitrum One, OP Mainnet, Polygon, BNB Smart Chain, Avalanche, Scroll, Linea, Gnosis, ZKsync Era, X Layer, Ethereum Sepolia and Base Sepolia, and Solana mainnet-beta and devnet for balances, SPL token supply and transfers. Serves the Telegraph intents <code>ONCHAIN_TX_LOOKUP_GENERAL</code>, <code>GAS_PRICE_GENERAL</code>, <code>WALLET_BALANCE_CHECK_GENERAL</code>, <code>TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL</code>, <code>CRYPTO_TRANSFER_VERIFY_GENERAL</code> and <code>LIQUIDITY_DEPTH_VERIFY_GENERAL</code>.</p>
 <ul>
 <li><code>GET /tx?tx_hash=0x…&amp;chain=base</code> - status, inclusion block, sender, recipient and value of a transaction, its gas and exact total fee incl. the L1 data fee on rollups that bill it, and the public endpoints and methods it was read from; add <code>&amp;detail=full</code> for the calldata, decoded ERC-20 transfers and every fee part</li>
 <li><code>GET /gas?chain=base</code> - block-anchored gas price in gwei with EIP-1559 percentiles</li>
@@ -84,9 +88,22 @@ a{color:#7db4ff;text-decoration:none}a:hover{text-decoration:underline}
   // /tx answers concisely unless asked for ?detail=full (see txLookup.ts).
   app.get('/tx', async (req) => handleTxLookup(validateTxLookupInput(req.query)));
   app.get('/gas', async (req) => handleGasPrice(validateGasPriceInput(req.query ?? {})));
-  app.get('/balance', async (req) => handleBalance(validateBalanceInput(req.query ?? {})));
-  app.get('/total-supply', async (req) => handleSupply(validateSupplyInput(req.query ?? {})));
-  app.get('/transfer', async (req) => handleTransferVerify(validateTransferInput(req.query ?? {})));
+  // Solana questions (a Solana chain, a base58 address, mint or signature) go to solana.ts; the rest are EVM.
+  app.get('/balance', async (req) => {
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    const cluster = solanaBalanceCluster(q);
+    return cluster ? handleSolanaBalance(validateSolanaBalanceInput(q, cluster)) : handleBalance(validateBalanceInput(q));
+  });
+  app.get('/total-supply', async (req) => {
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    const cluster = solanaSupplyCluster(q);
+    return cluster ? handleSolanaSupply(validateSolanaSupplyInput(q, cluster)) : handleSupply(validateSupplyInput(q));
+  });
+  app.get('/transfer', async (req) => {
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    const sol = solanaTransferRequest(q);
+    return sol ? handleSolanaTransfer(sol) : handleTransferVerify(validateTransferInput(q));
+  });
   app.get('/liquidity', async (req) => handleLiquidity(validateLiquidityInput(req.query ?? {})));
 
   // POST equivalents for JSON-body callers
