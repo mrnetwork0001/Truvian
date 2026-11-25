@@ -331,6 +331,10 @@
       Array.prototype.forEach.call(box.querySelectorAll(':scope > ' + g[1] + ', :scope > tbody > ' + g[1]), function (el, i) { el.style.setProperty('--i', String(i)); });
     });
   });
+  // roadmap (FIG. 03): each phase's items and chips arrive in order (--j)
+  Array.prototype.forEach.call(document.querySelectorAll('.road .ph-items'), function (list) {
+    Array.prototype.forEach.call(list.children, function (li, j) { li.style.setProperty('--j', String(j)); li.querySelector('.chip') && li.querySelector('.chip').style.setProperty('--j', String(j)); });
+  });
 
   // figures that count up once from 0 to the value already on the page
   function countUp(el) {
@@ -360,7 +364,7 @@
     requestAnimationFrame(step);
   }
 
-  var targets = document.querySelectorAll('.sec-head, .final, .desk, .cases li, .flow, .track, .code, .endpoints, .limits, .stats dd, .track-fig');
+  var targets = document.querySelectorAll('.sec-head, .final, .desk, .cases li, .flow, .track, .code, .endpoints, .limits, .road, .stats dd, .track-fig');
   var io = new IntersectionObserver(function (entries) {
     entries.forEach(function (e) {
       if (!e.isIntersecting) return;
