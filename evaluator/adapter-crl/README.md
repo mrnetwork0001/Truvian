@@ -160,3 +160,23 @@ length shortcut 53.6%).
 python3 generate_pairs_v3.py --n 2000 --seed 11 --out v3raw.jsonl
 python3 generate_pairs_v3.py --n 360 --seed 97 --out v3rawtest.jsonl
 ```
+
+## Version 3 result: registered
+
+Trained 2026-11-24 16:40-20:13 UTC (3 epochs, 1,445 training pairs;
+validation accuracy 79.6% at the last epoch): **70.83% on 240 held-out
+pairs** (length baseline 55.83%), verdict PASS; record in
+[`package-v3/train-result.json`](package-v3/train-result.json). Lower than
+v2 on our own pairs, since the held-out set is now mostly the harder
+geography faults, but replayed through the executor on the node's 15 public
+pairs it ordered **12** (v1 10, v2 8), the first version over the 11-pair
+floor. Several margins are thin.
+
+Package: [`package-v3/CORPORATE_REGISTRY_LOOKUP.safetensors`](package-v3/),
+6,776,916 bytes, keccak256
+`0x42998a9d609b9ce06449089db8643e9b6dfdc70d9870e0819a26332af0c0b73e`, sha256
+`6f2933a7235c14a836fd7b8373dfd7b785d3b17a9e4adf1591d76ade10f6a2f5`, class
+`judgment`; `adapterbuild lora` Stage 1 passed (kit scratch copy with the
+catalog patch). The executor at `https://scorer.truvian.xyz/crl/runnable`
+serves it (v1 and v2 kept on the scorer VPS). With no champion, it needs at
+least 70% on the hidden sample.
