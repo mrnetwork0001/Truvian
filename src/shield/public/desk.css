@@ -23,7 +23,7 @@
 .section-label .n { color: var(--gold); }
 .label-hint { color: var(--bone-faint); text-transform: none; letter-spacing: .02em; font-weight: 400; }
 
-.check-section { padding: clamp(36px, 6vw, 72px) 0 clamp(40px, 6vw, 64px); }
+.check-section { padding: clamp(18px, 3vw, 36px) 0 clamp(40px, 6vw, 64px); }
 .desk-title { margin: 0 0 1.6rem; font-weight: 300; font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1; letter-spacing: -.035em; }
 
 /* ---------- desk tabs: a row of index cards ---------- */
