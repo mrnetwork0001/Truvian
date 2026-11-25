@@ -18,7 +18,8 @@ body.docs { background: var(--ink); }
   background: var(--bar); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--rule-soft);
 }
-.dtop-inner { display: flex; align-items: center; gap: 14px; height: 100%; max-width: 1320px; margin: 0 auto; padding: 0 var(--gutter); }
+/* the bar's inset matches the landing and app headers (tokens.css --head-inset) */
+.dtop-inner { display: flex; align-items: center; gap: 14px; height: 100%; max-width: none; margin: 0; padding: 0 var(--head-inset); }
 .dbrand img { display: block; height: 30px; width: auto; }
 .ddiv { width: 1px; height: 22px; background: var(--rule); }
 .dlabel { font: 500 .68rem/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--gold); text-decoration: none; }
@@ -27,7 +28,11 @@ body.docs { background: var(--ink); }
 .dlinks a:hover, .dlinks a:focus-visible { color: var(--gold-soft); }
 
 /* ---------- layout ---------- */
-.dwrap { position: relative; z-index: 1; display: grid; grid-template-columns: 250px minmax(0, 780px); gap: 64px; max-width: 1320px; margin: 0 auto; padding: 0 var(--gutter); justify-content: center; }
+/* Outer margins are half of what centring the 250px + 64px + 780px pair would leave:
+   the sidebar sits nearer the edge, and the article keeps its 780px measure,
+   centred in the space to the right. */
+.dwrap { --docs-inset: max(16px, calc((100vw - 1094px) / 4)); position: relative; z-index: 1; display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 64px; max-width: none; margin: 0; padding: 0 var(--docs-inset); }
+.dwrap > .dmain { width: 100%; max-width: 780px; justify-self: center; }
 .dwrap > * { min-width: 0; }
 
 /* ---------- sidebar ---------- */
@@ -128,6 +133,7 @@ body.docs { background: var(--ink); }
   body.menu-open .mbackdrop { opacity: 1; pointer-events: auto; }
 
   .dwrap { display: block; padding: 0 16px; }
+  .dtop-inner { padding: 0 var(--gutter); }
   .dside {
     position: fixed; top: 0; bottom: 0; left: 0; z-index: 50; width: min(88vw, 320px); max-height: none; height: 100dvh;
     padding: 0 18px calc(18px + env(safe-area-inset-bottom)); background: var(--ink-2); border-right: 1px solid var(--rule);
