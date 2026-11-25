@@ -4,7 +4,9 @@
 .page { width: 100%; max-width: var(--wrap); margin: 0 auto; padding: 0 var(--gutter) 0; }
 
 /* ---------- header ---------- */
-.site-header { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; padding: 22px 0; border-bottom: 1px solid var(--rule-soft); }
+.site-header { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; padding: 22px var(--head-inset); border-bottom: 1px solid var(--rule-soft);
+  /* full bleed out of .page, then the header's own (half) inset */
+  margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); }
 .header-left { display: flex; align-items: center; gap: 1.4rem; min-width: 0; flex-wrap: wrap; }
 .brand { margin: 0; line-height: 0; }
 .brand a { display: inline-block; }

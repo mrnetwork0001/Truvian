@@ -5,6 +5,7 @@
 /* ---------- top bar ---------- */
 .top { position: sticky; top: 0; z-index: 20; background: rgba(13,12,10,.9); backdrop-filter: saturate(140%) blur(8px); -webkit-backdrop-filter: saturate(140%) blur(8px); border-bottom: 1px solid var(--rule-soft); }
 .top-inner { display: flex; align-items: center; gap: 2rem; height: 68px; }
+.top .top-inner { max-width: none; padding-left: var(--head-inset); padding-right: var(--head-inset); }
 .brand { line-height: 0; flex: none; }
 .brand-logo { height: 34px; width: auto; display: block; }
 .topnav { display: flex; gap: 1.6rem; margin-left: auto; }

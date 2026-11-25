@@ -37,6 +37,8 @@
 
   --wrap: 1340px;
   --gutter: clamp(16px, 2vw, 24px);
+  /* the header bar sits at half the content inset: (100vw - wrap)/2 + gutter, halved; never under 12px */
+  --head-inset: max(12px, calc((100vw - var(--wrap)) / 4 + var(--gutter) / 2));
 }
 
 /* ---------- base ---------- */
