@@ -115,10 +115,8 @@ html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *
 html[data-theme="light"] .theme-toggle .ic-sun { display: block; }
 html[data-theme="light"] .theme-toggle .ic-moon { display: none; }
 
-/* the logo PNG is drawn for ink; on paper it sits on a small ink plate */
-html[data-theme="light"] img[src*="truvian-header"] {
-  background: #13120f; padding: 6px 10px; border-radius: 4px; box-sizing: content-box;
-}
+/* on paper, the light version of the logo: the same icon, the wordmark in ink and gold (brand/truvian-header-light.png) */
+html[data-theme="light"] img[src*="truvian-header.png"] { content: url("/brand/truvian-header-light.png"); }
 
 /* ---------- base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
