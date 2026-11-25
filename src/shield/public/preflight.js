@@ -326,7 +326,8 @@
     $('chainread').textContent = '';
     $('sig').classList.add('hidden');
     try {
-      const res = await fetch('/api/preflight?stream=1', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' }, body: JSON.stringify(body) });
+      // Past the 5 free runs a day, TruvianPay (pay.js) asks the visitor to sign a payment and sends the run again
+      const res = await window.TruvianPay.fetch('/api/preflight?stream=1', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' }, body: JSON.stringify(body) }, `This ${KIND_LABEL[{ trade: 'token-preflight', listing: 'listing-review', holdings: 'holdings-proof', settlement: 'settlement-assurance' }[mode]] || 'run'} run`);
       if (!res.ok || !res.body || !(res.headers.get('content-type') || '').includes('ndjson')) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.message || j.error || `HTTP ${res.status}`);
@@ -351,6 +352,7 @@
           else if (ev.type === 'plan') renderPlan(ev.plan);
           else if (ev.type === 'purchase') renderPurchase(ev.purchase);
           else if (ev.type === 'memo') { renderMemo(ev); history.replaceState(null, '', `/preflight?m=${ev.id}`); }
+          else if (ev.type === 'payment') window.TruvianPay.showPayment($('costline'), ev);
           else if (ev.type === 'error') { $('decision').className = 'decision REVIEW'; $('decision').replaceChildren(el('div', { class: 'word', text: 'NO DECISION' }), el('div', { class: 'rule', text: ev.message })); }
         }
       }

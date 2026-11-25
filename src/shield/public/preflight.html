@@ -132,7 +132,7 @@
         </div>
         <p id="form-error" class="form-error wide" role="alert" hidden></p>
       </form>
-      <p class="note-testnet">Telegraph Season II settles on testnet: answers are paid in test USDC from Shield's Anjoman escrow on Ethereum Sepolia. The facts checked are about the mainnet chain you pick. Trades are simulated, never sent.</p>
+      <p class="note-testnet">Telegraph Season II settles on testnet: answers are paid in test USDC from Shield's Anjoman escrow on Ethereum Sepolia. The facts checked are about the chain you pick. Trades are simulated, never sent; a settlement on RELEASE is sent on Solana devnet in test tokens. After 5 free runs a day, a run costs $0.05 test USDC on Base Sepolia, signed in your browser wallet.</p>
     </section>
 
     <section id="out" class="report hidden" aria-live="polite">
@@ -194,6 +194,8 @@
   <a class="db-item" href="/preflight?desk=settlement" data-mode="settlement"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.2l2.4 2.4 4.6-5"/></svg><span>Settle</span></a>
   <a class="db-item" href="/resolve"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4v16M7.5 20h9M5 7.5h14"/><path d="M5 7.5l-2.6 6.2a2.6 2.6 0 0 0 5.2 0z"/><path d="M19 7.5l-2.6 6.2a2.6 2.6 0 0 0 5.2 0z"/></svg><span>Resolve</span></a>
 </nav>
+<script src="./wallet.js"></script>
+<script src="./pay.js"></script>
 <script src="./preflight.js"></script>
 </body>
 </html>

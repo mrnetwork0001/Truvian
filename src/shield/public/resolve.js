@@ -159,7 +159,8 @@
     $('sig').classList.add('hidden');
     $('submit-btn').disabled = true;
     try {
-      const res = await fetch('/api/resolve?stream=1', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      // Past the 5 free runs a day, TruvianPay (pay.js) asks the visitor to sign a payment and sends the run again
+      const res = await window.TruvianPay.fetch('/api/resolve?stream=1', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }, 'This resolution');
       if (!res.ok || !res.body) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.message || j.error || `http ${res.status}`);
@@ -180,6 +181,7 @@
           if (e.type === 'market') renderMarket(e.market);
           else if (e.type === 'answer') addAnswer(e.answer);
           else if (e.type === 'memo') { renderStored(e); history.replaceState(null, '', `/resolve?r=${e.id}`); }
+          else if (e.type === 'payment') window.TruvianPay.showPayment($('costline'), e);
           else if (e.type === 'error') throw new Error(e.message);
         }
       }
