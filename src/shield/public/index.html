@@ -117,7 +117,7 @@
         <div><dt>Telegraph requests</dt><dd id="st-requests">126</dd></div>
         <div><dt>Paid to Telegraph</dt><dd id="st-paid"><a class="st-src" id="st-paid-link" href="https://devnode.telegraphprotocol.com/v1/ledger/account/0x29476125898638c8634a97fdca8994530e8c9055" target="_blank" rel="noopener" title="charged $2.38 + unbilled $0.90, from the node's ledger for Shield's escrow">$3.28</a> <small id="st-paid-note">test USDC · node ledger</small></dd></div>
         <div><dt>Champion evaluators</dt><dd>2 <small>ids 187 · 242</small></dd></div>
-        <div><dt>Miner</dt><dd>6180 <small>EVM + Solana</small></dd></div>
+        <div><dt>Miner</dt><dd>6194 <small>EVM + Solana</small></dd></div>
       </dl>
       <p class="stats-note" id="stats-note">Counters from <a href="/api/stats">/api/stats</a>; nearly all decisions so far are our own test runs.</p>
       <div class="ledger fig-frame" id="ledger">
@@ -240,9 +240,9 @@
       <div class="tracks">
         <article class="track">
           <p class="track-k">Miner</p>
-          <p class="track-fig">6180</p>
+          <p class="track-fig">6194</p>
           <p>Six intents on Telegraph's devnode: transaction lookup, gas price, wallet balance, total supply, transfer verification and pool liquidity, across 14 EVM chains. On 25 Nov it added Solana balances, supply and transfers, when no miner on the node answered a Solana balance. Scores move every epoch.</p>
-          <p class="track-links"><a href="https://devnode.telegraphprotocol.com/api/miners/6180" target="_blank" rel="noopener">Status on the node</a><a href="https://miner.truvian.xyz" target="_blank" rel="noopener">miner.truvian.xyz</a></p>
+          <p class="track-links"><a href="https://devnode.telegraphprotocol.com/api/miners/6194" target="_blank" rel="noopener">Status on the node</a><a href="https://miner.truvian.xyz" target="_blank" rel="noopener">miner.truvian.xyz</a></p>
         </article>
         <article class="track">
           <p class="track-k">Evaluator</p>
@@ -285,7 +285,7 @@
             <span class="node" aria-hidden="true"><span class="pulse"></span></span><span class="here" aria-hidden="true">You are here</span>
             <p class="ph-k"><span>Now</span><span class="chip live">Live</span></p>
             <h3>Season II, on testnet</h3>
-            <ul class="ph-items"><li><span class="ph-t">Five desks: preflight, listing, holdings, settlement, resolution</span><span class="chip live">Live</span></li><li><span class="ph-t">Miner 6180, six intents, EVM chains and Solana</span><span class="chip live">Live</span></li><li><span class="ph-t">Champion evaluators 187 and 242</span><span class="chip live">Live</span></li><li><span class="ph-t">Pay per run over x402, in test USDC</span><span class="chip live">Live</span></li><li><span class="ph-t">Solana devnet settlement and memo anchoring</span><span class="chip live">Live</span></li></ul>
+            <ul class="ph-items"><li><span class="ph-t">Five desks: preflight, listing, holdings, settlement, resolution</span><span class="chip live">Live</span></li><li><span class="ph-t">Miner 6194, six intents, EVM chains and Solana</span><span class="chip live">Live</span></li><li><span class="ph-t">Champion evaluators 187 and 242</span><span class="chip live">Live</span></li><li><span class="ph-t">Pay per run over x402, in test USDC</span><span class="chip live">Live</span></li><li><span class="ph-t">Solana devnet settlement and memo anchoring</span><span class="chip live">Live</span></li></ul>
           </li>
           <li class="ph ph-next" style="--p:1">
             <span class="node" aria-hidden="true"><span class="pulse"></span></span>
@@ -361,7 +361,7 @@ curl -s https://truvian.xyz/api/preflight \
       <ol class="limits">
         <li><h3>Testnet money</h3><p>Telegraph answers are paid in test USDC from an Anjoman escrow on Ethereum Sepolia; Shield's own charge is test USDC on Base Sepolia; settlements are sent on Solana devnet in test tokens. Token facts are read from mainnets.</p></li>
         <li><h3>Security reviews time out</h3><p>Since 22 Nov every routed SECURITY_REVIEW ask has ended in a gateway timeout, so token preflights and listing reviews usually end in REVIEW: nothing is cleared on a missing answer.</p></li>
-        <li><h3>Solana balances</h3><p>On 25 Nov no miner on the node answered a Solana wallet balance. Ours now does; until the node routes those questions to it, the settlement desk's funds check rests on its own two-provider chain read.</p></li>
+        <li><h3>Solana balances</h3><p>On 25 Nov no miner on the node answered a Solana wallet balance. Ours now does, registered as 6194 the same day; while it is in its 7-day grace period the node's routed asks may still go to other miners, so the settlement desk's funds check also rests on its own two-provider chain read.</p></li>
         <li><h3>Prediction markets</h3><p>Resolution reads Polymarket and Kalshi markets; a Solana-native market API (DFlow) refused our requests, so the Solana part is the memo anchor. Few miners on the node resolve free-text events: of five settled markets tried on 25 Nov, one reached RESOLVED, one DISPUTED, three REVIEW.</p></li>
         <li><h3>Season I check</h3><p>The <a href="/app">Season I pre-sign check</a> is still online at <code>/app</code>; it is looser than the desks and keeps its Season I wording.</p></li>
       </ol>
@@ -406,7 +406,7 @@ curl -s https://truvian.xyz/api/preflight \
       <ul>
         <li><a href="https://anjoman.ai" target="_blank" rel="noopener">Anjoman</a></li>
         <li><a href="https://anjoman.ai/docs" target="_blank" rel="noopener">Telegraph docs</a></li>
-        <li><a href="https://devnode.telegraphprotocol.com/api/miners/6180" target="_blank" rel="noopener">Our miner on the node</a></li>
+        <li><a href="https://devnode.telegraphprotocol.com/api/miners/6194" target="_blank" rel="noopener">Our miner on the node</a></li>
         <li><a href="https://x.com/Telegraphprotoc" target="_blank" rel="noopener">@Telegraphprotoc</a></li>
       </ul>
     </nav>

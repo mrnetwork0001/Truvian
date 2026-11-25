@@ -64,6 +64,16 @@ commit `1507b04` (sha256 `de76685d…20aa`), six intents: the four above plus
 13 minutes after the transaction. For the next update, use 6180 as the
 first argument and list all six intents.
 
+**Since 2026-11-25: registration 6194**, from `updateMiner` on 6180
+(tx `0xa49244818b8d2dbd8a495909af93bf6f5af985cfd58571f581b6298e984d01f8`,
+block 12209795, Diamond `0x72a70e949362670Bf8bceAd24eFC5b8f950aa08b` checked
+on anjoman.ai's addresses page the same day). Same six intents, fee address
+and 10000 minimum price; the YAML is pinned at commit `3c3b94a` (sha256
+`8e8e8730…5532`), which describes Solana wallets, mints and signatures
+(chains `solana` and `solana-devnet`), so the node can route Solana questions
+to us. The bond was already held (`quoteMinerBond(6)` = 1.50), so nothing was
+topped up. The dry run returned 6194. For the next update, use 6194.
+
 **How answers are read now.** Each intent has a response format
 (`GET $NODE/engine/v1/intents/<FAMILY>` -> `response.fields`; one field is
 `scored: true`). The node reads a miner's answer into those fields, exactly by

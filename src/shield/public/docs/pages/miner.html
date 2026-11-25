@@ -1,5 +1,5 @@
 <h1>The <span class="accent">miner.</span></h1>
-<p class="lead"><strong>Truvian's miner is Telegraph registration 6180: an HTTP API that answers six onchain intents from direct chain reads, with exact figures and no guesses.</strong> It runs at <a href="https://miner.truvian.xyz">miner.truvian.xyz</a>; the node sends it questions and scores its answers against a reference each epoch.</p>
+<p class="lead"><strong>Truvian's miner is Telegraph registration 6194 (6180 until 25 Nov): an HTTP API that answers six onchain intents from direct chain reads, with exact figures and no guesses.</strong> It runs at <a href="https://miner.truvian.xyz">miner.truvian.xyz</a>; the node sends it questions and scores its answers against a reference each epoch.</p>
 
 <h2 id="intents">What it answers</h2>
 <div class="tw"><table>
@@ -17,7 +17,7 @@
 <p>Try it directly, free: <a href="https://miner.truvian.xyz/gas?chain=base">/gas?chain=base</a>, <a href="https://miner.truvian.xyz/balance?address=vitalik.eth&amp;chain=ethereum">/balance?address=vitalik.eth&amp;chain=ethereum</a>. These are diagnostic requests, not the node's scored questions.</p>
 
 <h2 id="scores">How it scores</h2>
-<p>Scores move every epoch; read them live on <a href="https://devnode.telegraphprotocol.com/leaderboard/miners">the node's leaderboard</a> or <a href="https://devnode.telegraphprotocol.com/api/miners/6180">its status</a>. Epoch 53 (25 Nov 2026):</p>
+<p>Scores move every epoch; read them live on <a href="https://devnode.telegraphprotocol.com/leaderboard/miners">the node's leaderboard</a> or <a href="https://devnode.telegraphprotocol.com/api/miners/6194">its status</a>. Epoch 53 (25 Nov 2026):</p>
 <div class="tw narrow"><table>
   <thead><tr><th>Intent</th><th>Score</th><th>Rank</th></tr></thead>
   <tbody>
@@ -33,4 +33,4 @@
 <h2 id="built">How it is built</h2>
 <p>A Fastify app (<code>src/miner/server.ts</code>, <code>npm run dev</code>, port 8787) described to the node by <a href="https://github.com/mrnetwork0001/Truvian/blob/main/telegraph/truvian-miner.yaml">telegraph/truvian-miner.yaml</a>. Registration is one transaction to the Telegraph registry contract (the Diamond, <code>0x72a70e94…a08b</code> on Ethereum Sepolia) with a test-USDC bond. <code>npm run test:miner</code> runs the live checks.</p>
 
-<div class="callout warn"><span class="ck">Pending</span>The node builds each miner's request from its registered description, and 6180's registered description lists only EVM chains and <code>0x</code> addresses. Until an <code>updateMiner</code> transaction registers the description that adds Solana, the node does not send Solana balance questions to this miner. The code is live; the registration update is waiting for the owner's approval.</div>
+<div class="callout"><span class="ck">Updated 25 Nov</span>The node builds each miner's request from its registered description. Registration 6180's described only EVM chains and <code>0x</code> addresses, so Solana balance questions never reached us. On 25 Nov <code>updateMiner</code> (tx <a href="https://sepolia.etherscan.io/tx/0xa49244818b8d2dbd8a495909af93bf6f5af985cfd58571f581b6298e984d01f8">0xa4924481…01f8</a>) registered the description that adds Solana as registration 6194, active the same hour. A Solana devnet balance asked through the node and pinned to this miner came back right (998 tUSD, $0.01 receipt). A new registration spends 7 days in the grace period before it is ranked, so routed asks may still go to other miners first.</div>
