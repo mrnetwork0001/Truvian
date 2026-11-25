@@ -1,0 +1,166 @@
+/* Truvian design system: "the signed memo".
+   Ink desk, bone paper, one gold. Verdict colours appear only on stamps.
+   Shared by the landing page (landing.css) and the desks (desk.css). */
+
+:root {
+  color-scheme: dark;
+  /* ink: the desk */
+  --ink: #0d0c0a;
+  --ink-2: #13120f;
+  --ink-3: #1a1814;
+  --rule: #2b2822;
+  --rule-soft: #1f1d19;
+  --bone: #ece5d6;
+  --bone-dim: #b2ab9c;
+  --bone-faint: #8d8678;
+  /* paper: the memo */
+  --paper: #efe9dc;
+  --paper-2: #e6dfcf;
+  --paper-rule: #cfc6b2;
+  --paper-ink: #1c1a16;
+  --paper-dim: #5b5548;
+  /* the one accent, matched to the logo */
+  --gold: #caa53d;
+  --gold-soft: #e3c46f;
+  --gold-on-paper: #7d5f12;
+  /* verdicts: stamps only */
+  --ok: #7fae73;
+  --review: #d9a441;
+  --reject: #d0645a;
+  --ok-paper: #2f5f2b;
+  --review-paper: #7a4f00;
+  --reject-paper: #8b2219;
+
+  --sans: "Inter Tight", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --serif: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --wrap: 1240px;
+  --gutter: clamp(20px, 4vw, 48px);
+}
+
+/* ---------- base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--bone);
+  font: 400 16px/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
+  overflow-x: hidden;
+}
+img { max-width: 100%; }
+a { color: inherit; }
+::selection { background: var(--gold); color: var(--ink); }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 2px; }
+.skip { position: absolute; left: -9999px; top: 8px; z-index: 50; background: var(--gold); color: var(--ink); padding: .5rem .8rem; font: 500 .85rem var(--mono); }
+.skip:focus { left: 8px; }
+code, .mono { font-family: var(--mono); }
+.hidden { display: none !important; }
+
+/* ---------- type helpers ---------- */
+.accent { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--gold); letter-spacing: -.005em; }
+.kicker {
+  font: 500 .72rem/1.4 var(--mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--bone-faint);
+}
+.kicker b { color: var(--bone); font-weight: 500; }
+.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); margin-right: .55em; vertical-align: 1px; box-shadow: 0 0 0 3px rgba(202,165,61,.16); }
+
+/* ---------- the stamp ---------- */
+.stamp {
+  --c: var(--bone-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 600 .68rem/1 var(--mono);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--c);
+  border: 3px double var(--c);
+  padding: .34rem .5rem .3rem .6rem;
+  border-radius: 3px;
+  transform: rotate(-2.5deg);
+  white-space: nowrap;
+  background: transparent;
+}
+.stamp.ok { --c: var(--ok); }
+.stamp.review { --c: var(--review); }
+.stamp.reject { --c: var(--reject); }
+.stamp.muted { --c: var(--bone-faint); }
+.stamp.flat { transform: none; }
+.stamp.lg { font-size: 1.05rem; border-width: 5px; padding: .5rem .8rem .45rem 1rem; letter-spacing: .2em; }
+.stamp.xl { font-size: clamp(1.6rem, 4vw, 2.6rem); border-width: 7px; padding: .55rem 1rem .5rem 1.25rem; letter-spacing: .2em; }
+.paper .stamp.ok { --c: var(--ok-paper); }
+.paper .stamp.review { --c: var(--review-paper); }
+.paper .stamp.reject { --c: var(--reject-paper); }
+.paper .stamp.muted { --c: var(--paper-dim); }
+
+@keyframes press {
+  0% { opacity: 0; transform: rotate(-9deg) scale(1.55); }
+  60% { opacity: 1; transform: rotate(-7deg) scale(.96); }
+  100% { opacity: 1; transform: rotate(-7deg) scale(1); }
+}
+
+/* ---------- the paper memo ---------- */
+.paper {
+  position: relative;
+  background: var(--paper);
+  color: var(--paper-ink);
+  font-family: var(--sans);
+  /* ruled like a form, faintly */
+  background-image: repeating-linear-gradient(180deg, transparent 0 31px, rgba(28,26,22,.045) 31px 32px);
+}
+/* perforated top edge: a row of punched holes in the ink */
+.paper.perf::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: -6px;
+  height: 12px;
+  background: radial-gradient(circle at 8px 6px, var(--ink) 3.2px, transparent 3.7px) 0 0 / 16px 12px repeat-x;
+}
+.paper .doc-k { font: 500 .66rem/1.3 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--paper-dim); }
+.paper a { color: var(--paper-ink); text-decoration-color: var(--gold-on-paper); text-underline-offset: 3px; }
+
+/* ---------- framed figure (corner ticks) ---------- */
+.fig-frame {
+  position: relative;
+  border: 1px solid var(--rule);
+  padding: clamp(16px, 2.4vw, 28px);
+  background:
+    linear-gradient(var(--gold), var(--gold)) top left / 10px 1px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) top left / 1px 10px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) top right / 10px 1px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) top right / 1px 10px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) bottom left / 10px 1px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) bottom left / 1px 10px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) bottom right / 10px 1px no-repeat,
+    linear-gradient(var(--gold), var(--gold)) bottom right / 1px 10px no-repeat;
+}
+.fig-cap { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 0 0 1.1rem; font: 500 .68rem/1.4 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--bone-faint); }
+.fig-cap b { color: var(--gold); font-weight: 500; }
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: .6rem;
+  font: 500 .9rem/1 var(--sans);
+  color: var(--bone);
+  text-decoration: none;
+  padding: .95rem 1.25rem;
+  border: 1px solid var(--rule);
+  background: transparent;
+  border-radius: 0;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.btn:hover { border-color: var(--bone-faint); }
+.btn-gold { background: var(--gold); border-color: var(--gold); color: #17140c; }
+.btn-gold:hover { background: var(--gold-soft); border-color: var(--gold-soft); }
+.btn .arr { font-family: var(--mono); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
