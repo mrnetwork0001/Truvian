@@ -23,14 +23,19 @@
   document.body.insertBefore(canvas, document.body.firstChild);
   var ctx = canvas.getContext('2d');
 
-  var GOLD = '202,165,61';
-  var BONE = '236,229,214';
-  var OK = '127,174,115';
-  var REV = '217,164,65';
-  var REJ = '208,100,90';
+  // Colours per theme (theme.js sets data-theme="light" on <html> and fires "themechange")
+  var PALETTES = {
+    dark: { gold: '202,165,61', bone: '236,229,214', ok: '127,174,115', rev: '217,164,65', rej: '208,100,90', glow: 0.07, line: 0.035, dot: 0.16, mark: 0.5 },
+    light: { gold: '127,96,15', bone: '28,26,22', ok: '47,95,43', rev: '122,79,0', rej: '139,34,25', glow: 0.10, line: 0.05, dot: 0.2, mark: 0.62 },
+  };
+  var P = PALETTES.dark;
+  function readTheme() {
+    P = document.documentElement.getAttribute('data-theme') === 'light' ? PALETTES.light : PALETTES.dark;
+  }
+  readTheme();
   var MARKS = [
-    ['0x3f9a…c21e', GOLD], ['0xd9e3…32f9', GOLD], ['sha256 6b04…ecbb', GOLD], ['$0.01', BONE], ['$0.01 · receipt', BONE],
-    ['RELEASE', OK], ['VERIFIED', OK], ['HOLD', OK], ['REVIEW', REV], ['REJECT', REJ], ['RESOLVED', OK], ['rank 1', BONE], ['slot 526130868', BONE],
+    ['0x3f9a…c21e', 'gold'], ['0xd9e3…32f9', 'gold'], ['sha256 6b04…ecbb', 'gold'], ['$0.01', 'bone'], ['$0.01 · receipt', 'bone'],
+    ['RELEASE', 'ok'], ['VERIFIED', 'ok'], ['HOLD', 'ok'], ['REVIEW', 'rev'], ['REJECT', 'rej'], ['RESOLVED', 'ok'], ['rank 1', 'bone'], ['slot 526130868', 'bone'],
   ];
 
   var W = 0, H = 0, DPR = 1, STEP = 64, cols = 0, rows = 0;
@@ -92,12 +97,12 @@
     // a slow gold glow drifting across the page, like light on a desk
     var gx = W * (0.5 + 0.38 * Math.sin(now / 9000)), gy = H * (0.45 + 0.3 * Math.cos(now / 11000));
     var glow = ctx.createRadialGradient(gx, gy, 0, gx, gy, Math.max(W, H) * 0.55);
-    glow.addColorStop(0, 'rgba(' + GOLD + ',0.07)');
-    glow.addColorStop(1, 'rgba(' + GOLD + ',0)');
+    glow.addColorStop(0, 'rgba(' + P.gold + ',' + P.glow + ')');
+    glow.addColorStop(1, 'rgba(' + P.gold + ',0)');
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, W, H);
     // hairline grid
-    ctx.strokeStyle = 'rgba(' + BONE + ',0.035)';
+    ctx.strokeStyle = 'rgba(' + P.bone + ',' + P.line + ')';
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (var gi = 0; gi < cols; gi++) { ctx.moveTo(gi * STEP + 0.5, 0); ctx.lineTo(gi * STEP + 0.5, H); }
@@ -110,7 +115,7 @@
         var dx = px - mouse.x, dy = py - mouse.y;
         var near = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy) / 220);
         var a = 0.16 + near * 0.5;
-        ctx.fillStyle = near > 0.05 ? 'rgba(' + GOLD + ',' + a + ')' : 'rgba(' + BONE + ',0.16)';
+        ctx.fillStyle = near > 0.05 ? 'rgba(' + P.gold + ',' + a + ')' : 'rgba(' + P.bone + ',' + P.dot + ')';
         ctx.fillRect(px - 0.75, py - 0.75, 1.5 + near * 1.2, 1.5 + near * 1.2);
       }
     }
@@ -126,7 +131,7 @@
       var p = pulses[k];
       p.t += p.speed * dt;
       // the whole route, faintly, so the network shows
-      ctx.strokeStyle = 'rgba(' + GOLD + ',0.10)';
+      ctx.strokeStyle = 'rgba(' + P.gold + ',0.12)';
       ctx.setLineDash([2, 5]);
       ctx.beginPath();
       ctx.moveTo(p.pts[0][0] * STEP, p.pts[0][1] * STEP);
@@ -140,12 +145,12 @@
         var d = tail + (head - tail) * (s / N);
         var q = at(p, d);
         var alpha = (s / N) * 0.55;
-        ctx.fillStyle = 'rgba(' + GOLD + ',' + alpha + ')';
+        ctx.fillStyle = 'rgba(' + P.gold + ',' + alpha + ')';
         ctx.fillRect(q[0] - 0.9, q[1] - 0.9, 1.8, 1.8);
       }
       var hd = at(p, head);
       ctx.beginPath();
-      ctx.fillStyle = 'rgba(' + GOLD + ',0.95)';
+      ctx.fillStyle = 'rgba(' + P.gold + ',0.95)';
       ctx.arc(hd[0], hd[1], 2.1, 0, Math.PI * 2);
       ctx.fill();
       if (p.t >= p.total) {
@@ -165,7 +170,7 @@
       g.life -= 0.9 * dt;
       if (g.life <= 0) { rings.splice(r, 1); continue; }
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(' + GOLD + ',' + (g.life * 0.45) + ')';
+      ctx.strokeStyle = 'rgba(' + P.gold + ',' + (g.life * 0.45) + ')';
       ctx.lineWidth = 1;
       ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
       ctx.stroke();
@@ -179,7 +184,7 @@
       mk.shown = Math.min(mk.text.length, mk.shown + 28 * dt);
       if (mk.shown >= mk.text.length) mk.life -= 0.35 * dt;
       if (mk.life <= 0) { marks.splice(mI, 1); continue; }
-      ctx.fillStyle = 'rgba(' + mk.rgb + ',' + (Math.min(1, mk.life) * 0.5) + ')';
+      ctx.fillStyle = 'rgba(' + (P[mk.rgb] || P.gold) + ',' + (Math.min(1, mk.life) * P.mark) + ')';
       ctx.fillText(mk.text.slice(0, Math.floor(mk.shown)), mk.x, mk.y);
     }
   }
@@ -202,6 +207,7 @@
   window.addEventListener('resize', resize);
   window.addEventListener('pointermove', function (e) { mouse.x = e.clientX; mouse.y = e.clientY; }, { passive: true });
   window.addEventListener('pointerleave', function () { mouse.x = mouse.y = -9999; });
+  window.addEventListener('themechange', function () { readTheme(); if (reduce || !running) draw(0, performance.now()); });
   document.addEventListener('visibilitychange', function () {
     running = !document.hidden && !reduce;
     if (running) { last = performance.now(); requestAnimationFrame(frame); }
