@@ -39,8 +39,29 @@
       <a href="#agents">API</a>
       <a href="#limits" class="nav-opt">Limits</a>
     </nav>
+    <button class="burger" id="burger" type="button" aria-expanded="false" aria-controls="mnav" aria-label="Open menu"><span></span><span></span><span></span></button>
   </div>
 </header>
+
+<!-- phones and tablets (900px and below): the menu is a left drawer -->
+<div class="mbackdrop" id="mbackdrop" aria-hidden="true"></div>
+<nav class="mnav" id="mnav" aria-label="Menu" inert>
+  <div class="mhead">
+    <a class="brand" href="/" aria-label="Truvian Shield home"><img class="brand-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
+    <button class="mclose" id="mclose" type="button" aria-label="Close menu"><span></span><span></span></button>
+  </div>
+  <p class="mlabel">On this page</p>
+  <a class="mlink" href="#desks">Desks</a>
+  <a class="mlink" href="#evidence">Evidence</a>
+  <a class="mlink" href="#how">Method</a>
+  <a class="mlink" href="#tracks">Tracks</a>
+  <a class="mlink" href="#agents">API</a>
+  <a class="mlink" href="#limits">Limits</a>
+  <p class="mlabel">Also</p>
+  <a class="mlink msub" href="/resolve">Resolve a market</a>
+  <a class="mlink msub" href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">Source on GitHub</a>
+  <div class="mfoot"><a class="btn btn-gold mcta" href="/preflight">Open the desks</a></div>
+</nav>
 
 <main id="main">
 
@@ -59,6 +80,7 @@
       </div>
 
       <figure class="hero-memo" aria-labelledby="memo-cap">
+        <div class="memo-float" id="memo-float">
         <article class="paper perf memo" id="memo" aria-label="Signed memo Py5ehwTL: settlement rejected" aria-live="off">
           <div class="memo-body" id="memo-body">
           <header class="memo-top">
@@ -79,14 +101,25 @@
             <div class="sig-meta mono">sha256 6b04009c…47ecbb · $0.04 test USDC · 3 answers</div>
           </footer>
           </div>
+          <span class="memo-ink" aria-hidden="true"></span>
           <span class="stamp xl reject memo-stamp" id="memo-stamp" aria-hidden="true">Reject</span>
+          <span class="memo-scan" aria-hidden="true"></span>
         </article>
+        </div>
         <figcaption id="memo-cap"><a href="/preflight?m=Py5ehwTL" id="memo-link">Open this memo</a> and press <i>Verify signature</i>: the hash is recomputed and the signer recovered in your browser.<span class="memo-cycle" id="memo-cycle" hidden></span></figcaption>
       </figure>
     </div>
 
-    <!-- the ledger tape: static rows of verified memos, replaced live by landing.js from /api/memos -->
+    <!-- right under the hero: the live counters, then the ledger tape (static rows of verified memos, replaced live by landing.js from /api/memos) -->
     <div class="wrap">
+      <dl class="stats" id="stats">
+        <div><dt>Desk decisions</dt><dd><span id="st-decisions">20</span> <small>incl. market resolutions since 25 Nov</small></dd></div>
+        <div><dt>Telegraph requests</dt><dd id="st-requests">126</dd></div>
+        <div><dt>Paid to Telegraph</dt><dd id="st-paid"><a class="st-src" id="st-paid-link" href="https://devnode.telegraphprotocol.com/v1/ledger/account/0x29476125898638c8634a97fdca8994530e8c9055" target="_blank" rel="noopener" title="charged $2.38 + unbilled $0.90, from the node's ledger for Shield's escrow">$3.28</a> <small id="st-paid-note">test USDC · node ledger</small></dd></div>
+        <div><dt>Champion evaluators</dt><dd>2 <small>ids 187 · 242</small></dd></div>
+        <div><dt>Miner</dt><dd>6180 <small>EVM + Solana</small></dd></div>
+      </dl>
+      <p class="stats-note" id="stats-note">Counters from <a href="/api/stats">/api/stats</a>; nearly all decisions so far are our own test runs.</p>
       <div class="ledger fig-frame" id="ledger">
         <p class="fig-cap"><span><b>FIG. 00</b> · The ledger · latest signed decisions</span><span id="ledger-state">verified 25 Nov 2026</span></p>
         <div class="tape" role="table" aria-label="Latest signed decisions">
@@ -104,14 +137,6 @@
         </div>
       </div>
 
-      <dl class="stats" id="stats">
-        <div><dt>Desk decisions</dt><dd id="st-decisions">20</dd></div>
-        <div><dt>Telegraph requests</dt><dd id="st-requests">126</dd></div>
-        <div><dt>Paid to miners</dt><dd id="st-paid">$1.05 <small>test USDC</small></dd></div>
-        <div><dt>Champion evaluators</dt><dd>2 <small>ids 187 · 242</small></dd></div>
-        <div><dt>Miner</dt><dd>6180 <small>EVM + Solana</small></dd></div>
-      </dl>
-      <p class="stats-note" id="stats-note">Counters from <a href="/api/stats">/api/stats</a>; nearly all decisions so far are our own test runs.</p>
     </div>
   </section>
 

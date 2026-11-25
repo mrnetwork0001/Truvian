@@ -11,7 +11,6 @@
 .brand { margin: 0; line-height: 0; }
 .brand a { display: inline-block; }
 .brand-logo { height: 34px; width: auto; display: block; }
-.tagline { margin: 0; padding-left: 1.4rem; border-left: 1px solid var(--rule); font: 400 .72rem/1.5 var(--mono); letter-spacing: .04em; color: var(--bone-faint); max-width: 19rem; }
 .badge-row { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; font: 500 .66rem var(--mono); letter-spacing: .1em; text-transform: uppercase; }
 .badge { color: var(--gold); border: 1px solid rgba(202,165,61,.45); padding: .45rem .7rem; }
 .badge-row a { color: var(--bone-dim); text-decoration: none; border-bottom: 1px solid transparent; }
@@ -259,7 +258,6 @@ table.grid a { color: var(--bone); text-decoration-color: var(--gold); text-unde
 /* ---------- responsive ---------- */
 @media (max-width: 960px) {
   .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tagline { display: none; }
   .foot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .foot-brand-col { grid-column: 1 / -1; }
 }
@@ -282,6 +280,78 @@ table.grid a { color: var(--bone); text-decoration-color: var(--gold); text-unde
 @media (max-width: 420px) {
   .tabs { grid-template-columns: minmax(0, 1fr); }
   .foot-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---------- phones and tablets (900px and below): app shell ----------
+   A compact sticky bar with the logo and Home, the desks as a fixed bottom
+   bar (it replaces the desk tabs), content that clears the bar, and a one-line
+   footer. Desktop (901px and up) never shows any of this. */
+.home-link, .deskbar, .mini-foot { display: none; }
+@media (max-width: 900px) {
+  html, body { overflow-x: clip; }
+  .page { padding-bottom: calc(7rem + env(safe-area-inset-bottom)); }
+  .page > :not(.site-header), main > *, section > *, .field, .decision > *, .costline > * { min-width: 0; max-width: 100%; }
+
+  .site-header {
+    position: sticky; top: 0; z-index: 40; flex-wrap: nowrap; gap: 1rem;
+    padding: 0 var(--head-inset); min-height: 56px;
+    background: rgba(13,12,10,.96); backdrop-filter: saturate(140%) blur(12px); -webkit-backdrop-filter: saturate(140%) blur(12px);
+  }
+  .brand-logo { height: 28px; }
+  .header-right { display: none; }
+  .home-link { display: inline-flex; align-items: center; min-height: 44px; margin-left: auto; font: 500 .7rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--bone-dim); text-decoration: none; }
+  .home-link:active { color: var(--gold); }
+
+  .tabs { display: none; }
+  .check-section { padding-top: 22px; }
+  .desk-title { font-size: clamp(2rem, 9vw, 3rem); }
+
+  .deskbar {
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background: rgba(19,18,15,.9); backdrop-filter: saturate(140%) blur(14px); -webkit-backdrop-filter: saturate(140%) blur(14px);
+    border-top: 1px solid var(--rule);
+  }
+  .db-item {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+    min-height: 60px; padding: 9px 2px 8px; color: var(--bone-faint); text-decoration: none;
+    font: 500 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; -webkit-tap-highlight-color: transparent;
+    transition: color .16s;
+  }
+  .db-item svg { width: 22px; height: 22px; }
+  .db-item::before { content: ""; position: absolute; top: -1px; left: 24%; right: 24%; height: 3px; background: var(--gold); transform: scaleX(0); transition: transform .2s cubic-bezier(.2,.8,.2,1); }
+  .db-item[aria-current="page"] { color: var(--gold-soft); }
+  .db-item[aria-current="page"]::before { transform: scaleX(1); }
+  .db-item:active { color: var(--bone); background: rgba(255,255,255,.03); }
+
+  .site-footer { display: none; }
+  .mini-foot { display: flex; flex-wrap: wrap; justify-content: center; gap: .4rem 1.1rem; margin: 2.4rem 0 0; padding-top: 1.2rem; border-top: 1px solid var(--rule-soft); font: 400 .66rem/1.5 var(--mono); letter-spacing: .06em; color: var(--bone-faint); text-align: center; }
+  .mini-foot span { flex-basis: 100%; }
+  .mini-foot a { color: var(--bone-dim); text-decoration-color: var(--gold); text-underline-offset: 3px; min-height: 32px; display: inline-flex; align-items: center; }
+
+  /* touch: no zoom on focus, comfortable targets, feedback on press */
+  input, select, textarea, .field input[type="text"], .field select, textarea.holdings { font-size: 16px; }
+  .field input[type="text"], .field select { min-height: 46px; }
+  #submit-btn { min-height: 50px; width: 100%; }
+  .submit-field { justify-content: stretch; }
+  .preset-btn { min-height: 44px; }
+  .preset-btn:active, .actions button:active, .actions a.btnlike:active { background: var(--ink-3); transform: none; }
+  .actions button, .actions a.btnlike { min-height: 44px; display: inline-flex; align-items: center; }
+  .recent li { padding-top: .5rem; padding-bottom: .5rem; }
+
+  /* long values wrap; wide boxes scroll inside themselves */
+  .mono, td, .detail, .market, .sigbox, #chainread, #selection, .how-footnote { overflow-wrap: anywhere; word-break: break-word; }
+  .how-footnote .mono { word-break: break-all; }
+  .decision .word { max-width: 100%; font-size: clamp(1.4rem, 7vw, 2.4rem); }
+  .decision { overflow: hidden; }
+}
+@media (max-width: 600px) {
+  .presets { align-items: stretch; }
+  .presets-label { flex-basis: 100%; }
+  #fixtures { display: flex; flex-direction: column; gap: .5rem; width: 100%; }
+  #fixtures .preset-btn { width: 100%; text-align: left; white-space: normal; }
+  #rs-form, #pf-form { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ---------- hover and focus: consistent with the landing page ---------- */

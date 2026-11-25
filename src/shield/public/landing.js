@@ -35,10 +35,18 @@
       if (!s || typeof s !== 'object') return;
       if (typeof s.preflightsRun === 'number') $('st-decisions').textContent = s.preflightsRun.toLocaleString('en-US');
       if (typeof s.telegraphRequests === 'number') $('st-requests').textContent = s.telegraphRequests.toLocaleString('en-US');
-      if (typeof s.paidUsd === 'number') {
-        var dd = $('st-paid');
-        dd.textContent = money(s.paidUsd) + ' ';
-        dd.appendChild(el('small', null, 'test USDC'));
+      // What Telegraph billed Shield's escrow, from the node's own ledger (charged + unbilled);
+      // Shield's own count only when the ledger could not be read.
+      var L = s.telegraphLedger, link = $('st-paid-link'), note = $('st-paid-note');
+      if (L && typeof L.spentUsd === 'number') {
+        link.textContent = money(L.spentUsd);
+        if (L.url) link.href = L.url;
+        link.title = 'charged ' + money(L.chargedUsd || 0) + ' + unbilled ' + money(L.unbilledUsd || 0) + ", from the node's ledger for Shield's escrow";
+        note.textContent = 'test USDC · node ledger';
+      } else if (typeof s.paidUsd === 'number') {
+        link.textContent = money(s.paidUsd);
+        link.removeAttribute('href'); link.removeAttribute('title');
+        note.textContent = "test USDC · Shield's own count";
       }
       var left = s.you && typeof s.you.checksLeftToday === 'number' ? s.you.checksLeftToday : null;
       if (left !== null) {
@@ -118,17 +126,25 @@
     });
   }
 
-  /* ---------------- the featured memo cycles through real memos ----------------
-     Every 7 s the paper memo fades to the next recent decision (fetched from
-     /api/memo/<id>, the signed record itself) and its verdict is stamped again.
-     Pauses on hover/focus and while the tab is hidden. */
+  /* ---------------- the featured memo: always in motion, always a real memo ----------------
+     The paper floats (a slow sway, CSS), a gold hairline sweeps down it as if
+     the hash were being recomputed (CSS), and every 7 s the current memo
+     tears off and the next recent decision (fetched from /api/memo/<id>, the
+     signed record itself) prints underneath: header, each row in turn, the
+     values, the verdict stamp pressed down, the signature line drawn, then
+     the hash and cost. The old memo lifts away over the new one, so the paper
+     is never blank. Hover, keyboard focus or a hidden tab pause it. With
+     reduced motion: no sway, no scan, no printing; the dots still switch. */
   var memoEl = $('memo');
   var body = $('memo-body');
   var stampEl = $('memo-stamp');
+  var fig = memoEl ? memoEl.parentNode.parentNode : null; // figure > .memo-float > article
   var cache = {};
   var idx = 0;
   var timer = null;
   var paused = false;
+  var STEP = 120; // ms between printed rows
+
 
   function severityWord(s) { return s === 'block' ? 'blocks' : s === 'review' ? 'review' : s === 'pass' ? 'pass' : 'noted'; }
   function minerFor(memo, f) {
@@ -182,10 +198,41 @@
     var link = $('memo-link'); link.href = '/preflight?m=' + encodeURIComponent(rec.id);
   }
 
+  /* number the printed parts so CSS can stagger them: header, title, each row */
+  function indexMemo() {
+    var parts = [body.querySelector('.memo-top'), body.querySelector('.memo-title')].concat(Array.prototype.slice.call(body.querySelectorAll('.memo-fields > div')));
+    parts.forEach(function (p, i) { if (p) p.style.setProperty('--i', i); });
+    memoEl.style.setProperty('--n', parts.length);
+  }
+
+  function print() {
+    indexMemo();
+    memoEl.classList.remove('printing');
+    void memoEl.offsetWidth; // restart every staggered animation
+    memoEl.classList.add('printing');
+  }
+
+  /* the memo on show lifts off as a copy, over the next one printing beneath it */
+  function tearOff() {
+    var ghost = el('div', 'memo-ghost paper');
+    var b = body.cloneNode(true); b.removeAttribute('id'); ghost.appendChild(b);
+    var st = stampEl.cloneNode(true); st.removeAttribute('id'); st.classList.remove('repress'); ghost.appendChild(st);
+    ghost.setAttribute('aria-hidden', 'true');
+    memoEl.appendChild(ghost);
+    setTimeout(function () { if (ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 900);
+  }
+
   function dots() {
     var c = $('memo-cycle');
     c.hidden = false; c.textContent = '';
-    memoList.forEach(function (m, i) { c.appendChild(el('i', i === idx ? 'on' : null)); });
+    memoList.forEach(function (m, i) {
+      var b = el('button', i === idx ? 'on' : null);
+      b.type = 'button';
+      b.setAttribute('aria-label', 'Show memo ' + m.id);
+      if (i === idx) b.setAttribute('aria-current', 'true');
+      b.addEventListener('click', function () { show(i); restart(); });
+      c.appendChild(b);
+    });
   }
 
   function show(i) {
@@ -194,15 +241,10 @@
     var got = cache[m.id] ? Promise.resolve(cache[m.id]) : json('/api/memo/' + encodeURIComponent(m.id)).then(function (r) { cache[m.id] = r; return r; });
     got.then(function (rec) {
       if (!rec || !rec.memo) return;
-      memoEl.classList.add('swapping');
-      setTimeout(function () {
-        renderMemo(rec);
-        idx = i; dots();
-        memoEl.classList.remove('swapping');
-        stampEl.classList.remove('repress');
-        void stampEl.offsetWidth; // restart the press
-        stampEl.classList.add('repress');
-      }, 450);
+      if (MOTION) tearOff();
+      renderMemo(rec);
+      idx = i; dots();
+      if (MOTION) print();
     }).catch(function () { idx = i; /* unreadable: keep the memo on show, move on next tick */ });
   }
 
@@ -210,18 +252,24 @@
     if (paused || document.hidden || !memoList.length) return;
     show((idx + 1) % memoList.length);
   }
+  function restart() { if (timer) { clearInterval(timer); timer = setInterval(tick, 7000); } }
+  function hold(on) { paused = on; if (fig) fig.classList.toggle('held', on); }
 
   function startMemoCycle() {
-    if (!MOTION || !memoEl || memoList.length < 2) return;
+    if (!memoEl || memoList.length < 2) return;
     // start on the memo already printed in the HTML, if it is in the feed
     var at = memoList.map(function (m) { return m.id; }).indexOf('Py5ehwTL');
-    idx = at >= 0 ? at : -1;
-    if (idx < 0) { idx = 0; show(0); } else dots();
-    memoEl.addEventListener('mouseenter', function () { paused = true; });
-    memoEl.addEventListener('mouseleave', function () { paused = false; });
-    var fig = memoEl.parentNode;
-    fig.addEventListener('focusin', function () { paused = true; });
-    fig.addEventListener('focusout', function () { paused = false; });
+    idx = at >= 0 ? at : 0;
+    dots();
+    if (at < 0) show(0);
+    if (!MOTION) return; // reduced motion: still, but the dots switch memos
+    fig.classList.add('memo-live');
+    if (at >= 0) print();
+    memoEl.addEventListener('mouseenter', function () { hold(true); });
+    memoEl.addEventListener('mouseleave', function () { hold(false); });
+    fig.addEventListener('focusin', function () { hold(true); });
+    fig.addEventListener('focusout', function () { hold(false); });
+    document.addEventListener('visibilitychange', function () { if (fig) fig.classList.toggle('held', document.hidden || paused); });
     if (!timer) timer = setInterval(tick, 7000);
   }
 
@@ -288,6 +336,11 @@
   function countUp(el) {
     var node = null;
     for (var i = 0; i < el.childNodes.length; i++) if (el.childNodes[i].nodeType === 3 && /\d/.test(el.childNodes[i].textContent)) { node = el.childNodes[i]; break; }
+    // a figure wrapped in its own element (a link or span, not the small note)
+    if (!node) {
+      var inner = el.querySelector(':scope > a, :scope > span');
+      if (inner && inner.firstChild && inner.firstChild.nodeType === 3 && /\d/.test(inner.firstChild.textContent)) node = inner.firstChild;
+    }
     if (!node) return;
     var m = node.textContent.match(/^(\s*\$?)([\d,]*\.?\d+)(.*)$/);
     if (!m) return;
@@ -317,4 +370,43 @@
     });
   }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 });
   Array.prototype.forEach.call(targets, function (el) { io.observe(el); });
+})();
+
+/* Phones and tablets (900px and below): the menu is a left drawer. It opens
+   from the burger; it closes on the backdrop, Esc, the close button, any link,
+   and when the window grows past 900px. Focus moves into it on open and back
+   to the burger on close; the page behind does not scroll while it is open. */
+(function () {
+  'use strict';
+  var burger = document.getElementById('burger');
+  var nav = document.getElementById('mnav');
+  var backdrop = document.getElementById('mbackdrop');
+  var closeBtn = document.getElementById('mclose');
+  if (!burger || !nav) return;
+  function isOpen() { return document.body.classList.contains('menu-open'); }
+  function open() {
+    document.body.classList.add('menu-open');
+    nav.removeAttribute('inert');
+    burger.setAttribute('aria-expanded', 'true');
+    burger.setAttribute('aria-label', 'Close menu');
+    setTimeout(function () { (nav.querySelector('.mlink') || closeBtn).focus({ preventScroll: true }); }, 60);
+  }
+  function close(returnFocus) {
+    if (!isOpen()) return;
+    document.body.classList.remove('menu-open');
+    nav.setAttribute('inert', '');
+    burger.setAttribute('aria-expanded', 'false');
+    burger.setAttribute('aria-label', 'Open menu');
+    if (returnFocus) burger.focus({ preventScroll: true });
+  }
+  burger.addEventListener('click', function () { if (isOpen()) close(true); else open(); });
+  if (closeBtn) closeBtn.addEventListener('click', function () { close(true); });
+  if (backdrop) backdrop.addEventListener('click', function () { close(true); });
+  Array.prototype.forEach.call(nav.querySelectorAll('a'), function (a) { a.addEventListener('click', function () { close(false); }); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(true); });
+  if (window.matchMedia) {
+    var wide = window.matchMedia('(min-width: 901px)');
+    var onWide = function () { if (wide.matches) close(false); };
+    if (wide.addEventListener) wide.addEventListener('change', onWide); else if (wide.addListener) wide.addListener(onWide);
+  }
 })();
