@@ -230,6 +230,28 @@ ChainSight answered raw (`shape_error no_fields_found`, for USDC). A second
 opinion lets WETH clear as soon as a next-best miner answers with evidence;
 it does not stand in for evidence.
 
+## Measured on 2026-11-25, fresh inputs
+
+| Desk | Input | Decision | Cost | Time |
+|---|---|---|---|---|
+| Token preflight | LINK, Uniswap V3 LINK/WETH, $2,500 ([`-gDEis7Y`](https://truvian.xyz/preflight?m=-gDEis7Y)) | REVIEW | $0.05 | 194 s |
+| Token preflight | UNI, Uniswap V3 UNI/WETH, $1,500 ([`JAdz203v`](https://truvian.xyz/preflight?m=JAdz203v)), after commit `87eeca2` | REVIEW | $0.05 | 72 s |
+| Listing review | AAVE, issuer "Aave Companies", ecosystem reserve as treasury ([`x0bwcUae`](https://truvian.xyz/preflight?m=x0bwcUae)) | REVIEW | $0.06 | 196 s |
+| Holdings proof | Lido Aragon agent holds at least 1 LDO ([`IfNN2L2y`](https://truvian.xyz/preflight?m=IfNN2L2y)) | VERIFIED | $0.02 | 8 s |
+| Failure case | vitalik.eth given as the token ([`jQHbAXy3`](https://truvian.xyz/preflight?m=jQHbAXy3)) | REJECT | $0 | |
+
+Every routed `SECURITY_REVIEW_GENERAL` ask since Nov 22 has ended in a
+gateway 504 after about 60 s. Shield retried those twice, so each token
+decision waited about three minutes before the pinned second opinion ran;
+commit `87eeca2` stops retrying a 504 (the node may bill a timed-out ask), and
+the next decision took 72 s. The pinned answer from the top-ranked miner,
+Telegraph Verity Intelligence, was "Secure" with the summary "No configured
+static security heuristic matched. This limited source-text scan cannot
+certify the target as secure", which does not name the token, so it is not
+used. Each answer's receipt resolves on the node by its signal hash, and
+`/api/memo/verify` recovers the Shield signer `0x956a…3245` for these memos
+(checked on `-gDEis7Y`).
+
 ## Accounting: tracing what was paid
 
 - **Each memo** lists, per answer, the miner, the signal hash and (since
