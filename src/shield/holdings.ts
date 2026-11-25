@@ -28,6 +28,8 @@ import { formatUnits, getAddress, parseAbi, parseUnits } from 'viem';
 import { getClient, type SupportedChain } from '../config/chains.js';
 import { apiKeyBalanceUsd } from './telegraph.js';
 import { anchorBlock, parseAddress, parseChain, readTokenFacts, TokenFactsError } from './tokenFacts.js';
+import { parseSolanaAddress, parseSolanaNetwork, SolanaInputError, type SolanaNetwork } from './solana.js';
+import { isSolanaNetwork, readSolanaHoldings, type SolanaHoldingRead } from './solanaHoldings.js';
 import {
   budgetUsd,
   buy,
@@ -54,7 +56,8 @@ import {
 
 export interface HoldingsRequest {
   mode: 'holdings';
-  chain: SupportedChain;
+  /** An EVM chain, or solana / solana-devnet (base58 wallet and mints) */
+  chain: SupportedChain | SolanaNetwork;
   /** The custody wallet the fund says holds the tokens */
   wallet: `0x${string}`;
   holdings: Array<{ token: `0x${string}`; claimed: string; pool?: `0x${string}` }>;
@@ -72,8 +75,11 @@ export function normalizeHoldingsRequest(raw: unknown): HoldingsRequest {
   if (typeof raw !== 'object' || raw === null) throw new PreflightInputError('body must be a JSON object');
   const body = raw as Record<string, unknown>;
   try {
-    const chain = parseChain(body.chain ?? 'ethereum');
-    const wallet = parseAddress(body.wallet, 'wallet');
+    const chainName = String(body.chain ?? 'ethereum').trim().toLowerCase();
+    const solana = /^solana/.test(chainName) || chainName === 'devnet';
+    const chain = solana ? parseSolanaNetwork(chainName) : parseChain(chainName);
+    const addr = (v: unknown, what: string) => (solana ? parseSolanaAddress(v, what) as `0x${string}` : parseAddress(v, what));
+    const wallet = addr(body.wallet, 'wallet');
     const list = Array.isArray(body.holdings) ? body.holdings : [];
     if (list.length === 0) throw new PreflightInputError('a holdings proof needs holdings: [{token, claimed, pool?}, ...]');
     if (list.length > HOLDINGS_POLICY.maxHoldings) throw new PreflightInputError(`at most ${HOLDINGS_POLICY.maxHoldings} holdings per proof`);
@@ -81,18 +87,18 @@ export function normalizeHoldingsRequest(raw: unknown): HoldingsRequest {
     const holdings = list.map((h, i) => {
       if (typeof h !== 'object' || h === null) throw new PreflightInputError(`holding ${i + 1} must be {token, claimed, pool?}`);
       const item = h as Record<string, unknown>;
-      const token = parseAddress(item.token, `holding ${i + 1} token`);
+      const token = addr(item.token, `holding ${i + 1} token`);
       if (seen.has(token)) throw new PreflightInputError(`holding ${i + 1} repeats ${token}`);
       seen.add(token);
       const claimed = String(item.claimed ?? '').trim().replace(/,/g, '');
       if (!AMOUNT.test(claimed) || /^0+(\.0+)?$/.test(claimed)) throw new PreflightInputError(`holding ${i + 1} claimed must be a positive amount in whole tokens, such as 2400000 or 1.5`);
       const out: HoldingsRequest['holdings'][number] = { token, claimed };
-      if (item.pool !== undefined && item.pool !== null && String(item.pool).trim() !== '') out.pool = parseAddress(item.pool, `holding ${i + 1} pool`);
+      if (!solana && item.pool !== undefined && item.pool !== null && String(item.pool).trim() !== '') out.pool = parseAddress(item.pool, `holding ${i + 1} pool`);
       return out;
     });
     return { mode: 'holdings', chain, wallet, holdings };
   } catch (err) {
-    if (err instanceof TokenFactsError) throw new PreflightInputError(err.message);
+    if (err instanceof TokenFactsError || err instanceof SolanaInputError) throw new PreflightInputError(err.message);
     throw err;
   }
 }
@@ -113,7 +119,8 @@ function labelOf(read: HoldingRead): string {
 
 /** A request shaped like the other desks', for the rules shared with them (liquidity, second opinions). */
 export function asPreflightRequest(req: Pick<HoldingsRequest, 'chain'>, read: Pick<HoldingRead, 'token' | 'pool'>): PreflightRequest {
-  const out: PreflightRequest = { mode: 'holdings', chain: req.chain, token: read.token };
+  // A Solana holding has no pool, so the EVM-only rules that read chain never run for it
+  const out: PreflightRequest = { mode: 'holdings', chain: req.chain as SupportedChain, token: read.token };
   if (read.pool) out.pool = read.pool;
   return out;
 }
@@ -161,7 +168,9 @@ export function balanceFindings(p: Purchase | undefined, read: HoldingRead, wall
   const sym = labelOf(read);
   if (!p || !p.ok || !p.fields) return [unavailable(p, 'balance', 'Wallet balance')];
   const answeredFor = typeof p.fields.address === 'string' ? p.fields.address.trim() : '';
-  if (/^0x[0-9a-fA-F]{40}$/.test(answeredFor) && answeredFor.toLowerCase() !== wallet.toLowerCase()) {
+  const evmOther = /^0x[0-9a-fA-F]{40}$/.test(answeredFor) && answeredFor.toLowerCase() !== wallet.toLowerCase();
+  const solOther = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(answeredFor) && !wallet.startsWith('0x') && answeredFor !== wallet;
+  if (evmOther || solOther) {
     return [{ rule: 'balance.not_about_wallet', severity: 'review', title: 'Wallet balance: about another address', detail: `The answer gives a balance of ${String(p.fields.balance)} for ${answeredFor}${answeredFor.toLowerCase() === read.token.toLowerCase() ? ', the token contract itself,' : ''} not for the wallet ${wallet}, so it is no evidence about this holding.`, source: 'telegraph', evidence: ['balance'] }];
   }
   const told = num(p.fields.balance);
@@ -205,6 +214,10 @@ export function evaluateHoldings(
     findings.push(...about(read, balanceFindings(by('balance'), read, req.wallet)));
     findings.push(...about(read, supplyFindings(by('supply'), read.facts)));
     findings.push(...floatFindings(read));
+    // Solana: what the issuer can still do to this holding. A holding it can take back needs a person.
+    for (const r of (read as Partial<SolanaHoldingRead>).restrictions ?? []) {
+      findings.push({ rule: `mint.${r.key}`, severity: r.level === 'block' ? 'review' : r.level, title: `${labelOf(read)}: ${r.title}`, detail: r.detail, source: 'chain', evidence: [] });
+    }
     if (read.pool) findings.push(...about(read, liquidityFindings(by('liquidity'), asPreflightRequest(req, read))));
     for (const p of mine) {
       const so = p.secondOpinion;
@@ -232,7 +245,7 @@ export interface HoldingsEvents {
 }
 
 /** Every holding read at the same block: contract facts and the wallet's balance. */
-export async function readHoldings(req: HoldingsRequest): Promise<HoldingRead[]> {
+export async function readHoldings(req: HoldingsRequest & { chain: SupportedChain }): Promise<HoldingRead[]> {
   const anchor = await anchorBlock(req.chain);
   const client = getClient(req.chain);
   return Promise.all(req.holdings.map(async (h) => {
@@ -255,7 +268,9 @@ export async function readHoldings(req: HoldingsRequest): Promise<HoldingRead[]>
 export async function runHoldings(req: HoldingsRequest, events: HoldingsEvents = {}): Promise<PreflightMemo> {
   const started = Date.now();
   const createdAt = new Date().toISOString();
-  const reads = await readHoldings(req);
+  const reads: HoldingRead[] = isSolanaNetwork(req.chain)
+    ? await readSolanaHoldings(req.chain, req.wallet, req.holdings)
+    : await readHoldings(req as HoldingsRequest & { chain: SupportedChain });
   events.onHoldingsRead?.(reads);
 
   const plan: Planned[] = [];
@@ -304,17 +319,19 @@ export async function runHoldings(req: HoldingsRequest, events: HoldingsEvents =
     input: {
       mode: 'holdings', chain: req.chain, token: req.wallet, pool: null, tradeUsd: null, issuer: null, treasury: null,
       wallet: req.wallet,
-      holdings: req.holdings.map((h) => ({ token: getAddress(h.token), claimed: h.claimed, pool: h.pool ?? null })),
+      holdings: req.holdings.map((h) => ({ token: isSolanaNetwork(req.chain) ? h.token : getAddress(h.token), claimed: h.claimed, pool: h.pool ?? null })),
     },
     network: {
       telegraphNode: process.env.TELEGRAPH_NODE_URL ?? 'https://devnode.telegraphprotocol.com',
       routing: 'one routed ask per fact (POST /engine/ask with intent and params, paid from escrow); the node picks its ranked miner and returns a payment receipt. When that answer is no evidence, at most one more ask per fact, pinned to the next-best miner on the node leaderboard (POST /engine/ask/{minerId}), within the budget',
       settlement: 'Anjoman escrow, test USDC on Ethereum Sepolia (testnet)',
-      note: 'Telegraph Season II runs on testnet settlement; the holdings checked are on the mainnet chain named in input.chain.',
+      note: isSolanaNetwork(req.chain)
+        ? `Telegraph Season II runs on testnet settlement; the holdings checked are on ${req.chain}, read from ${req.chain === 'solana' ? 'two RPC providers that must agree' : 'the public devnet RPC'}.`
+        : 'Telegraph Season II runs on testnet settlement; the holdings checked are on the mainnet chain named in input.chain.',
     },
     chainReads: null,
     treasuryRead: null,
-    holdingReads: reads.map((r) => ({ ...r, source: `${label} JSON-RPC at block ${r.facts.block} (Truvian chain registry, not Telegraph)` })),
+    holdingReads: reads.map((r) => ({ ...r, source: isSolanaNetwork(req.chain) ? `${label} JSON-RPC at slot ${r.facts.block}, finalized (Truvian, not Telegraph)` : `${label} JSON-RPC at block ${r.facts.block} (Truvian chain registry, not Telegraph)` })),
     purchases,
     findings,
     decision,
