@@ -25,7 +25,7 @@
 .desk { transition: background .2s, transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s; }
 .js-reveal .desk { opacity: 0; transform: translate3d(0, 18px, 0); }
 .js-reveal .desk.in { opacity: 1; transform: none; transition: opacity .6s ease calc(var(--i, 0) * 90ms), transform .7s cubic-bezier(.2,.8,.2,1) calc(var(--i, 0) * 90ms), background .2s, box-shadow .25s; }
-.desk:not(.desk-soon):hover, .js-reveal .desk.in:not(.desk-soon):hover { transform: translate3d(0, -3px, 0); box-shadow: inset 0 0 0 1px var(--gold), 0 18px 30px -24px rgba(0,0,0,.9); z-index: 2; transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, background .2s; }
+.desk:not(.desk-soon):hover, .js-reveal .desk.in:not(.desk-soon):hover { transform: translate3d(0, -3px, 0); box-shadow: inset 0 0 0 1px var(--gold), 0 18px 30px -24px var(--shadow); z-index: 2; transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, background .2s; }
 .desk:not(.desk-soon):hover .vocab .stamp { animation: thunk .42s cubic-bezier(.2,.8,.2,1) both; }
 .desk:not(.desk-soon):hover .vocab .stamp:nth-child(2) { animation-delay: .07s; }
 .desk:not(.desk-soon):hover .vocab .stamp:nth-child(3) { animation-delay: .14s; }
@@ -95,7 +95,7 @@
 .memo-live .memo-float { animation: sway 9s ease-in-out infinite; transform-origin: 50% 60%; will-change: transform; }
 .memo-live .memo-float::after {
   content: ""; position: absolute; z-index: -1; left: 6%; right: 6%; bottom: -30px; height: 46px;
-  background: radial-gradient(50% 50% at 50% 50%, rgba(0,0,0,.75), transparent 72%);
+  background: radial-gradient(50% 50% at 50% 50%, var(--shadow), transparent 72%);
   animation: sway-shadow 9s ease-in-out infinite; will-change: transform, opacity;
 }
 @keyframes sway { 0%, 100% { transform: translate3d(0, -6px, 0) rotate(-2.5deg); } 50% { transform: translate3d(0, 6px, 0) rotate(-.5deg); } }
@@ -105,7 +105,7 @@
 .memo-live .memo-scan { display: block; position: absolute; inset: 0; z-index: 3; overflow: hidden; pointer-events: none; }
 .memo-live .memo-scan::before {
   content: ""; position: absolute; left: 0; right: 0; top: 0; height: 100%;
-  background: linear-gradient(to bottom, transparent calc(100% - 44px), rgba(202,165,61,.10) calc(100% - 4px), rgba(202,165,61,.85) calc(100% - 1px), transparent 100%);
+  background: linear-gradient(to bottom, transparent calc(100% - 44px), rgba(var(--gold-rgb),.10) calc(100% - 4px), rgba(var(--gold-rgb),.85) calc(100% - 1px), transparent 100%);
   transform: translate3d(0, -100%, 0);
   animation: scan 4.2s cubic-bezier(.45,0,.55,1) infinite; will-change: transform;
 }
