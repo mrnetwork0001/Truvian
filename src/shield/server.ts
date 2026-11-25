@@ -26,7 +26,7 @@ import { readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { askIntent } from './telegraph.js';
+import { askIntent, escrowLedger, type EscrowLedger } from './telegraph.js';
 import {
   assessTxVerification,
   buildCheckReport,
@@ -326,6 +326,15 @@ export function buildShieldServer() {
 
   app.get('/healthz', async () => ({ ok: true }));
 
+  // The node's own ledger for Shield's escrow: the exact spend on Telegraph answers, read at most once a minute.
+  let ledgerCache: { at: number; value: EscrowLedger | null } | null = null;
+  const ledger = async (): Promise<EscrowLedger | null> => {
+    if (ledgerCache && Date.now() - ledgerCache.at < 60_000) return ledgerCache.value;
+    const value = await escrowLedger();
+    ledgerCache = { at: Date.now(), value: value ?? ledgerCache?.value ?? null };
+    return ledgerCache.value;
+  };
+
   app.get('/api/stats', async (req) => {
     // The first request can arrive before the boot-time balance read lands.
     // Wait briefly for it rather than reporting an unknown balance, but never
@@ -344,6 +353,8 @@ export function buildShieldServer() {
       payer: payerAddress(),
       pricing: paymentsEnabled(payerAddress()) && payTo ? { priceUsd: priceUsd(), payTo, asset: 'USDC', network: 'base-sepolia' } : null,
       you: { checksLeftToday: you.remainingForIp, perDay: budget.perIpDailyCap },
+      /** What the node itself records for Shield's escrow (paidUsd above is Shield's own count, which misses some calls) */
+      telegraphLedger: await ledger(),
     };
   });
 
@@ -721,7 +732,9 @@ export function buildShieldServer() {
       }
       return { success: settlement.success, transaction: settlement.transaction ?? null, reason: settlement.reason };
     },
+    // Called once per resolution, so a resolution counts as a desk decision like a preflight
     recordSpend: (usd, requests) => {
+      stats.preflightsRun++;
       stats.telegraphRequests += requests;
       stats.paidUsd = Number((stats.paidUsd + usd).toFixed(6));
       limiter.recordSpend(usd);
