@@ -12,37 +12,29 @@
 <meta property="og:description" content="Independent Telegraph miners, checked against each other and the venue: RESOLVED, DISPUTED, TOO EARLY or REVIEW, signed and anchored on Solana.">
 <meta property="og:image" content="https://truvian.xyz/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="stylesheet" href="./style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=Inter+Tight:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./tokens.css">
+<link rel="stylesheet" href="./desk.css">
 <style>
-  .decision { border-left: 4px solid var(--edge); padding: 1rem 1.1rem; border-radius: 6px; background: var(--panel); }
-  .decision .word { font-size: 1.6rem; font-weight: 700; letter-spacing: .04em; }
-  .decision .rule { color: var(--muted); font-size: .82rem; margin-top: .3rem; }
-  .decision.RESOLVED { border-left-color: var(--safe); background: rgba(83,192,127,.07); } .decision.RESOLVED .word { color: var(--safe); }
-  .decision.REVIEW, .decision.TOO_EARLY { border-left-color: var(--warn); background: rgba(224,168,75,.07); } .decision.REVIEW .word, .decision.TOO_EARLY .word { color: var(--warn); }
-  .decision.DISPUTED { border-left-color: var(--block); background: rgba(224,92,92,.07); } .decision.DISPUTED .word { color: var(--block); }
-  .costline { display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; margin: .9rem 0 0; font-size: .8rem; color: var(--muted); }
-  .costline b { color: var(--text); font-weight: 600; }
-  table.grid { width: 100%; border-collapse: collapse; font-size: .8rem; margin-top: .6rem; }
-  table.grid th, table.grid td { text-align: left; padding: .5rem .55rem; border-bottom: 1px solid var(--edge-soft); vertical-align: top; }
-  table.grid th { color: var(--faint); font-weight: 500; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
-  .sev { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; padding: .12rem .4rem; border-radius: 4px; border: 1px solid currentColor; white-space: nowrap; }
-  .sev.block, .sev.failed, .sev.inconsistent { color: var(--block); } .sev.review, .sev.unsupported { color: var(--warn); } .sev.pass, .sev.decisive { color: var(--safe); } .sev.info, .sev.abstained, .sev.duplicate { color: var(--neutral-chip); }
-  .detail { color: var(--muted); }
-  .mono { font-family: var(--mono); word-break: break-all; }
-  .pending { color: var(--faint); }
-  .market { padding: .8rem 1rem; border: 1px solid var(--edge); border-radius: 6px; background: var(--panel); font-size: .82rem; }
-  .market .q { font-size: 1rem; color: var(--text); font-weight: 600; }
-  .market .row { margin-top: .35rem; color: var(--muted); }
-  .market .row b { color: var(--text); font-weight: 500; }
-  .sigbox { margin-top: 1rem; padding: .8rem 1rem; border: 1px solid var(--edge); border-radius: 6px; background: var(--panel); font-size: .78rem; }
-  .sigbox .row { display: flex; gap: .6rem; margin: .25rem 0; flex-wrap: wrap; }
-  .sigbox .k { color: var(--faint); min-width: 7rem; }
-  .actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .7rem; }
-  .actions button, .actions a.btnlike { background: var(--panel-2); border: 1px solid var(--edge); color: var(--text); font: inherit; font-size: .78rem; padding: .4rem .7rem; border-radius: 5px; cursor: pointer; text-decoration: none; }
-  .note-testnet { font-size: .74rem; color: var(--faint); margin-top: .6rem; }
-  .recent li { font-size: .78rem; margin: .3rem 0; color: var(--muted); }
+  /* Resolve's own verdicts on the shared stamp: RESOLVED green, DISPUTED red, REVIEW and TOO EARLY amber */
+  .decision.RESOLVED { --c: var(--ok); }
+  .decision.DISPUTED { --c: var(--reject); }
+  .decision.TOO_EARLY { --c: var(--review); }
+  .decision.RESOLVED .word, .decision.DISPUTED .word, .decision.TOO_EARLY .word { animation: press-sm .5s cubic-bezier(.2,.8,.2,1) both; }
+  .sev.failed, .sev.inconsistent { --c: var(--reject); }
+  .sev.unsupported { --c: var(--review); }
+  .sev.decisive { --c: var(--ok); }
+  .sev.abstained, .sev.duplicate { --c: var(--bone-faint); }
+  .market { border: 1px solid var(--rule); background: var(--ink-2); padding: 1.1rem 1.25rem; font: 400 .76rem/1.6 var(--mono); color: var(--bone-dim); }
+  .market .q { font: 400 1.35rem/1.3 var(--sans); color: var(--bone); letter-spacing: -.01em; margin-bottom: .5rem; }
+  .market .row { margin-top: .3rem; }
+  .market .row b { color: var(--bone); font-weight: 500; }
+  .srcs a { display: block; font: 400 .68rem/1.5 var(--mono); color: var(--bone-faint); word-break: break-all; }
+  .recent li { font: 400 .74rem/1.6 var(--mono); color: var(--bone-dim); margin: .35rem 0; }
+  .recent a { color: var(--bone); text-decoration-color: var(--gold); }
   .hidden { display: none !important; }
-  .srcs a { display: block; font-size: .72rem; color: var(--muted); word-break: break-all; }
 </style>
 </head>
 <body>
@@ -56,7 +48,7 @@
     <div class="header-right">
       <div class="badge-row">
         <span class="badge">Telegraph Season II · Apps &amp; Agents</span>
-        <a href="/preflight">token desks</a>
+        <a href="/preflight">the other desks</a>
         <span class="sep" aria-hidden="true">·</span>
         <a href="https://github.com/mrnetwork0001/Truvian/blob/main/src/shield/resolve.ts" target="_blank" rel="noopener">the rules</a>
       </div>
@@ -65,11 +57,12 @@
 
   <main>
     <section class="check-section" aria-labelledby="rs-heading">
-      <h2 id="rs-heading" class="section-label">Resolve a market</h2>
+      <h2 id="rs-heading" class="section-label"><span class="n">05</span> · Prediction-market resolution</h2>
+      <p class="desk-title">Settle on <span class="accent">evidence,</span> not one oracle.</p>
       <p class="section-note">Truvian Resolve reads the market from its venue, then buys its outcome from up to three independent miners serving <span class="mono">EVENT_OUTCOME_RESOLUTION_GENERAL</span>: the node's routed pick and up to two specialists pinned by id, one per operator, never a miner that reads the same venue. An answer counts only with a source on the event. <b>RESOLVED</b> needs two that agree, and agree with the venue's settlement; sourced answers that disagree are <b>DISPUTED</b>; fewer than two is <b>REVIEW</b>; a market still open is <b>TOO EARLY</b> and buys nothing. The memo is signed, and its digest is written to Solana devnet with the Memo program.</p>
 
       <div class="presets" aria-label="Fixtures">
-        <span class="presets-label">Try one:</span>
+        <span class="presets-label">Try one</span>
         <span id="fixtures"></span>
       </div>
 
@@ -114,17 +107,17 @@
       <h2 class="section-label">Market</h2>
       <div id="market-card" class="market"><span class="pending">reading the venue…</span></div>
 
-      <h2 class="section-label" style="margin-top:1.4rem">Decision</h2>
+      <h2 class="section-label" style="margin-top:2.4rem">Decision</h2>
       <div id="decision" class="decision"><div class="word pending">working…</div></div>
       <div id="costline" class="costline"></div>
 
-      <h3 class="section-label" style="margin-top:1.6rem">Telegraph answers</h3>
+      <h3 class="section-label" >Telegraph answers</h3>
       <table class="grid"><thead><tr><th>miner</th><th>answer</th><th>counts as</th><th>cost · latency · receipt</th></tr></thead><tbody id="answers"><tr><td colspan="4" class="pending">waiting for the miners…</td></tr></tbody></table>
 
-      <h3 class="section-label" style="margin-top:1.6rem">Findings</h3>
+      <h3 class="section-label" >Findings</h3>
       <table class="grid"><thead><tr><th>severity</th><th>finding</th></tr></thead><tbody id="findings"></tbody></table>
 
-      <h3 class="section-label" style="margin-top:1.6rem">Who was asked</h3>
+      <h3 class="section-label" >Who was asked</h3>
       <div id="selection" class="detail" style="font-size:.78rem"></div>
 
       <div id="sig" class="sigbox hidden"></div>

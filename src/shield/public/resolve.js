@@ -14,10 +14,10 @@
 
   // Recorded live on 2026-11-25; markets do not change once settled.
   const FIXTURES = [
-    { label: 'Trump wins 2024 (Polymarket) → expect RESOLVED', cls: 'preset-safe', v: { source: 'polymarket', market: '253591', event: '' } },
-    { label: 'Ukraine minerals deal "before April" (Polymarket, settled YES) → DISPUTED', cls: 'preset-block', v: { source: 'polymarket', market: '521607', event: 'Did the United States and Ukraine sign a minerals deal before April 1, 2025?' } },
-    { label: 'Fed, December 2026 (Kalshi) → TOO EARLY, $0', cls: '', v: { source: 'kalshi', market: 'KXFEDDECISION-26DEC-H0', event: '' } },
-    { label: 'Dallas vs Denver, Nov 24 (Kalshi) → REVIEW', cls: '', v: { source: 'kalshi', market: 'KXNBAGAME-26NOV24DALDEN-DAL', event: '' } },
+    { label: 'Trump wins 2024 (Polymarket) · expect RESOLVED', cls: 'preset-safe', v: { source: 'polymarket', market: '253591', event: '' } },
+    { label: 'Ukraine minerals deal "before April" (Polymarket, settled YES) · expect DISPUTED', cls: 'preset-block', v: { source: 'polymarket', market: '521607', event: 'Did the United States and Ukraine sign a minerals deal before April 1, 2025?' } },
+    { label: 'Fed, December 2026 (Kalshi) · expect TOO EARLY, $0', cls: '', v: { source: 'kalshi', market: 'KXFEDDECISION-26DEC-H0', event: '' } },
+    { label: 'Dallas vs Denver, Nov 24 (Kalshi) · expect REVIEW', cls: '', v: { source: 'kalshi', market: 'KXNBAGAME-26NOV24DALDEN-DAL', event: '' } },
   ];
 
   function setSource(src) {
