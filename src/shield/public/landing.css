@@ -54,22 +54,47 @@
 .sig-line .mono { font-size: .82rem; }
 .sig-meta { margin-top: .45rem; font-size: .66rem; color: var(--paper-dim); word-break: break-word; }
 .memo-stamp { position: absolute; left: 50%; margin-left: -6.6rem; bottom: 88px; transform: rotate(-7deg); mix-blend-mode: multiply; opacity: .92; animation: press .55s cubic-bezier(.2,.8,.2,1) .45s both; }
+.memo-body { transition: opacity .45s ease, transform .45s ease; }
+/* memos differ in length: a fixed floor keeps the hero still while they cycle */
+@media (min-width: 861px) { .memo { min-height: 640px; display: flex; flex-direction: column; } .memo-body { flex: 1; display: flex; flex-direction: column; } .memo-sign { margin-top: auto; padding-top: 5.6rem; } }
+.memo.swapping .memo-body { opacity: 0; transform: translate3d(0, 6px, 0); }
+.memo.swapping .memo-stamp { opacity: 0; transition: opacity .2s; }
+.memo-stamp.repress { animation: press .55s cubic-bezier(.2,.8,.2,1) both; }
+.memo-cycle { display: flex; gap: 6px; margin-top: .9rem; }
+.memo-cycle i { display: block; width: 18px; height: 2px; background: var(--rule); transition: background .3s; }
+.memo-cycle i.on { background: var(--gold); }
 .hero-memo figcaption { margin: 1.3rem 0 0; font-size: .84rem; color: var(--bone-faint); max-width: 30rem; }
 .hero-memo figcaption a { color: var(--bone); text-decoration-color: var(--gold); text-underline-offset: 3px; }
 
 /* ledger tape */
 .ledger { margin-top: clamp(48px, 7vw, 88px); }
-.ledger-scroll { overflow-x: auto; }
-.tape { width: 100%; border-collapse: collapse; font: 400 .8rem/1.4 var(--mono); }
-.tape th { text-align: left; font-weight: 500; font-size: .66rem; letter-spacing: .14em; text-transform: uppercase; color: var(--bone-faint); padding: 0 .9rem .7rem 0; border-bottom: 1px solid var(--rule); white-space: nowrap; }
-.tape td { padding: .78rem .9rem .78rem 0; border-bottom: 1px solid var(--rule-soft); color: var(--bone-dim); white-space: nowrap; }
-.tape td:nth-child(3) { color: var(--bone); white-space: normal; min-width: 12rem; }
-.tape td a { color: var(--bone); text-decoration-color: var(--gold); text-underline-offset: 3px; }
+/* the tape: a list of slips. Static with JS off; landing.js duplicates the rows
+   and adds .looping for a seamless vertical marquee (transform only). */
+.tape { font: 400 .8rem/1.4 var(--mono); }
+.tape-row { display: grid; grid-template-columns: 7.6rem 6.6rem minmax(0, 1fr) 8.6rem 4.4rem 6.6rem 7rem; align-items: center; gap: 0 .9rem; padding: .78rem 0; border-bottom: 1px solid var(--rule-soft); color: var(--bone-dim); list-style: none; }
+.tape-head { font-weight: 500; font-size: .66rem; letter-spacing: .14em; text-transform: uppercase; color: var(--bone-faint); padding: 0 0 .7rem; border-bottom: 1px solid var(--rule); }
+.tape-track { margin: 0; padding: 0; }
+.tape .c-s { color: var(--bone); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tape .num { text-align: right; }
-.tape .v { text-align: right; padding-right: 0; }
-.tape tbody tr { transition: background .15s; }
-.tape tbody tr:hover { background: var(--ink-2); }
-.tape tbody tr.in { animation: slide .5s cubic-bezier(.2,.8,.2,1) both; }
+.tape .c-v { text-align: right; }
+.tape-row a { color: var(--bone); text-decoration-color: var(--gold); text-underline-offset: 3px; }
+.tape-track .tape-row { transition: background .15s; }
+.tape-track .tape-row:hover { background: var(--ink-2); }
+.tape-window { position: relative; }
+.ledger.looping .tape-window {
+  height: calc(var(--rows, 5) * 3.05rem);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14%, #000 86%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 14%, #000 86%, transparent 100%);
+}
+.ledger.looping .tape-track .tape-row { height: 3.05rem; padding: 0; }
+.ledger.looping .tape-track { animation: tape var(--tape-dur, 30s) linear infinite; will-change: transform; }
+.ledger.looping:hover .tape-track, .ledger.looping:focus-within .tape-track { animation-play-state: paused; }
+@keyframes tape { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(0, -50%, 0); } }
+/* a row that just arrived from /api/memos */
+.tape-row.fresh .c-s, .tape-row.fresh .c-t { animation: slide .6s cubic-bezier(.2,.8,.2,1) both; }
+.tape-row.fresh .stamp { animation: press-row .5s cubic-bezier(.2,.8,.2,1) .35s both; }
+@keyframes press-row { 0% { opacity: 0; transform: rotate(-9deg) scale(1.6); } 100% { opacity: 1; transform: rotate(-2.5deg) scale(1); } }
 @keyframes slide { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
 
 /* stats strip */
@@ -209,6 +234,8 @@
   .stats > div:nth-child(5) { border-top: 1px solid var(--rule); }
 }
 @media (max-width: 860px) {
+  .tape-row { grid-template-columns: 7.2rem minmax(0, 1fr) 4.4rem 6.6rem 7rem; }
+  .tape-row .c-d, .tape-row .c-c { display: none; }
   .hero-grid { grid-template-columns: minmax(0, 1fr); }
   .memo { transform: none; }
   .desks { grid-template-columns: minmax(0, 1fr); }
@@ -240,12 +267,13 @@
   .foot-grid { grid-template-columns: minmax(0, 1fr); }
   .memo-top { flex-direction: column; gap: .35rem; }
   .stats > div:nth-child(5) { grid-column: 1 / -1; border-left: 0; padding-left: 0; }
-  /* the tape becomes a stack of slips */
-  .tape thead { display: none; }
-  .tape, .tape tbody { display: block; }
-  .tape tr { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .9rem; padding: .9rem 0; border-bottom: 1px solid var(--rule-soft); }
-  .tape td { padding: 0; border: 0; font-size: .72rem; }
-  .tape td:nth-child(3) { order: -1; flex-basis: 100%; min-width: 0; font-size: .82rem; }
-  .tape td:nth-child(4) { display: none; }
-  .tape .v { margin-left: auto; }
+  /* the tape: each row a slip */
+  .tape-head { display: none; }
+  .tape-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "s v" "m v"; row-gap: .25rem; }
+  .tape-row .c-t, .tape-row .c-d, .tape-row .c-c, .tape-row .c-p { display: none; }
+  .tape .c-s { grid-area: s; font-size: .82rem; }
+  .tape .c-m { grid-area: m; font-size: .72rem; }
+  .tape .c-v { grid-area: v; }
+  .ledger.looping .tape-track .tape-row { height: 4.2rem; }
+  .ledger.looping .tape-window { height: calc(var(--rows, 5) * 4.2rem); }
 }

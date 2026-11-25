@@ -59,7 +59,8 @@
       </div>
 
       <figure class="hero-memo" aria-labelledby="memo-cap">
-        <article class="paper perf memo" aria-label="Signed memo Py5ehwTL: settlement rejected">
+        <article class="paper perf memo" id="memo" aria-label="Signed memo Py5ehwTL: settlement rejected" aria-live="off">
+          <div class="memo-body" id="memo-body">
           <header class="memo-top">
             <span class="doc-k">Truvian Shield · decision memo</span>
             <span class="doc-k">No. <b>Py5ehwTL</b></span>
@@ -77,9 +78,10 @@
             <div class="sig-line"><span class="doc-k">Signed EIP-191</span><span class="mono">0x956a…3245</span></div>
             <div class="sig-meta mono">sha256 6b04009c…47ecbb · $0.04 test USDC · 3 answers</div>
           </footer>
-          <span class="stamp xl reject memo-stamp" aria-hidden="true">Reject</span>
+          </div>
+          <span class="stamp xl reject memo-stamp" id="memo-stamp" aria-hidden="true">Reject</span>
         </article>
-        <figcaption id="memo-cap"><a href="/preflight?m=Py5ehwTL">Open this memo</a> and press <i>Verify signature</i>: the hash is recomputed and the signer recovered in your browser.</figcaption>
+        <figcaption id="memo-cap"><a href="/preflight?m=Py5ehwTL" id="memo-link">Open this memo</a> and press <i>Verify signature</i>: the hash is recomputed and the signer recovered in your browser.<span class="memo-cycle" id="memo-cycle" hidden></span></figcaption>
       </figure>
     </div>
 
@@ -87,18 +89,18 @@
     <div class="wrap">
       <div class="ledger fig-frame" id="ledger">
         <p class="fig-cap"><span><b>FIG. 00</b> · The ledger · latest signed decisions</span><span id="ledger-state">verified 25 Nov 2026</span></p>
-        <div class="ledger-scroll">
-          <table class="tape">
-            <thead><tr><th scope="col">UTC</th><th scope="col">Desk</th><th scope="col">Subject</th><th scope="col">Chain</th><th scope="col" class="num">Cost</th><th scope="col">Memo</th><th scope="col" class="v">Verdict</th></tr></thead>
-            <tbody id="tape-body">
-              <tr><td>11-25 11:16</td><td>Settlement</td><td>Coinbase Global · tUSD</td><td>solana-devnet</td><td class="num">$0.00</td><td><a href="/preflight?m=sEDw0qBk">sEDw0qBk</a></td><td class="v"><span class="stamp ok">Release</span></td></tr>
-              <tr><td>11-25 11:14</td><td>Settlement</td><td>Coinbase Global · rUSD</td><td>solana-devnet</td><td class="num">$0.04</td><td><a href="/preflight?m=HB7ZGFGr">HB7ZGFGr</a></td><td class="v"><span class="stamp review">Review</span></td></tr>
-              <tr><td>11-25 11:14</td><td>Settlement</td><td>Garantex Europe OU · tUSD</td><td>solana-devnet</td><td class="num">$0.04</td><td><a href="/preflight?m=Py5ehwTL">Py5ehwTL</a></td><td class="v"><span class="stamp reject">Reject</span></td></tr>
-              <tr><td>11-23 09:17</td><td>Holdings</td><td>ENS DAO treasury</td><td>ethereum</td><td class="num">$0.06</td><td><a href="/preflight?m=JYjvJrmy">JYjvJrmy</a></td><td class="v"><span class="stamp review">Review</span></td></tr>
-              <tr><td>11-21 08:19</td><td>Preflight</td><td>WETH</td><td>ethereum</td><td class="num">$0.04</td><td><a href="/preflight?m=B4k2AxbY">B4k2AxbY</a></td><td class="v"><span class="stamp review">Review</span></td></tr>
-              <tr><td>11-20 20:38</td><td>Listing</td><td>Garantex Europe OU · USDC</td><td>ethereum</td><td class="num">$0.04</td><td><a href="/preflight?m=WOYbyG3x">WOYbyG3x</a></td><td class="v"><span class="stamp reject">Reject</span></td></tr>
-            </tbody>
-          </table>
+        <div class="tape" role="table" aria-label="Latest signed decisions">
+          <div class="tape-row tape-head" role="row"><span class="c-t" role="columnheader">UTC</span><span class="c-d" role="columnheader">Desk</span><span class="c-s" role="columnheader">Subject</span><span class="c-c" role="columnheader">Chain</span><span class="c-p num" role="columnheader">Cost</span><span class="c-m" role="columnheader">Memo</span><span class="c-v" role="columnheader">Verdict</span></div>
+          <div class="tape-window" id="tape-window">
+            <ul class="tape-track" id="tape-track" role="rowgroup">
+              <li class="tape-row" role="row"><span class="c-t" role="cell">11-25 11:16</span><span class="c-d" role="cell">Settlement</span><span class="c-s" role="cell">Coinbase Global · tUSD</span><span class="c-c" role="cell">solana-devnet</span><span class="c-p num" role="cell">$0.00</span><span class="c-m" role="cell"><a href="/preflight?m=sEDw0qBk">sEDw0qBk</a></span><span class="c-v" role="cell"><span class="stamp ok">Release</span></span></li>
+              <li class="tape-row" role="row"><span class="c-t" role="cell">11-25 11:14</span><span class="c-d" role="cell">Settlement</span><span class="c-s" role="cell">Coinbase Global · rUSD</span><span class="c-c" role="cell">solana-devnet</span><span class="c-p num" role="cell">$0.04</span><span class="c-m" role="cell"><a href="/preflight?m=HB7ZGFGr">HB7ZGFGr</a></span><span class="c-v" role="cell"><span class="stamp review">Review</span></span></li>
+              <li class="tape-row" role="row"><span class="c-t" role="cell">11-25 11:14</span><span class="c-d" role="cell">Settlement</span><span class="c-s" role="cell">Garantex Europe OU · tUSD</span><span class="c-c" role="cell">solana-devnet</span><span class="c-p num" role="cell">$0.04</span><span class="c-m" role="cell"><a href="/preflight?m=Py5ehwTL">Py5ehwTL</a></span><span class="c-v" role="cell"><span class="stamp reject">Reject</span></span></li>
+              <li class="tape-row" role="row"><span class="c-t" role="cell">11-23 09:17</span><span class="c-d" role="cell">Holdings</span><span class="c-s" role="cell">ENS DAO treasury</span><span class="c-c" role="cell">ethereum</span><span class="c-p num" role="cell">$0.06</span><span class="c-m" role="cell"><a href="/preflight?m=JYjvJrmy">JYjvJrmy</a></span><span class="c-v" role="cell"><span class="stamp review">Review</span></span></li>
+              <li class="tape-row" role="row"><span class="c-t" role="cell">11-21 08:19</span><span class="c-d" role="cell">Preflight</span><span class="c-s" role="cell">WETH</span><span class="c-c" role="cell">ethereum</span><span class="c-p num" role="cell">$0.04</span><span class="c-m" role="cell"><a href="/preflight?m=B4k2AxbY">B4k2AxbY</a></span><span class="c-v" role="cell"><span class="stamp review">Review</span></span></li>
+              <li class="tape-row" role="row"><span class="c-t" role="cell">11-20 20:38</span><span class="c-d" role="cell">Listing</span><span class="c-s" role="cell">Garantex Europe OU · USDC</span><span class="c-c" role="cell">ethereum</span><span class="c-p num" role="cell">$0.04</span><span class="c-m" role="cell"><a href="/preflight?m=WOYbyG3x">WOYbyG3x</a></span><span class="c-v" role="cell"><span class="stamp reject">Reject</span></span></li>
+            </ul>
+          </div>
         </div>
       </div>
 
