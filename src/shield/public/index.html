@@ -153,13 +153,12 @@
           <p class="vocab"><span class="stamp flat ok">Release</span><span class="stamp flat review">Review</span><span class="stamp flat reject">Reject</span></p>
           <p class="desk-foot"><span>Custodians · real devnet settlement, test tokens</span><a href="/preflight?m=sEDw0qBk">sEDw0qBk</a></p>
         </article>
-        <!-- DESK SLOT 5: Prediction-market resolution. Fill in when the desk ships (link /preflight?desk=... or /resolve). -->
-        <article class="desk desk-soon" aria-label="Prediction-market resolution, in progress">
-          <p class="desk-no">D-05 <span>In progress</span></p>
-          <h3>Prediction-market resolution</h3>
-          <p>Several ranked miners asked for an event's outcome, compared with each other and with the market's resolution rules, before a market settles.</p>
-          <p class="vocab"><span class="stamp flat muted">Resolved</span><span class="stamp flat muted">Disputed</span><span class="stamp flat muted">Too early</span></p>
-          <p class="desk-foot"><span>Being built · not live yet</span></p>
+        <article class="desk desk-new">
+          <p class="desk-no">D-05 <span class="new">New · anchored on Solana</span></p>
+          <h3><a href="/resolve">Prediction-market resolution</a></h3>
+          <p>Before a market settles, several ranked miners from different operators are asked for the event's outcome. An answer counts only with a source that names the event; answers are compared with each other and with the market's own result. Every memo's digest is written to Solana devnet.</p>
+          <p class="vocab"><span class="stamp flat ok">Resolved</span><span class="stamp flat review">Disputed</span><span class="stamp flat review">Review</span><span class="stamp flat muted">Too early</span></p>
+          <p class="desk-foot"><span>Markets &amp; traders · Polymarket and Kalshi markets</span><a href="/resolve?r=UnLKfa5v">UnLKfa5v</a></p>
         </article>
       </div>
     </div>
@@ -293,7 +292,7 @@ curl -s https://truvian.xyz/api/preflight \
         <li><h3>Testnet money</h3><p>Telegraph answers are paid in test USDC from an Anjoman escrow on Ethereum Sepolia; Shield's own charge is test USDC on Base Sepolia; settlements are sent on Solana devnet in test tokens. Token facts are read from mainnets.</p></li>
         <li><h3>Security reviews time out</h3><p>Since 22 Nov every routed SECURITY_REVIEW ask has ended in a gateway timeout, so token preflights and listing reviews usually end in REVIEW: nothing is cleared on a missing answer.</p></li>
         <li><h3>Solana balances</h3><p>On 25 Nov no miner on the node answered a Solana wallet balance. Ours now does; until the node routes those questions to it, the settlement desk's funds check rests on its own two-provider chain read.</p></li>
-        <li><h3>Prediction markets</h3><p>Prediction-market resolution is in progress, not live.</p></li>
+        <li><h3>Prediction markets</h3><p>Resolution reads Polymarket and Kalshi markets; a Solana-native market API (DFlow) refused our requests, so the Solana part is the memo anchor. Few miners on the node resolve free-text events: of five settled markets tried on 25 Nov, one reached RESOLVED, one DISPUTED, three REVIEW.</p></li>
         <li><h3>Season I check</h3><p>The <a href="/app">Season I pre-sign check</a> is still online at <code>/app</code>; it is looser than the desks and keeps its Season I wording.</p></li>
       </ol>
     </div>
@@ -315,7 +314,7 @@ curl -s https://truvian.xyz/api/preflight \
   <div class="wrap foot-grid">
     <div class="foot-brand-col">
       <a class="foot-brand" href="/"><img class="foot-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
-      <p class="foot-desc">Decide before you act. Built for Telegraph Season II; independent, not affiliated with Telegraph Protocol or Anjoman.</p>
+      <p class="foot-desc">Truvian decides before money moves. It buys evidence from Telegraph's ranked specialist miners, checks every answer against the chain, and returns a signed memo with the cost and a receipt for each answer: for trading agents, exchanges, funds, custodians and prediction markets, on EVM chains and Solana.</p>
       <div class="foot-social">
         <a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener" aria-label="Truvian on GitHub"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
         <a href="https://x.com/Telegraphprotoc" target="_blank" rel="noopener" aria-label="Telegraph Protocol on X"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117Z"/></svg></a>
