@@ -12,46 +12,12 @@
 <meta property="og:description" content="Telegraph intelligence, checked against the chain, in a signed HOLD / REVIEW / REJECT memo with its cost.">
 <meta property="og:image" content="https://truvian.xyz/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="stylesheet" href="./style.css">
-<style>
-  .tabs { display: flex; gap: .5rem; margin: 1rem 0 1.25rem; flex-wrap: wrap; }
-  .tab { background: var(--panel); border: 1px solid var(--edge); color: var(--muted); font: inherit; font-size: .85rem; padding: .55rem .9rem; border-radius: 6px; cursor: pointer; }
-  .tab[aria-selected="true"] { color: var(--text); border-color: var(--gold); }
-  .tab small { display: block; color: var(--faint); font-size: .7rem; margin-top: .15rem; }
-  .decision { border-left: 4px solid var(--edge); padding: 1rem 1.1rem; border-radius: 6px; background: var(--panel); }
-  .decision .word { font-size: 1.6rem; font-weight: 700; letter-spacing: .04em; }
-  .decision .rule { color: var(--muted); font-size: .82rem; margin-top: .3rem; }
-  .decision .action { color: var(--faint); font-size: .78rem; margin-top: .3rem; }
-  .decision.HOLD, .decision.LIST, .decision.VERIFIED { border-left-color: var(--safe); background: rgba(83,192,127,.07); }
-  .decision.HOLD .word, .decision.LIST .word, .decision.VERIFIED .word { color: var(--safe); }
-  textarea.holdings { width: 100%; min-height: 5.2rem; font-family: var(--mono); font-size: .8rem; background: var(--panel); color: var(--text); border: 1px solid var(--edge); border-radius: 6px; padding: .55rem .65rem; resize: vertical; }
-  .decision.REVIEW { border-left-color: var(--warn); background: rgba(224,168,75,.07); }
-  .decision.REVIEW .word { color: var(--warn); }
-  .decision.REJECT { border-left-color: var(--block); background: rgba(224,92,92,.07); }
-  .decision.REJECT .word { color: var(--block); }
-  .costline { display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; margin: .9rem 0 0; font-size: .8rem; color: var(--muted); }
-  .costline b { color: var(--text); font-weight: 600; }
-  table.grid { width: 100%; border-collapse: collapse; font-size: .8rem; margin-top: .6rem; }
-  table.grid th, table.grid td { text-align: left; padding: .5rem .55rem; border-bottom: 1px solid var(--edge-soft); vertical-align: top; }
-  table.grid th { color: var(--faint); font-weight: 500; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
-  .sev { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; padding: .12rem .4rem; border-radius: 4px; border: 1px solid currentColor; white-space: nowrap; }
-  .sev.block { color: var(--block); } .sev.review { color: var(--warn); } .sev.pass { color: var(--safe); } .sev.info { color: var(--neutral-chip); }
-  .detail { color: var(--muted); }
-  .mono { font-family: var(--mono); word-break: break-all; }
-  .pending { color: var(--faint); }
-  .ok { color: var(--safe); } .err { color: var(--block); }
-  .fields { color: var(--muted); font-size: .74rem; margin-top: .25rem; }
-  .second { margin-top: .45rem; padding-left: .55rem; border-left: 2px solid var(--edge); font-size: .74rem; color: var(--muted); }
-  .second b { color: var(--text); font-weight: 600; }
-  .sigbox { margin-top: 1rem; padding: .8rem 1rem; border: 1px solid var(--edge); border-radius: 6px; background: var(--panel); font-size: .78rem; }
-  .sigbox .row { display: flex; gap: .6rem; margin: .25rem 0; flex-wrap: wrap; }
-  .sigbox .k { color: var(--faint); min-width: 7rem; }
-  .actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .7rem; }
-  .actions button, .actions a.btnlike { background: var(--panel-2); border: 1px solid var(--edge); color: var(--text); font: inherit; font-size: .78rem; padding: .4rem .7rem; border-radius: 5px; cursor: pointer; text-decoration: none; }
-  .note-testnet { font-size: .74rem; color: var(--faint); margin-top: .6rem; }
-  .recent li { font-size: .78rem; margin: .3rem 0; color: var(--muted); }
-  .hidden { display: none !important; }
-</style>
+<meta name="theme-color" content="#0d0c0a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=Inter+Tight:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./tokens.css">
+<link rel="stylesheet" href="./desk.css">
 </head>
 <body>
 <div class="page">
@@ -73,7 +39,8 @@
 
   <main>
     <section class="check-section" aria-labelledby="pf-heading">
-      <h2 id="pf-heading" class="section-label">Choose a desk</h2>
+      <h2 id="pf-heading" class="section-label"><span class="n">01</span> · Choose a desk</h2>
+      <p class="desk-title">Pick a desk. Get a <span class="accent">signed</span> decision.</p>
       <div class="tabs" role="tablist">
         <button type="button" class="tab" role="tab" id="tab-trade" aria-selected="true" data-mode="trade">Token preflight<small>trading agent · HOLD / REVIEW / REJECT · Mission 14</small></button>
         <button type="button" class="tab" role="tab" id="tab-listing" aria-selected="false" data-mode="listing">Listing review<small>exchange listings desk · LIST / REVIEW / REJECT · Mission 01</small></button>
@@ -83,7 +50,7 @@
       <p class="section-note" id="desk-note"></p>
 
       <div class="presets" aria-label="Fixtures">
-        <span class="presets-label">Try one:</span>
+        <span class="presets-label">Try one</span>
         <span id="fixtures"></span>
       </div>
 
@@ -169,24 +136,24 @@
     </section>
 
     <section id="out" class="report hidden" aria-live="polite">
-      <h2 class="section-label">Decision</h2>
+      <h2 class="section-label"><span class="n">02</span> · Decision</h2>
       <div id="decision" class="decision"><div class="word pending">working…</div></div>
       <div id="costline" class="costline"></div>
 
-      <h3 class="section-label" style="margin-top:1.6rem">Findings</h3>
+      <h3 class="section-label"><span class="n">03</span> · Findings</h3>
       <table class="grid"><thead><tr><th>severity</th><th>finding</th><th>source</th></tr></thead><tbody id="findings"><tr><td colspan="3" class="pending">waiting for the evidence…</td></tr></tbody></table>
 
-      <h3 class="section-label" style="margin-top:1.6rem">Telegraph requests</h3>
+      <h3 class="section-label"><span class="n">04</span> · Telegraph requests</h3>
       <table class="grid"><thead><tr><th>intent</th><th>answer</th><th>miner · cost · latency</th><th>signal</th></tr></thead><tbody id="purchases"></tbody></table>
 
-      <h3 class="section-label" style="margin-top:1.6rem">Chain read <span class="label-hint">(Truvian's own JSON-RPC reads, not Telegraph)</span></h3>
-      <div id="chainread" class="detail" style="font-size:.8rem"></div>
+      <h3 class="section-label"><span class="n">05</span> · Chain read <span class="label-hint">(Truvian's own JSON-RPC reads, not Telegraph)</span></h3>
+      <div id="chainread" class="detail"></div>
 
       <div id="sig" class="sigbox hidden"></div>
     </section>
 
     <section class="how-section">
-      <h2 class="section-label">Recent decisions</h2>
+      <h2 class="section-label"><span class="n">06</span> · Recent decisions</h2>
       <ul id="recent" class="recent"><li class="pending">loading…</li></ul>
       <p class="how-footnote">For agents: <span class="mono">POST /api/preflight</span> with <span class="mono">{"mode":"trade","chain":"ethereum","token":"0x…","pool":"0x…","tradeUsd":1000}</span> or <span class="mono">{"mode":"listing","chain":"ethereum","token":"0x…","issuer":"…","treasury":"0x…"}</span> or <span class="mono">{"mode":"holdings","chain":"ethereum","wallet":"0x…","holdings":[{"token":"0x…","claimed":"2400000","pool":"0x…"}]}</span>; add <span class="mono">?stream=1</span> for NDJSON progress. Verify any memo with <span class="mono">POST /api/memo/verify {"memo","signature"}</span> or any EIP-191 library.</p>
     </section>
@@ -199,7 +166,8 @@
         <p class="foot-desc">Built for the Telegraph Protocol Season II hackathon. Every answer above was bought through Telegraph and can be resolved on the node by its signal hash.</p>
       </div>
       <nav class="foot-col"><h4>Shield</h4><ul>
-        <li><a href="/preflight">Token preflight</a></li>
+        <li><a href="/preflight?desk=trade">Token preflight</a></li>
+        <li><a href="/preflight?desk=settlement">Settlement on Solana</a></li>
         <li><a href="/app">Pre-sign check</a></li>
         <li><a href="/api/memos">Memo feed (JSON)</a></li>
       </ul></nav>

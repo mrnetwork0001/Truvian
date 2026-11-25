@@ -1,0 +1,86 @@
+/* Truvian landing: scroll effects and hover states.
+   Every hidden-before-reveal state is scoped to html.js-reveal, which
+   landing.js adds only when IntersectionObserver exists and the visitor
+   allows motion; .in is added once per element. With JS off or reduced
+   motion, everything is visible and still. Transform, opacity and
+   clip-path only. */
+
+/* section label: types in, then its hairline draws left to right */
+.sec-no { position: relative; padding-bottom: .9rem; }
+.sec-no::after { content: ""; position: absolute; left: 0; bottom: 0; width: 56px; height: 1px; background: var(--gold); transform-origin: left; }
+.js-reveal .sec-no { clip-path: inset(0 100% 0 0); }
+.js-reveal .sec-no::after { transform: scaleX(0); }
+/* driven by the parent header: a fully clipped element never reports as visible */
+.js-reveal .in > .sec-no { clip-path: inset(0 0 0 0); transition: clip-path .7s steps(22, end); }
+.js-reveal .in > .sec-no::after { transform: scaleX(1); transition: transform .6s cubic-bezier(.2,.8,.2,1) .6s; }
+
+/* headlines: each word rises out of its own line mask, staggered */
+.js-reveal .rw { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: .14em; margin-bottom: -.14em; }
+.js-reveal .rw > span { display: inline-block; transform: translate3d(0, 105%, 0); }
+.js-reveal .in .rw > span { transform: none; transition: transform .8s cubic-bezier(.16,.84,.24,1) calc(var(--w, 0) * 45ms); }
+.js-reveal .sec-head .sub { opacity: 0; transform: translate3d(0, 10px, 0); }
+.js-reveal .sec-head.in .sub { opacity: 1; transform: none; transition: opacity .7s ease .35s, transform .7s ease .35s; }
+
+/* desks: rise in sequence; on hover lift 3px, gold edge, stamps press in */
+.desk { transition: background .2s, transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s; }
+.js-reveal .desk { opacity: 0; transform: translate3d(0, 18px, 0); }
+.js-reveal .desk.in { opacity: 1; transform: none; transition: opacity .6s ease calc(var(--i, 0) * 90ms), transform .7s cubic-bezier(.2,.8,.2,1) calc(var(--i, 0) * 90ms), background .2s, box-shadow .25s; }
+.desk:not(.desk-soon):hover, .js-reveal .desk.in:not(.desk-soon):hover { transform: translate3d(0, -3px, 0); box-shadow: inset 0 0 0 1px var(--gold), 0 18px 30px -24px rgba(0,0,0,.9); z-index: 2; transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, background .2s; }
+.desk:not(.desk-soon):hover .vocab .stamp { animation: thunk .42s cubic-bezier(.2,.8,.2,1) both; }
+.desk:not(.desk-soon):hover .vocab .stamp:nth-child(2) { animation-delay: .07s; }
+.desk:not(.desk-soon):hover .vocab .stamp:nth-child(3) { animation-delay: .14s; }
+@keyframes thunk { 0% { transform: scale(1.18) rotate(-5deg); opacity: .35; } 70% { transform: scale(.97) rotate(-1deg); opacity: 1; } 100% { transform: none; opacity: 1; } }
+
+/* evidence: rows arrive in order and their stamps land; hover shows a paper edge */
+.cases a { position: relative; }
+.cases a::after { content: ""; position: absolute; left: -14px; top: 12%; bottom: 12%; width: 3px; background: var(--paper); transform: scaleY(0); transform-origin: top; transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+.cases a:hover::after, .cases a:focus-visible::after { transform: scaleY(1); }
+.js-reveal .cases li { opacity: 0; transform: translate3d(-10px, 0, 0); }
+.js-reveal .cases li.in { opacity: 1; transform: none; transition: opacity .5s ease calc(var(--i, 0) * 70ms), transform .6s cubic-bezier(.2,.8,.2,1) calc(var(--i, 0) * 70ms); }
+.js-reveal .cases li .stamp { opacity: 0; }
+.js-reveal .cases li.in .stamp { animation: land .45s cubic-bezier(.2,.8,.2,1) calc(var(--i, 0) * 70ms + .25s) both; }
+@keyframes land { 0% { opacity: 0; transform: scale(1.15) rotate(-7deg); } 100% { opacity: 1; transform: rotate(-2.5deg); } }
+
+/* FIG. 01: each step's rule draws and its label lights up, in order */
+.js-reveal .flow-steps li::before { transform: scaleX(0); transform-origin: left; }
+.js-reveal .flow-steps .step-n { color: var(--bone-faint); }
+.js-reveal .flow-steps li > :not(.step-n) { opacity: .2; }
+.js-reveal .flow.in .flow-steps li::before { transform: scaleX(1); transition: transform .55s cubic-bezier(.2,.8,.2,1) calc(var(--i, 0) * 260ms + .2s); }
+.js-reveal .flow.in .flow-steps .step-n { color: var(--gold); transition: color .3s ease calc(var(--i, 0) * 260ms + .45s); }
+.js-reveal .flow.in .flow-steps li > :not(.step-n) { opacity: 1; transition: opacity .5s ease calc(var(--i, 0) * 260ms + .4s); }
+
+/* tracks: rise in sequence; their figures and the stats strip count up (landing.js) */
+.js-reveal .track { opacity: 0; transform: translate3d(0, 14px, 0); }
+.js-reveal .track.in { opacity: 1; transform: none; transition: opacity .6s ease calc(var(--i, 0) * 110ms), transform .7s cubic-bezier(.2,.8,.2,1) calc(var(--i, 0) * 110ms); }
+
+/* FIG. 02: the code prints line by line; a copy button with feedback */
+.copy-btn { font: 500 .62rem/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--bone-dim); background: transparent; border: 1px solid var(--rule); padding: .45rem .6rem; cursor: pointer; transition: color .15s, border-color .15s; }
+.copy-btn:hover, .copy-btn:focus-visible { color: var(--bone); border-color: var(--gold); }
+.copy-btn.done { color: var(--ok); border-color: var(--ok); }
+.js-reveal .code pre { clip-path: inset(0 0 100% 0); }
+.js-reveal .code.in pre { clip-path: inset(0 0 0 0); transition: clip-path 1.2s steps(26, end) .2s; }
+
+/* endpoint rows and limits: a quiet stagger */
+.js-reveal .endpoints tr, .js-reveal .limits li { opacity: 0; }
+.js-reveal .endpoints.in tr, .js-reveal .limits.in li { opacity: 1; transition: opacity .5s ease calc(var(--i, 0) * 70ms); }
+
+/* links: an underline that grows from the left */
+.track a, .limits a, .hero-memo figcaption a, .desk-foot a, .stats-note a {
+  text-decoration: none;
+  border-bottom: 0;
+  background: linear-gradient(var(--gold), var(--gold)) 0 100% / 0 1px no-repeat, linear-gradient(var(--rule), var(--rule)) 0 100% / 100% 1px no-repeat;
+  padding-bottom: 2px;
+  transition: background-size .35s cubic-bezier(.2,.8,.2,1), color .15s;
+}
+.desk-foot a { background: linear-gradient(var(--gold-soft), var(--gold-soft)) 0 100% / 0 1px no-repeat, linear-gradient(var(--gold), var(--gold)) 0 100% / 100% 1px no-repeat; }
+.track a:hover, .limits a:hover, .hero-memo figcaption a:hover, .desk-foot a:hover, .stats-note a:hover,
+.track a:focus-visible, .limits a:focus-visible, .hero-memo figcaption a:focus-visible, .desk-foot a:focus-visible, .stats-note a:focus-visible { background-size: 100% 1px, 100% 1px; color: var(--gold-soft); }
+.foot-col a { background: linear-gradient(var(--gold), var(--gold)) 0 100% / 0 1px no-repeat; padding-bottom: 2px; transition: background-size .35s cubic-bezier(.2,.8,.2,1), color .15s; }
+.foot-col a:hover, .foot-col a:focus-visible { background-size: 100% 1px; }
+.topnav a { position: relative; border-bottom: 0; }
+.topnav a::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--gold); transform: scaleX(0); transform-origin: left; transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+.topnav a:hover::after, .topnav a:focus-visible::after { transform: scaleX(1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .desk:not(.desk-soon):hover { transform: none; }
+}

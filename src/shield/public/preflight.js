@@ -24,28 +24,28 @@
 
   const FIXTURES = {
     trade: [
-      { label: 'WETH → expect HOLD', cls: 'preset-safe', v: { chain: 'ethereum', token: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', pool: '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640', tradeUsd: '1000' } },
-      { label: 'SQUID rug pull (BSC) → not cleared', cls: 'preset-block', v: { chain: 'bsc', token: '0x87230146E138d3F296a9a77e497A2A83012e9Bc5', pool: '0x683c425D917E8fEf34c8bbbeab57246Dd2a8B718', tradeUsd: '1000' } },
-      { label: 'Not a token (vitalik.eth) → REJECT, $0', cls: 'preset-block', v: { chain: 'ethereum', token: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', pool: '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640', tradeUsd: '1000' } },
-      { label: 'Whale-size trade → price impact', cls: '', v: { chain: 'ethereum', token: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', pool: '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640', tradeUsd: '5000000' } },
+      { label: 'WETH · expect HOLD', cls: 'preset-safe', v: { chain: 'ethereum', token: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', pool: '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640', tradeUsd: '1000' } },
+      { label: 'SQUID rug pull (BSC) · expect not cleared', cls: 'preset-block', v: { chain: 'bsc', token: '0x87230146E138d3F296a9a77e497A2A83012e9Bc5', pool: '0x683c425D917E8fEf34c8bbbeab57246Dd2a8B718', tradeUsd: '1000' } },
+      { label: 'Not a token (vitalik.eth) · expect REJECT, $0', cls: 'preset-block', v: { chain: 'ethereum', token: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', pool: '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640', tradeUsd: '1000' } },
+      { label: 'Whale-size trade · expect price impact', cls: '', v: { chain: 'ethereum', token: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', pool: '0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640', tradeUsd: '5000000' } },
     ],
     listing: [
       { label: 'UNI by Uniswap Labs, timelock treasury', cls: '', v: { chain: 'ethereum', token: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', pool: '', issuer: 'Uniswap Labs', treasury: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC' } },
-      { label: 'Sanctioned issuer (Garantex) → REJECT', cls: 'preset-block', v: { chain: 'ethereum', token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', pool: '', issuer: 'Garantex Europe OU', treasury: '' } },
+      { label: 'Sanctioned issuer (Garantex) · expect REJECT', cls: 'preset-block', v: { chain: 'ethereum', token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', pool: '', issuer: 'Garantex Europe OU', treasury: '' } },
     ],
     // Devnet: tUSD is a plain SPL dollar, rUSD a Token-2022 dollar whose issuer keeps a permanent delegate
     // (src/scripts/solana-devnet-fixtures.ts). The recipient is a fresh devnet wallet.
     settlement: [
-      { label: 'Coinbase Global, 1 tUSD → expect RELEASE, sent', cls: 'preset-safe', v: { network: 'solana-devnet', mint: 'TUSD', amount: '1', recipient: 'Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ', counterparty: 'Coinbase Global, Inc.', jurisdiction: 'US-DE' } },
-      { label: 'Sanctioned counterparty (Garantex) → REJECT', cls: 'preset-block', v: { network: 'solana-devnet', mint: 'TUSD', amount: '1', recipient: 'Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ', counterparty: 'Garantex Europe OU', jurisdiction: 'Estonia' } },
-      { label: 'Issuer can claw back (rUSD) → REVIEW', cls: 'preset-block', v: { network: 'solana-devnet', mint: 'RUSD', amount: '1', recipient: 'Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ', counterparty: 'Coinbase Global, Inc.', jurisdiction: 'US-DE' } },
+      { label: 'Coinbase Global, 1 tUSD · expect RELEASE, sent', cls: 'preset-safe', v: { network: 'solana-devnet', mint: 'TUSD', amount: '1', recipient: 'Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ', counterparty: 'Coinbase Global, Inc.', jurisdiction: 'US-DE' } },
+      { label: 'Sanctioned counterparty (Garantex) · expect REJECT', cls: 'preset-block', v: { network: 'solana-devnet', mint: 'TUSD', amount: '1', recipient: 'Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ', counterparty: 'Garantex Europe OU', jurisdiction: 'Estonia' } },
+      { label: 'Issuer can claw back (rUSD) · expect REVIEW', cls: 'preset-block', v: { network: 'solana-devnet', mint: 'RUSD', amount: '1', recipient: 'Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ', counterparty: 'Coinbase Global, Inc.', jurisdiction: 'US-DE' } },
     ],
     // Read on-chain 2026-11-23 (block 26476779): the ENS DAO timelock held 2,435,008 USDC and
     // 8,632,326 ENS; the Uniswap timelock held 262,247,996 UNI. Balances move, so the labels say "expect".
     holdings: [
-      { label: 'ENS DAO treasury (USDC, ENS + pool) → expect VERIFIED', cls: 'preset-safe', v: { chain: 'ethereum', wallet: '0xFe89cc7aBB2C4183683ab71653C4cdc9B02D44b7', holdings: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48, 2400000\n0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72, 8600000, 0x92560C178cE069CC014138eD3C2F5221Ba71f58a' } },
-      { label: 'Solana devnet custody: tUSD + rUSD (claw-back mint) → REVIEW', cls: '', v: { chain: 'solana-devnet', wallet: 'A4X5JKBCLobAY5MeDXkwiRV5Hr7Uu4vUhzHQczwXMBnz', holdings: 'DThEeRe6uhj2eT8SLrjiLexUiuxrggysA4zCuHE2sUFb, 990\nB6yxPoHwxdThmbJ9C58TXF2TK3JYzsC2R6ggFdUvAz1v, 1000' } },
-      { label: 'Overstated claim (300M UNI in the Uniswap timelock) → REJECT', cls: 'preset-block', v: { chain: 'ethereum', wallet: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC', holdings: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984, 300000000' } },
+      { label: 'ENS DAO treasury (USDC, ENS + pool) · expect VERIFIED', cls: 'preset-safe', v: { chain: 'ethereum', wallet: '0xFe89cc7aBB2C4183683ab71653C4cdc9B02D44b7', holdings: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48, 2400000\n0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72, 8600000, 0x92560C178cE069CC014138eD3C2F5221Ba71f58a' } },
+      { label: 'Solana devnet custody: tUSD + rUSD (claw-back mint) · expect REVIEW', cls: '', v: { chain: 'solana-devnet', wallet: 'A4X5JKBCLobAY5MeDXkwiRV5Hr7Uu4vUhzHQczwXMBnz', holdings: 'DThEeRe6uhj2eT8SLrjiLexUiuxrggysA4zCuHE2sUFb, 990\nB6yxPoHwxdThmbJ9C58TXF2TK3JYzsC2R6ggFdUvAz1v, 1000' } },
+      { label: 'Overstated claim (300M UNI in the Uniswap timelock) · expect REJECT', cls: 'preset-block', v: { chain: 'ethereum', wallet: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC', holdings: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984, 300000000' } },
     ],
   };
 
