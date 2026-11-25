@@ -1,0 +1,62 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  :root { --bg:#0a0a0a; --panel:#131313; --line:#262626; --text:#ededed; --dim:#8f8f8f; --gold:#d4a53a; --gold-soft:#f0cf7a; --ok:#6fcf97; --bad:#e07a7a; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { width:1600px; height:900px; background:var(--bg); color:var(--text); font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif; overflow:hidden; }
+  .mono { font-family:"SF Mono",Menlo,Monaco,monospace; }
+  .page { position:relative; width:1600px; height:900px; padding:46px 72px 0; background:
+     radial-gradient(900px 520px at 88% -8%, rgba(212,165,58,.18), transparent 62%),
+     radial-gradient(700px 480px at -6% 108%, rgba(212,165,58,.08), transparent 60%), var(--bg); }
+  .grid { position:absolute; inset:0; background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px); background-size:80px 80px; opacity:.22; mask-image:linear-gradient(180deg,rgba(0,0,0,.9),transparent 78%); }
+  .top { position:relative; display:flex; align-items:center; justify-content:space-between; }
+  .logo { height:78px; width:auto; display:block; margin-left:-6px; }
+  .tag { font-size:16px; letter-spacing:.2em; color:var(--gold); border:1px solid rgba(212,165,58,.45); padding:10px 18px; border-radius:999px; text-transform:uppercase; }
+  h1 { position:relative; margin-top:54px; font-size:78px; line-height:1.04; font-weight:700; letter-spacing:-.024em; }
+  h1 span { color:var(--gold); }
+  .sub { position:relative; margin-top:16px; font-size:24px; color:#bdbdbd; }
+
+  .cards { position:relative; display:grid; grid-template-columns:1fr 1fr; gap:28px; margin-top:48px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:26px 30px; position:relative; overflow:hidden; }
+  .card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:var(--gold); }
+  .card .h { display:flex; justify-content:space-between; align-items:center; }
+  .card .intent { font-size:20px; color:var(--dim); letter-spacing:.04em; }
+  .badge { font-size:13px; font-weight:700; letter-spacing:.14em; color:var(--gold-soft); border:1px solid rgba(212,165,58,.5); border-radius:999px; padding:6px 12px; text-transform:uppercase; }
+  .score { margin-top:12px; font-size:96px; font-weight:800; letter-spacing:-.03em; color:var(--text); line-height:1; }
+  .score small { font-size:24px; font-weight:500; color:var(--dim); letter-spacing:0; margin-left:12px; }
+  .path { margin-top:18px; display:flex; align-items:center; gap:12px; font-size:19px; }
+  .step { padding:6px 12px; border-radius:6px; border:1px solid var(--line); color:var(--dim); }
+  .step.bad { color:var(--bad); border-color:rgba(224,122,122,.4); }
+  .step.ok { color:var(--ok); border-color:rgba(111,207,151,.45); font-weight:700; }
+  .arrow { color:#555; }
+  .note { margin-top:18px; font-size:19px; color:#a8a8a8; }
+
+  .foot { position:absolute; left:72px; right:72px; bottom:30px; display:flex; justify-content:space-between; align-items:flex-end; font-size:18px; color:var(--dim); }
+  .foot .url { font-size:28px; color:var(--text); font-weight:600; }
+  .foot .url span { color:var(--gold); }
+  .tracks b { color:var(--ok); }
+</style></head>
+<body><div class="page"><div class="grid"></div>
+  <div class="top">
+    <img class="logo" src="../../src/shield/public/brand/truvian-header.png" alt="Truvian">
+    <div class="tag">Telegraph Season II</div>
+  </div>
+  <h1>Two champion evaluators. <span>Judging the network's miners.</span></h1>
+  <div class="sub">Scored on hidden pairs they had never seen. Trained on one CPU, no GPU.</div>
+  <div class="cards">
+    <div class="card">
+      <div class="h"><span class="intent mono">SMART_CONTRACT_AUDIT</span><span class="badge">Champion</span></div>
+      <div class="score">83.33%<small>30 hidden pairs</small></div>
+      <div class="note">First champion for the intent.</div>
+    </div>
+    <div class="card">
+      <div class="h"><span class="intent mono">CORPORATE_REGISTRY_LOOKUP</span><span class="badge">Champion</span></div>
+      <div class="score">76.67%<small>30 hidden pairs</small></div>
+      <div class="path mono"><span class="step bad">v1 10/15</span><span class="arrow">→</span><span class="step bad">v2 8/15</span><span class="arrow">→</span><span class="step ok">v3 12/15</span></div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="url">truvian.xyz<span>/preflight</span></div>
+    <div class="tracks">Miner <b>✓</b> &nbsp; Evaluator <b>✓✓</b> &nbsp; App <b>✓</b></div>
+  </div>
+</div></body></html>
