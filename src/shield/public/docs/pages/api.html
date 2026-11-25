@@ -1,0 +1,78 @@
+<h1>HTTP <span class="accent">API.</span></h1>
+<p class="lead"><strong>Every desk is one POST; every decision is a signed memo you can fetch and verify; no API key is needed.</strong> The first 5 runs a day per IP address are free; after that a run costs $0.05 in test USDC over x402.</p>
+
+<h2 id="routes">Routes</h2>
+<div class="tw"><table>
+  <thead><tr><th>Method and path</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>POST /api/preflight</code></td><td>runs a desk: <code>mode</code> is <code>trade</code>, <code>listing</code>, <code>holdings</code> or <code>settlement</code></td></tr>
+    <tr><td><code>POST /api/resolve</code></td><td>resolves a prediction market</td></tr>
+    <tr><td><code>GET /api/memo/:id</code></td><td>a stored desk memo with its sha256, message, signature and signer</td></tr>
+    <tr><td><code>GET /api/memos?limit=n</code></td><td>the latest desk decisions (up to 50) and the signer</td></tr>
+    <tr><td><code>GET /api/resolution/:id</code>, <code>GET /api/resolutions</code></td><td>a stored resolution with its Solana anchor; the latest resolutions (<code>?current=1</code> keeps only the latest run of each market)</td></tr>
+    <tr><td><code>POST /api/memo/verify</code></td><td><code>{memo, signature}</code>: recomputes the digest and recovers the signer; free</td></tr>
+    <tr><td><code>GET /api/signal/:hash</code></td><td>looks up a Telegraph signal hash on the node</td></tr>
+    <tr><td><code>GET /api/stats</code></td><td>live counters, the free allowance left for you, the price, and the node's ledger for Shield's escrow</td></tr>
+    <tr><td><code>POST /api/check</code>, <code>GET /api/report/:id</code>, <code>GET /api/recent</code>, <code>GET /api/verify/:txHash</code></td><td>the Season I pre-sign check behind <a href="/app">/app</a></td></tr>
+    <tr><td><code>GET /healthz</code></td><td><code>{ok: true}</code></td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="examples">Examples</h2>
+<pre><code># a trading agent: may I buy $1,000 of WETH through the Uniswap V3 USDC/WETH pool?
+curl -s https://truvian.xyz/api/preflight -H 'content-type: application/json' -d '{
+  "mode": "trade", "chain": "ethereum",
+  "token": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+  "pool":  "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+  "tradeUsd": 1000
+}' | jq '{decision: .memo.decision, rule: .memo.decisionRule, cost: .memo.cost, url}'
+
+# a custodian: may I pay 1 rUSD to this counterparty on Solana devnet?
+curl -s https://truvian.xyz/api/preflight -H 'content-type: application/json' -d '{
+  "mode": "settlement", "network": "solana-devnet", "mint": "RUSD", "amount": "1",
+  "recipient": "Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ",
+  "counterparty": "Coinbase Global, Inc.", "jurisdiction": "US-DE", "execute": true
+}' | jq '{decision: .memo.decision, sent: .memo.settlement.execution.reason}'
+
+# a market: what really happened?
+curl -s https://truvian.xyz/api/resolve -H 'content-type: application/json' \
+  -d '{"source": "polymarket", "market": "253591"}' | jq '{decision: .memo.decision, outcome: .memo.outcome, anchor}'</code></pre>
+<p>A successful run answers <code>{type: "memo", id, memo, sha256, message, signature, signer, url}</code>. Invalid input is <code>400 INVALID_INPUT</code> with a message; a chain that does not answer is <code>503</code> and nothing is bought.</p>
+
+<h2 id="stream">Streaming</h2>
+<p>Add <code>?stream=1</code> (or <code>accept: application/x-ndjson</code>) to watch a decision assemble as newline-delimited JSON:</p>
+<div class="tw"><table>
+  <thead><tr><th>Event</th><th>Carries</th></tr></thead>
+  <tbody>
+    <tr><td><code>start</code></td><td>the normalized input</td></tr>
+    <tr><td><code>chain</code> / <code>holdings</code> / <code>solana</code></td><td>Shield's own reads: token facts, each holding, or the Solana mint, its restrictions and the payer's balance</td></tr>
+    <tr><td><code>market</code></td><td>resolution only: the market as its venue states it</td></tr>
+    <tr><td><code>plan</code></td><td>the facts to buy and the escrow balance</td></tr>
+    <tr><td><code>purchase</code> / <code>answer</code></td><td>one per answer, with miner, cost, latency, receipt and signal</td></tr>
+    <tr><td><code>execution</code></td><td>settlement only: whether the payment was sent, and its read-back</td></tr>
+    <tr><td><code>memo</code></td><td>the signed memo</td></tr>
+    <tr><td><code>payment</code></td><td>on a paid run: whether your payment settled, and its transaction</td></tr>
+    <tr><td><code>done</code></td><td>your free runs left today</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="pay">Paying with x402</h2>
+<p>Past the free runs, a desk answers <code>402</code> with a price instead of running:</p>
+<pre><code>{"x402Version": 1,
+ "error": "... Pay $0.05 in USDC to run this check now.",
+ "accepts": [{"scheme": "exact", "network": "base-sepolia", "maxAmountRequired": "50000",
+   "payTo": "0xCd0a2370F2dC12c1802707B7d9aB3fec891E3c02",
+   "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", "maxTimeoutSeconds": 300,
+   "extra": {"name": "USDC", "version": "2"}}]}</code></pre>
+<p>Sign an EIP-3009 <code>TransferWithAuthorization</code> for that amount and send the same request again with <code>X-PAYMENT: base64({x402Version, scheme, network, payload: {signature, authorization}})</code>. Shield verifies it with the facilitator before running and settles it <b>only after the run succeeds</b>; the caller pays no gas. On the website this is automatic: <code>pay.js</code> shows the price and <code>wallet.js</code> asks the visitor's browser wallet for the signature. A malformed header counts as no payment; a well-formed one with a bad signature is refused with <code>402</code> and nothing runs.</p>
+
+<h2 id="verify">Verifying a memo</h2>
+<p>A memo's digest is SHA-256 over its canonical JSON (keys sorted, no spaces; <code>canonicalJson</code> in <code>src/shield/memo.ts</code>). The signed message is <code>Truvian Shield memo sha256:&lt;digest&gt;</code> under EIP-191. <code>POST /api/memo/verify</code> answers <code>{sha256, message, recoveredSigner, signedByThisShield, shieldSigner}</code>; any EIP-191 library recovers the same signer offline. Change one field and it fails.</p>
+
+<h2 id="limits">Limits</h2>
+<ul>
+  <li>5 free runs per IP address a day, reset at 00:00 UTC, and at most 3 a minute (<code>SHIELD_FREE_CHECKS_PER_IP</code>, <code>SHIELD_BURST_PER_MIN</code>).</li>
+  <li>At most 300 free runs and $5 of Telegraph spend a day across everyone (<code>SHIELD_DAILY_CHECK_CAP</code>, <code>SHIELD_DAILY_SPEND_USD</code>).</li>
+  <li>$0.10 of Telegraph answers per decision (<code>SHIELD_PREFLIGHT_BUDGET_USD</code>); a plan over it buys nothing.</li>
+  <li>A settlement sends at most 1 token, on devnet, from Shield's wallet.</li>
+</ul>

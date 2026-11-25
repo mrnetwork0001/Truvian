@@ -1,0 +1,60 @@
+<h1>Building on <span class="accent">Telegraph mainnet.</span></h1>
+<p class="lead"><strong>Truvian is built to be a paid decision service on Telegraph mainnet, not a hackathon demo: these are the plans, in order, and only the first phase is shipped.</strong> Status chips are honest: <span class="chip live">Live</span> is running today, <span class="chip prog">In progress</span> is being built or waiting on one step, <span class="chip plan">Planned</span> is not started. Phases have no dates except the end of Season II, 1 Dec 2026; mainnet timing depends on Telegraph.</p>
+
+<div class="phase">
+  <h3>Now: Season II on testnet <span class="chip live">Live</span></h3>
+  <ul>
+    <li>Five desks: token preflight, listing review, holdings proof (EVM and Solana), settlement assurance on Solana, market resolution. <span class="chip live">Live</span></li>
+    <li>Miner 6180 answering six onchain intents on 14 EVM chains, and Solana in its own API. <span class="chip live">Live</span></li>
+    <li>Champion evaluators 187 (SMART_CONTRACT_AUDIT) and 242 (CORPORATE_REGISTRY_LOOKUP). <span class="chip live">Live</span></li>
+    <li>Pay per run over x402 in test USDC after 5 free runs a day, signed in the visitor's wallet. <span class="chip live">Live</span></li>
+    <li>Solana devnet settlement with read-back, and devnet anchoring of resolution memos. <span class="chip live">Live</span></li>
+  </ul>
+</div>
+
+<div class="phase">
+  <h3>Next: close the gaps the testnet showed <span class="chip prog">In progress</span></h3>
+  <ul>
+    <li>Register the miner description that includes Solana, so the node routes Solana balance and transfer questions to miner 6180. The code is live; one <code>updateMiner</code> transaction remains. <span class="chip prog">In progress</span></li>
+    <li>More evaluator adapters for the intents the desks buy, and second versions of the ones that lost. <span class="chip prog">In progress</span></li>
+    <li>Fewer REVIEWs: when the routed security review times out, ask a second source instead of waiting on the same route. <span class="chip plan">Planned</span></li>
+    <li>A Solana-native prediction-market source for the resolution desk (the one tried refused requests). <span class="chip plan">Planned</span></li>
+  </ul>
+</div>
+
+<div class="phase">
+  <h3>Mainnet launch: real money, with limits <span class="chip plan">Planned</span></h3>
+  <ul>
+    <li>Real-USDC payments for runs over x402 on Base mainnet, and an escrow funded with real USDC for Telegraph answers. <span class="chip plan">Planned</span></li>
+    <li>Solana mainnet settlement behind a per-customer policy: allowed tokens and counterparties, a cap per payment and per day, and a person's approval above it. <span class="chip plan">Planned</span></li>
+    <li>Memo anchoring on mainnet, so a decision's existence is provable on a chain that persists. <span class="chip plan">Planned</span></li>
+    <li>Uptime monitoring and alerts on every route, the miner and the evaluator executors. <span class="chip plan">Planned</span></li>
+    <li>API keys with per-key rate limits, replacing the per-IP free allowance for paying customers. <span class="chip plan">Planned</span></li>
+  </ul>
+</div>
+
+<div class="phase">
+  <h3>After: a product teams run every day <span class="chip plan">Planned</span></h3>
+  <ul>
+    <li>A usage dashboard: decisions, spend, and every memo per key, with audit export. <span class="chip plan">Planned</span></li>
+    <li>Webhooks: a decision delivered to the customer's system the moment it is signed. <span class="chip plan">Planned</span></li>
+    <li>Per-desk policies: each customer sets its own thresholds (supply tolerance, liquidity floor, which issuer powers block). <span class="chip plan">Planned</span></li>
+    <li>Continuous monitoring: holdings re-proved on a schedule, markets watched until they settle, alerts when a decision would change. <span class="chip plan">Planned</span></li>
+    <li>Volume pricing: pay per decision, cheaper per decision at volume. <span class="chip plan">Planned</span></li>
+  </ul>
+</div>
+
+<h2 id="who-pays">Who pays, and why</h2>
+<div class="tw"><table>
+  <thead><tr><th>Desk</th><th>Who pays</th><th>What it replaces</th></tr></thead>
+  <tbody>
+    <tr><td>Token preflight</td><td>trading agents and the teams running them</td><td>trusting one model's "safe" before a buy; one signed check per trade</td></tr>
+    <tr><td>Listing review</td><td>exchanges' listings desks</td><td>a manual sanctions check, contract review and treasury check per listing</td></tr>
+    <tr><td>Holdings proof</td><td>investors, index providers, auditors</td><td>trusting a fund's own statement of what it holds</td></tr>
+    <tr><td>Settlement assurance</td><td>custodians, treasury desks, payment processors</td><td>separate sanctions, registry and token-terms reviews before each payment, with the audit trail written before the money moves</td></tr>
+    <tr><td>Market resolution</td><td>prediction-market platforms and traders</td><td>a single oracle's word, or a dispute after settlement</td></tr>
+  </tbody>
+</table></div>
+<p>Every paid decision buys answers from Telegraph miners, so Truvian's growth is paid intelligence demand on Telegraph: the more decisions customers buy, the more the network's ranked specialists earn.</p>
+
+<div class="callout"><span class="ck">Plans, not promises</span>Nothing in the Next, Mainnet launch or After phases is shipped. This page changes as items move to Live; the code and the live site are the record of what exists.</div>

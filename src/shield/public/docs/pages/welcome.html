@@ -1,0 +1,42 @@
+<h1>Welcome to <span class="accent">Truvian.</span></h1>
+<p class="lead"><strong>Truvian decides before money moves: it buys evidence from Telegraph's ranked specialist miners, checks every answer against the chain, and returns a signed memo with the cost and a receipt for each answer.</strong> It was built for Telegraph Protocol's Season II hackathon and runs on Telegraph's devnode today.</p>
+
+<p>An agent, an exchange, a fund or a custodian that is about to act on a token, a payment or a market outcome usually trusts one source. A model can say a rug pull is "Secure"; a single oracle can be wrong; an issuer can overstate what it holds. Truvian asks the specialists, reads the chain itself, applies fixed public rules, and refuses to clear anything on an answer nobody checked. Every decision is a memo anyone can re-verify.</p>
+
+<ul>
+  <li><b>Shield desks</b> - five decision desks for trading agents, listing desks, funds, custodians and prediction markets.</li>
+  <li><b>Miner</b> - Telegraph registration 6180, answering six onchain intents on 14 EVM chains and Solana.</li>
+  <li><b>Evaluators</b> - two champion adapters that judge other teams' miners on Telegraph.</li>
+</ul>
+
+<h2 id="where">Where everything lives</h2>
+<dl class="kv">
+  <div><dt>The site</dt><dd><a href="https://truvian.xyz">truvian.xyz</a></dd></div>
+  <div><dt>Token preflight desk</dt><dd><a href="/preflight?desk=trade">/preflight?desk=trade</a></dd></div>
+  <div><dt>Listing review desk</dt><dd><a href="/preflight?desk=listing">/preflight?desk=listing</a></dd></div>
+  <div><dt>Holdings proof desk</dt><dd><a href="/preflight?desk=holdings">/preflight?desk=holdings</a></dd></div>
+  <div><dt>Settlement assurance desk (Solana)</dt><dd><a href="/preflight?desk=settlement">/preflight?desk=settlement</a></dd></div>
+  <div><dt>Market resolution desk</dt><dd><a href="/resolve">/resolve</a></dd></div>
+  <div><dt>Season I pre-sign check</dt><dd><a href="/app">/app</a></dd></div>
+  <div><dt>Run a desk (API)</dt><dd><code>POST /api/preflight</code>, <code>POST /api/resolve</code></dd></div>
+  <div><dt>Read a decision</dt><dd><code>GET /api/memo/:id</code>, <code>GET /api/memos</code>, <code>GET /api/resolution/:id</code>, <code>GET /api/resolutions</code></dd></div>
+  <div><dt>Verify a memo</dt><dd><code>POST /api/memo/verify</code></dd></div>
+  <div><dt>Live counters and escrow ledger</dt><dd><a href="/api/stats">/api/stats</a></dd></div>
+  <div><dt>Miner</dt><dd><a href="https://miner.truvian.xyz">miner.truvian.xyz</a> · registration <a href="https://devnode.telegraphprotocol.com/api/miners/6180">6180</a></dd></div>
+  <div><dt>Evaluator adapters</dt><dd><a href="https://devnode.telegraphprotocol.com/api/wasm/187">187</a> (SMART_CONTRACT_AUDIT, runs at <code>scorer.truvian.xyz/runnable</code>) · <a href="https://devnode.telegraphprotocol.com/api/wasm/242">242</a> (CORPORATE_REGISTRY_LOOKUP, <code>scorer.truvian.xyz/crl/runnable</code>)</dd></div>
+  <div><dt>Telegraph registry contract (Diamond)</dt><dd><a href="https://sepolia.etherscan.io/address/0x72a70e949362670Bf8bceAd24eFC5b8f950aa08b">0x72a70e949362670Bf8bceAd24eFC5b8f950aa08b</a> on Ethereum Sepolia</dd></div>
+  <div><dt>Shield's escrow on the node</dt><dd><a href="https://devnode.telegraphprotocol.com/v1/ledger/account/0x29476125898638c8634a97fdca8994530e8c9055">0x29476125898638c8634a97fdca8994530e8c9055</a></dd></div>
+  <div><dt>Memo signer (EIP-191)</dt><dd>0x956aECB0b0DEfC2f2631C26ec0FF7366Ebb53245</dd></div>
+  <div><dt>Solana devnet wallet (settlements, anchors)</dt><dd><a href="https://explorer.solana.com/address/A4X5JKBCLobAY5MeDXkwiRV5Hr7Uu4vUhzHQczwXMBnz?cluster=devnet">A4X5JKBCLobAY5MeDXkwiRV5Hr7Uu4vUhzHQczwXMBnz</a></dd></div>
+  <div><dt>Devnet test tokens</dt><dd>tUSD DThEeRe6uhj2eT8SLrjiLexUiuxrggysA4zCuHE2sUFb · rUSD B6yxPoHwxdThmbJ9C58TXF2TK3JYzsC2R6ggFdUvAz1v</dd></div>
+  <div><dt>Source code</dt><dd><a href="https://github.com/mrnetwork0001/Truvian">github.com/mrnetwork0001/Truvian</a></dd></div>
+  <div><dt>Telegraph on X</dt><dd><a href="https://x.com/Telegraphprotoc">@Telegraphprotoc</a></dd></div>
+</dl>
+
+<h2 id="stack">The stack, in one paragraph</h2>
+<p>Everything is TypeScript on Node.js, run with <code>tsx</code>. The Shield server is Fastify 5 (<code>src/shield/server.ts</code>) serving the desks, the API and these docs from <code>src/shield/public</code> as plain HTML, CSS and vanilla JavaScript, with no framework or bundler. EVM chain reads use viem 2; Solana reads, devnet settlements and memo anchors use <code>@solana/web3.js</code> 1.99 and <code>@solana/spl-token</code> 0.4. Telegraph answers are bought through the node's engine route and paid from an Anjoman escrow; visitors past the free runs pay Shield over x402 with a gasless USDC signature. Memos are hashed with SHA-256 over canonical JSON and signed under EIP-191 (<code>src/shield/memo.ts</code>). The miner (<code>src/miner</code>) is a separate Fastify app. Keys live only in the server's <code>.env</code>: <code>TELEGRAPH_API_KEY</code>, <code>TELEGRAPH_PAYER_KEY</code>, <code>SHIELD_MEMO_KEY</code>, <code>SOLANA_DEVNET_KEY</code>. They are never sent to the browser or written into a memo.</p>
+
+<h2 id="reading">Reading order</h2>
+<!--READING-ORDER-->
+
+<div class="callout warn"><span class="ck">Testnet</span>Telegraph Season II runs on testnet. Answers are paid in test USDC from an escrow on Ethereum Sepolia; Shield's own price is test USDC on Base Sepolia; settlements and anchors are on Solana devnet in test tokens. None of it has monetary value. The facts checked (token supply, pools, sanctions lists, registries, market outcomes) are real. Truvian is an independent hackathon entry.</div>

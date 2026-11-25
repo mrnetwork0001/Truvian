@@ -1,0 +1,39 @@
+<h1>Listing <span class="accent">review.</span></h1>
+<p class="lead"><strong>An exchange's listings desk checks a token, its issuer and its treasury, and gets LIST, REVIEW or REJECT.</strong> This is Telegraph Mission 01. It runs every token check of the preflight, then screens the issuer and matches the treasury to the chain.</p>
+
+<h2 id="use">How to use it</h2>
+<p>Open <a href="/preflight?desk=listing">/preflight?desk=listing</a> or call <code>POST /api/preflight</code> with <code>mode: "listing"</code>.</p>
+<div class="tw"><table>
+  <thead><tr><th>Field</th><th>What it is</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>chain</code>, <code>token</code></td><td>as in the token preflight</td><td>required</td></tr>
+    <tr><td><code>pool</code></td><td>a DEX pool for the token</td><td>optional; its liquidity is bought too</td></tr>
+    <tr><td><code>issuer</code></td><td>the issuer's legal name</td><td>screened with <code>SANCTIONS_SCREENING_MATCH_GENERAL</code></td></tr>
+    <tr><td><code>treasury</code></td><td>the issuer's treasury wallet</td><td>optional; its native balance is read and bought</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="rules">The extra rules</h2>
+<div class="tw"><table>
+  <thead><tr><th>Finding</th><th>Severity</th><th>When</th></tr></thead>
+  <tbody>
+    <tr><td><code>sanctions.match</code></td><td><span class="v rj">block</span></td><td>the issuer's name matched a sanctions list</td></tr>
+    <tr><td><code>sanctions.near_match</code></td><td><span class="v rv">review</span></td><td>no match, but a fuzzy score of 0.85 or more: a person compares the names</td></tr>
+    <tr><td><code>sanctions.uncertain</code></td><td><span class="v rv">review</span></td><td>no clear match result</td></tr>
+    <tr><td><code>treasury.conflict</code></td><td><span class="v rv">review</span></td><td>Telegraph's treasury balance is more than 5 bps from Shield's read at the same block</td></tr>
+    <tr><td><code>treasury.chain_only</code></td><td><span class="v mu">info</span></td><td>the balance intent (<code>ONCHAIN_METRIC_VERIFY_GENERAL</code>) covers Ethereum, Polygon and Arbitrum only, so on other chains the chain read stands alone</td></tr>
+  </tbody>
+</table></div>
+<p>Plus every token rule from the <a href="/docs/token-preflight">token preflight</a>. The clean decision is <span class="v ok">list</span>.</p>
+
+<h2 id="built">How it is built</h2>
+<p>The same <code>runPreflight</code> with <code>mode: "listing"</code>: <code>sanctionsFindings</code> and <code>treasuryFindings</code> in <code>src/shield/preflight.ts</code> add the issuer and treasury checks, and the treasury is read a few blocks back so every provider's node has it (<code>readBalanceGwei</code>).</p>
+
+<h2 id="memos">Real memos</h2>
+<ul>
+  <li><a href="/preflight?m=WOYbyG3x">WOYbyG3x</a>, 20 Nov - "Garantex Europe OU" matched a sanctions list with a score of 1. REJECT, $0.04.</li>
+  <li><a href="/preflight?m=Pi1JfTCY">Pi1JfTCY</a>, 20 Nov - UNI by "Uniswap Labs": a refused security review, an unmeasured wash figure and a 0.85 near match for the issuer. REVIEW, $0.04.</li>
+  <li><a href="/preflight?m=x0bwcUae">x0bwcUae</a>, 25 Nov - AAVE. REVIEW, $0.06.</li>
+</ul>
+
+<div class="callout warn"><span class="ck">Honest caveat</span>WOYbyG3x also blocks on an 86% wash figure from an answer that saw no trades; it predates the rule that makes such a figure a review, so its REJECT rests on the sanctions match. Listing reviews share the token preflight's security-review timeouts.</div>

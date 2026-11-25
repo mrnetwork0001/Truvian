@@ -1,0 +1,59 @@
+<h1>Token <span class="accent">preflight.</span></h1>
+<p class="lead"><strong>A trading agent asks "may I buy $1,000 of this token through this pool?" and gets HOLD, REVIEW or REJECT in a signed memo.</strong> This is Telegraph Mission 14 (Web3 Native and DeFi). The buy itself is simulated: Shield never trades.</p>
+
+<h2 id="use">How to use it</h2>
+<p>Open <a href="/preflight?desk=trade">/preflight?desk=trade</a>, pick a fixture under <i>Try one</i> or type your own, and press <i>Run preflight</i>. Agents call <code>POST /api/preflight</code> with the same fields.</p>
+<div class="tw"><table>
+  <thead><tr><th>Field</th><th>What it is</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>mode</code></td><td><code>"trade"</code></td><td>required</td></tr>
+    <tr><td><code>chain</code></td><td>ethereum, base, arbitrum, optimism, polygon, bsc or avalanche</td><td>the chain list in the page; the server accepts any chain in <code>src/config/chains.ts</code></td></tr>
+    <tr><td><code>token</code></td><td>the token contract, <code>0x</code> plus 40 hex characters</td><td>required</td></tr>
+    <tr><td><code>pool</code></td><td>the DEX pool the trade goes through</td><td>required for a trade</td></tr>
+    <tr><td><code>tradeUsd</code></td><td>the simulated trade size in USD</td><td>compared with the pool's depth</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="buys">What it buys</h2>
+<p>After reading the contract itself at one block (code, name, symbol, decimals, <code>totalSupply()</code>, proxy slots, <code>owner()</code>), Shield buys four facts, $0.01 each:</p>
+<div class="tw"><table>
+  <thead><tr><th>Fact</th><th>Telegraph intent</th><th>Checked against</th></tr></thead>
+  <tbody>
+    <tr><td>Security review</td><td><code>SECURITY_REVIEW_GENERAL</code></td><td>whether the answer examined this token at all</td></tr>
+    <tr><td>Total supply</td><td><code>TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL</code></td><td>Shield's <code>totalSupply()</code> read, 50 bps tolerance</td></tr>
+    <tr><td>Wash trading</td><td><code>WASH_TRADING_DETECTION_GENERAL</code></td><td>whether trades were examined and the figure measured</td></tr>
+    <tr><td>Pool depth</td><td><code>LIQUIDITY_DEPTH_VERIFY_GENERAL</code></td><td>the trade size</td></tr>
+  </tbody>
+</table></div>
+<p><code>SECURITY_REVIEW_GENERAL</code> stands in for <code>SMART_CONTRACT_AUDIT_GENERAL</code>, which the node has not opened. Truvian's adapter 187 is already that intent's champion evaluator.</p>
+
+<h2 id="rules">The rules</h2>
+<div class="tw"><table>
+  <thead><tr><th>Finding</th><th>Severity</th><th>When</th></tr></thead>
+  <tbody>
+    <tr><td><code>chain.not_a_contract</code></td><td><span class="v rj">block</span></td><td>the address has no contract code</td></tr>
+    <tr><td><code>security.honeypot</code>, <code>security.insecure</code></td><td><span class="v rj">block</span></td><td>the review says the token cannot be sold, or is insecure</td></tr>
+    <tr><td><code>wash.block</code></td><td><span class="v rj">block</span></td><td>wash trading at or above 50% of volume</td></tr>
+    <tr><td><code>security.not_examined</code>, <code>security.not_about_token</code>, <code>security.no_verdict</code></td><td><span class="v rv">review</span></td><td>the review examined nothing, was about another token, or gave no verdict</td></tr>
+    <tr><td><code>supply.conflict</code></td><td><span class="v rv">review</span></td><td>Telegraph's supply is more than 50 bps from the chain read</td></tr>
+    <tr><td><code>wash.review</code>, <code>wash.not_examined</code>, <code>wash.not_measured</code></td><td><span class="v rv">review</span></td><td>20% to 50% wash, or a figure from an answer that saw no trades</td></tr>
+    <tr><td><code>liquidity.thin</code>, <code>liquidity.price_impact</code></td><td><span class="v rv">review</span></td><td>pool under $100,000, or the trade above 1% of it</td></tr>
+    <tr><td><code>security.holder_concentration</code></td><td><span class="v rv">review</span></td><td>top 10 holders over 50%, unless the pool holds at least $1,000,000</td></tr>
+    <tr><td>buy or sell tax</td><td><span class="v rv">review</span> / <span class="v rj">block</span></td><td>at or above 10% / 50%</td></tr>
+    <tr><td>a missing answer</td><td><span class="v rv">review</span></td><td>any fact without an answer: nothing is cleared on a missing check</td></tr>
+  </tbody>
+</table></div>
+<p>Any block gives <span class="v rj">reject</span>; otherwise any review gives <span class="v rv">review</span>; only a clean set gives <span class="v ok">hold</span>. The thresholds are written into every memo (<code>POLICY</code> in <code>src/shield/preflight.ts</code>).</p>
+
+<h2 id="built">How it is built</h2>
+<p><code>runPreflight</code> in <code>src/shield/preflight.ts</code> plans the asks, <code>buy</code> buys each fact once (with reuse and a second opinion, <code>withSecondOpinion</code>), and <code>evaluate</code> turns reads and answers into findings and the decision. Chain reads are <code>readTokenFacts</code> in <code>src/shield/tokenFacts.ts</code>. The signed memo comes from <code>signMemo</code> in <code>src/shield/memo.ts</code>. <code>npm run test:preflight</code> replays stored answers through the rules.</p>
+
+<h2 id="memos">Real memos</h2>
+<ul>
+  <li><a href="/preflight?m=FKLfi2qT">FKLfi2qT</a>, 20 Nov - SQUID, the 2021 rug pull on BSC, rated <i>Secure</i> by a miner that never saw its code; the chain read caught a total supply 514 bps off. REVIEW, $0.04.</li>
+  <li><a href="/preflight?m=B4k2AxbY">B4k2AxbY</a>, 21 Nov - WETH, four answers each with its miner, signal and escrow receipt. REVIEW, $0.04.</li>
+  <li><a href="/preflight?m=63zSY25V">63zSY25V</a>, 20 Nov - WETH, every check answered and clean. HOLD, $0.04.</li>
+  <li><a href="/preflight?m=HnCGMGFK">HnCGMGFK</a>, 20 Nov - vitalik.eth's address given as a token: not a contract. REJECT, nothing bought.</li>
+</ul>
+
+<div class="callout warn"><span class="ck">Honest caveat</span>Since 22 Nov 2026 routed <code>SECURITY_REVIEW_GENERAL</code> asks have mostly ended in a gateway timeout, so most preflights end in REVIEW: a missing security review cannot clear a token. Shield does not retry a timeout (it would pay twice), and the decision says why.</div>

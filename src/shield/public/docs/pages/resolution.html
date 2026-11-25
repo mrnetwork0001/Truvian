@@ -1,0 +1,39 @@
+<h1>Market <span class="accent">resolution.</span></h1>
+<p class="lead"><strong>Before a prediction market settles, Truvian Resolve asks up to three independent Telegraph miners what happened, counts only answers that cite a source on the event, and decides RESOLVED, DISPUTED, REVIEW or TOO EARLY.</strong> Every memo's digest is written to Solana devnet, so anyone can prove the decision existed, unchanged, by that slot.</p>
+
+<h2 id="use">How to use it</h2>
+<p>Open <a href="/resolve">/resolve</a> or call <code>POST /api/resolve</code>.</p>
+<div class="tw"><table>
+  <thead><tr><th>Field</th><th>What it is</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>source</code></td><td><code>polymarket</code>, <code>kalshi</code> or <code>manual</code></td><td>required</td></tr>
+    <tr><td><code>market</code></td><td>a Polymarket market id or slug, or a Kalshi ticker</td><td>read from the venue's free public API</td></tr>
+    <tr><td><code>question</code>, <code>rules</code>, <code>closeTime</code></td><td>manual markets only</td><td><code>closeTime</code> in ISO 8601</td></tr>
+    <tr><td><code>event</code></td><td>the text sent to miners</td><td>optional override, at most 256 bytes (the node's limit); recorded in the memo</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="rules">How it decides</h2>
+<div class="tw"><table>
+  <thead><tr><th>Decision</th><th>When</th></tr></thead>
+  <tbody>
+    <tr><td><span class="v mu">too early</span></td><td>the market has not closed and is not settled: nothing is bought</td></tr>
+    <tr><td><span class="v ok">resolved</span></td><td>at least two independent sourced answers agree, and agree with the venue's settlement when there is one</td></tr>
+    <tr><td><span class="v rj">disputed</span></td><td>sourced answers disagree with each other or with the venue's settlement</td></tr>
+    <tr><td><span class="v rv">review</span></td><td>fewer than two sourced answers: no decision either way</td></tr>
+  </tbody>
+</table></div>
+<p><b>Who is asked.</b> The node's routed pick for <code>EVENT_OUTCOME_RESOLUTION_GENERAL</code>, then up to two specialists pinned by id, at most one per operator, never a miner that reads the market's own venue (it would only echo the market), at most $0.02 each and at most $0.04 per decision. An answer counts only with a yes or no and a source that names the event; an answer whose winner contradicts its own outcome is marked inconsistent.</p>
+
+<h2 id="built">How it is built</h2>
+<p><code>src/shield/resolve.ts</code>: <code>readMarket</code> reads Kalshi or Polymarket, <code>selectPinned</code> picks the miners, <code>judgeAnswer</code> grades each answer and <code>decide</code> applies the rules above. The memo is signed by <code>signAnyMemo</code> and its digest anchored by <code>anchorDigest</code> in <code>src/shield/solanaAnchor.ts</code>: one Memo-program instruction with the text <code>Truvian Resolve sha256:&lt;digest&gt;</code>, signed by the devnet wallet. Routes are in <code>src/shield/resolveRoutes.ts</code>; <code>npm run test:resolve</code> replays recorded answers twice and checks the decision and digest do not change.</p>
+
+<h2 id="memos">Real resolutions, 25 Nov 2026</h2>
+<ul>
+  <li><a href="/resolve?r=UnLKfa5v">UnLKfa5v</a> - Polymarket 253591, Trump wins 2024: TxLens, ZK Source-Checked Event Results and Takar all answer YES with sources, matching Polymarket. RESOLVED YES, $0.03.</li>
+  <li><a href="/resolve?r=f0rHop0u">f0rHop0u</a> - Polymarket 521607, Ukraine minerals deal "before April": Takar says NO (signed 30 Apr 2025) against Polymarket's YES. DISPUTED, $0.02.</li>
+  <li><a href="/resolve?r=gRjkzMqM">gRjkzMqM</a> - Kalshi Dallas vs Denver, 24 Nov: the top-ranked miner answered from the wrong season's page, so it was not counted. REVIEW, $0.03.</li>
+  <li><a href="/resolve?r=Osb8KXlo">Osb8KXlo</a> - Kalshi, the Fed's December 2026 decision: still open. TOO EARLY, nothing bought.</li>
+</ul>
+
+<div class="callout warn"><span class="ck">Honest caveat</span>Markets come from Polymarket and Kalshi: the one Solana-native market API tried (DFlow) refused every request, so the Solana part is the anchor. f0rHop0u asked miners whether the deal was <i>signed</i>, which is narrower than the market's rule (an announced deal counts); the override is in the memo. Few miners on the node resolve free-text events: of five settled markets tried, one reached RESOLVED.</div>

@@ -1,0 +1,38 @@
+<h1>Holdings <span class="accent">proof.</span></h1>
+<p class="lead"><strong>An investor checks what a fund or index says a custody wallet holds, without trusting the issuer, and gets VERIFIED, REVIEW or REJECT.</strong> This is Telegraph Mission 13 (Asset Management). It works on EVM chains and, since 25 Nov 2026, on Solana.</p>
+
+<h2 id="use">How to use it</h2>
+<p>Open <a href="/preflight?desk=holdings">/preflight?desk=holdings</a> or call <code>POST /api/preflight</code> with <code>mode: "holdings"</code>.</p>
+<div class="tw"><table>
+  <thead><tr><th>Field</th><th>What it is</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>chain</code></td><td>an EVM chain, or <code>solana</code> / <code>solana-devnet</code></td><td>Solana takes base58 addresses</td></tr>
+    <tr><td><code>wallet</code></td><td>the custody wallet the fund names</td><td>required</td></tr>
+    <tr><td><code>holdings</code></td><td><code>[{token, claimed, pool?}]</code>, at most 3</td><td><code>claimed</code> in whole tokens; <code>pool</code> (EVM only) is the pool the holding is rebalanced through</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="rules">The rules</h2>
+<div class="tw"><table>
+  <thead><tr><th>Finding</th><th>Severity</th><th>When</th></tr></thead>
+  <tbody>
+    <tr><td><code>holding.short</code></td><td><span class="v rj">block</span></td><td>the chain shows less than claimed, beyond 10 bps; the memo states the exact shortfall</td></tr>
+    <tr><td><code>holding.not_a_contract</code></td><td><span class="v rj">block</span></td><td>the claimed token is not a contract (or not a mint on Solana)</td></tr>
+    <tr><td><code>balance.conflict</code></td><td><span class="v rv">review</span></td><td>Telegraph's balance is more than 50 bps from the chain read</td></tr>
+    <tr><td><code>balance.not_about_wallet</code></td><td><span class="v rv">review</span></td><td>the answer gives a balance for another address</td></tr>
+    <tr><td><code>mint.permanent_delegate</code> (Solana)</td><td><span class="v rv">review</span></td><td>the issuer can move or burn tokens out of the holding</td></tr>
+    <tr><td><code>holding.float_share</code></td><td><span class="v mu">info</span></td><td>the holding's share of the token's supply, for rebalancing</td></tr>
+  </tbody>
+</table></div>
+<p>VERIFIED only when every claim is covered on the chain and every bought answer (balance, supply and, with a pool, liquidity) agrees with it.</p>
+
+<h2 id="built">How it is built</h2>
+<p><code>runHoldings</code> in <code>src/shield/holdings.ts</code> reads every holding at one block (<code>readHoldings</code>) or, on Solana, at one finalized slot (<code>readSolanaHoldings</code> in <code>src/shield/solanaHoldings.ts</code>), then <code>evaluateHoldings</code> applies <code>claimFindings</code>, <code>balanceFindings</code> and the shared supply and liquidity rules. Solana balances sum every account the wallet holds of the mint, listed on one provider and re-read by address on a second (<code>readBalance</code> in <code>src/shield/solana.ts</code>).</p>
+
+<h2 id="memos">Real memos</h2>
+<ul>
+  <li><a href="/preflight?m=IfNN2L2y">IfNN2L2y</a>, 25 Nov - Lido LDO holdings: every claim covered and every answer agreeing. VERIFIED, $0.02.</li>
+  <li><a href="/preflight?m=JYjvJrmy">JYjvJrmy</a>, 23 Nov - ENS DAO treasury: covered on chain, but the balance miner the node chose answered for the token contract, not the wallet. REVIEW, $0.06.</li>
+</ul>
+
+<div class="callout warn"><span class="ck">Honest caveat</span>On Solana the supply asks reach a miner (on 25 Nov the node routed them to Truvian's own miner, which agreed with the chain), but no miner on the node answered Solana balances that day, so a Solana proof ends in REVIEW until the node routes balance questions to a miner that can read Solana. See <a href="/docs/miner">the miner</a>.</div>

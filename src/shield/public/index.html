@@ -22,6 +22,8 @@
 <link rel="stylesheet" href="./tokens.css">
 <link rel="stylesheet" href="./landing.css">
 <link rel="stylesheet" href="./landing-motion.css">
+<link rel="stylesheet" href="./roadmap.css">
+<link rel="stylesheet" href="./footer.css">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -34,10 +36,8 @@
     <nav class="topnav" aria-label="Page sections">
       <a href="#desks">Desks</a>
       <a href="#evidence">Evidence</a>
-      <a href="#how" class="nav-opt">Method</a>
-      <a href="#tracks" class="nav-opt">Tracks</a>
       <a href="#agents">API</a>
-      <a href="#limits" class="nav-opt">Limits</a>
+      <a href="/docs">Docs</a>
     </nav>
     <button class="burger" id="burger" type="button" aria-expanded="false" aria-controls="mnav" aria-label="Open menu"><span></span><span></span><span></span></button>
   </div>
@@ -50,13 +50,11 @@
     <a class="brand" href="/" aria-label="Truvian Shield home"><img class="brand-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
     <button class="mclose" id="mclose" type="button" aria-label="Close menu"><span></span><span></span></button>
   </div>
-  <p class="mlabel">On this page</p>
+  <p class="mlabel">Menu</p>
   <a class="mlink" href="#desks">Desks</a>
   <a class="mlink" href="#evidence">Evidence</a>
-  <a class="mlink" href="#how">Method</a>
-  <a class="mlink" href="#tracks">Tracks</a>
   <a class="mlink" href="#agents">API</a>
-  <a class="mlink" href="#limits">Limits</a>
+  <a class="mlink" href="/docs">Docs</a>
   <p class="mlabel">Also</p>
   <a class="mlink msub" href="/resolve">Resolve a market</a>
   <a class="mlink msub" href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">Source on GitHub</a>
@@ -257,19 +255,64 @@
         </article>
         <article class="track">
           <p class="track-k">Apps</p>
-          <p class="track-fig">4 <span>desks live</span></p>
-          <p>Truvian Shield at <a href="/preflight">truvian.xyz/preflight</a>, plus the agent API below. The settlement desk's counterparty check buys CORPORATE_REGISTRY_LOOKUP answers, the intent our adapter 242 judges.</p>
+          <p class="track-fig">5 <span>desks live</span></p>
+          <p>Truvian Shield: four desks at <a href="/preflight">truvian.xyz/preflight</a> and market resolution at <a href="/resolve">/resolve</a>, plus the agent API below. The settlement desk's counterparty check buys CORPORATE_REGISTRY_LOOKUP answers, the intent our adapter 242 judges.</p>
           <p class="track-links"><a href="/preflight">Open the desks</a></p>
         </article>
       </div>
     </div>
   </section>
 
-  <!-- ============ 05 AGENTS ============ -->
+  <!-- ============ 05 ROADMAP ============ -->
+  <section class="sec" id="roadmap" aria-labelledby="roadmap-title">
+    <div class="wrap">
+      <header class="sec-head">
+        <p class="sec-no"><span>05</span> · Roadmap</p>
+        <h2 id="roadmap-title">Building on Telegraph <span class="accent">mainnet.</span></h2>
+        <p class="sub">Truvian is built to be a paid decision service on Telegraph mainnet. Only the first phase is shipped; the rest are plans, in order, with no dates beyond the end of Season II on 1 Dec 2026. <a href="/docs/roadmap">Read the full roadmap</a></p>
+      </header>
+      <figure class="fig-frame road" aria-labelledby="road-cap">
+        <figcaption class="fig-cap" id="road-cap"><span><b>FIG. 03</b> · From testnet to mainnet</span><span>Live · In progress · Planned</span></figcaption>
+        <div class="road-rail" aria-hidden="true">
+          <svg class="rail-svg" viewBox="0 0 1000 2" preserveAspectRatio="none" focusable="false"><line class="rail-bg" x1="0" y1="1" x2="1000" y2="1"/><line class="rail-draw" x1="0" y1="1" x2="1000" y2="1" pathLength="1"/></svg>
+          <span class="seg seg-0"></span><span class="seg seg-1"></span><span class="seg seg-2"></span><span class="seg seg-3"></span>
+          <span class="spark"></span>
+        </div>
+        <ol class="phases">
+          <li class="ph ph-now" style="--p:0">
+            <span class="node" aria-hidden="true"><span class="pulse"></span></span><span class="here" aria-hidden="true">You are here</span>
+            <p class="ph-k"><span>Now</span><span class="chip live">Live</span></p>
+            <h3>Season II, on testnet</h3>
+            <ul class="ph-items"><li><span class="ph-t">Five desks: preflight, listing, holdings, settlement, resolution</span><span class="chip live">Live</span></li><li><span class="ph-t">Miner 6180, six intents, EVM chains and Solana</span><span class="chip live">Live</span></li><li><span class="ph-t">Champion evaluators 187 and 242</span><span class="chip live">Live</span></li><li><span class="ph-t">Pay per run over x402, in test USDC</span><span class="chip live">Live</span></li><li><span class="ph-t">Solana devnet settlement and memo anchoring</span><span class="chip live">Live</span></li></ul>
+          </li>
+          <li class="ph ph-next" style="--p:1">
+            <span class="node" aria-hidden="true"><span class="pulse"></span></span>
+            <p class="ph-k"><span>Next</span><span class="chip prog">In progress</span></p>
+            <h3>Close the gaps the testnet showed</h3>
+            <ul class="ph-items"><li><span class="ph-t">Solana questions routed to our miner (registration update)</span><span class="chip prog">In progress</span></li><li><span class="ph-t">More evaluator adapters</span><span class="chip prog">In progress</span></li><li><span class="ph-t">Second sources when a security review times out</span><span class="chip plan">Planned</span></li><li><span class="ph-t">A Solana-native market source</span><span class="chip plan">Planned</span></li></ul>
+          </li>
+          <li class="ph ph-launch" style="--p:2">
+            <span class="node" aria-hidden="true"><span class="pulse"></span></span>
+            <p class="ph-k"><span>Mainnet launch</span><span class="chip plan">Planned</span></p>
+            <h3>Real money, with limits</h3>
+            <ul class="ph-items"><li><span class="ph-t">Real-USDC payments over x402 on Base mainnet</span><span class="chip plan">Planned</span></li><li><span class="ph-t">Solana mainnet settlement behind per-customer policies and caps</span><span class="chip plan">Planned</span></li><li><span class="ph-t">Uptime monitoring and alerts</span><span class="chip plan">Planned</span></li><li><span class="ph-t">API keys and per-key rate limits</span><span class="chip plan">Planned</span></li></ul>
+          </li>
+          <li class="ph ph-after" style="--p:3">
+            <span class="node" aria-hidden="true"><span class="pulse"></span></span>
+            <p class="ph-k"><span>After</span><span class="chip plan">Planned</span></p>
+            <h3>A product teams run every day</h3>
+            <ul class="ph-items"><li><span class="ph-t">Usage dashboard and audit export</span><span class="chip plan">Planned</span></li><li><span class="ph-t">Webhooks for decisions</span><span class="chip plan">Planned</span></li><li><span class="ph-t">Per-desk policies set by each customer</span><span class="chip plan">Planned</span></li><li><span class="ph-t">Continuous monitoring of holdings and markets</span><span class="chip plan">Planned</span></li><li><span class="ph-t">Volume pricing, with a payer for every desk</span><span class="chip plan">Planned</span></li></ul>
+          </li>
+        </ol>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ============ 06 AGENTS ============ -->
   <section class="sec" id="agents" aria-labelledby="agents-title">
     <div class="wrap">
       <header class="sec-head">
-        <p class="sec-no"><span>05</span> · For agents</p>
+        <p class="sec-no"><span>06</span> · For agents</p>
         <h2 id="agents-title">One POST, one signed <span class="accent">decision.</span></h2>
         <p class="sub">Same endpoint for every desk; <code>mode</code> picks the desk. Add <code>?stream=1</code> for newline-delimited events as each answer lands. Five free runs per IP a day (reset 00:00 UTC), then $0.05 in test USDC on Base Sepolia over x402: one EIP-3009 signature, settled only after the work succeeded.</p>
       </header>
@@ -306,11 +349,11 @@ curl -s https://truvian.xyz/api/preflight \
     </div>
   </section>
 
-  <!-- ============ 06 LIMITS ============ -->
+  <!-- ============ 07 LIMITS ============ -->
   <section class="sec" id="limits" aria-labelledby="limits-title">
     <div class="wrap">
       <header class="sec-head">
-        <p class="sec-no"><span>06</span> · Limits</p>
+        <p class="sec-no"><span>07</span> · Limits</p>
         <h2 id="limits-title">What is not true <span class="accent">yet.</span></h2>
       </header>
       <ol class="limits">
@@ -336,7 +379,7 @@ curl -s https://truvian.xyz/api/preflight \
 </main>
 
 <footer class="site-foot">
-  <div class="wrap foot-grid">
+  <div class="foot-wrap foot-grid">
     <div class="foot-brand-col">
       <a class="foot-brand" href="/"><img class="foot-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
       <p class="foot-desc">Truvian decides before money moves. It buys evidence from Telegraph's ranked specialist miners, checks every answer against the chain, and returns a signed memo with the cost and a receipt for each answer: for trading agents, exchanges, funds, custodians and prediction markets, on EVM chains and Solana.</p>
@@ -345,30 +388,32 @@ curl -s https://truvian.xyz/api/preflight \
         <a href="https://x.com/Telegraphprotoc" target="_blank" rel="noopener" aria-label="Telegraph Protocol on X"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117Z"/></svg></a>
       </div>
     </div>
-    <nav class="foot-col" aria-labelledby="foot-product">
-      <h4 id="foot-product">Shield</h4>
+    <nav class="foot-col" aria-label="Shield">
+      <h4>Shield</h4>
       <ul>
         <li><a href="/preflight?desk=trade">Token preflight</a></li>
         <li><a href="/preflight?desk=listing">Listing review</a></li>
         <li><a href="/preflight?desk=holdings">Holdings proof</a></li>
         <li><a href="/preflight?desk=settlement">Settlement on Solana</a></li>
+        <li><a href="/resolve">Market resolution</a></li>
         <li><a href="/app">Season I pre-sign check</a></li>
       </ul>
     </nav>
-    <nav class="foot-col" aria-labelledby="foot-telegraph">
-      <h4 id="foot-telegraph">Telegraph</h4>
+    <nav class="foot-col" aria-label="Telegraph">
+      <h4>Telegraph</h4>
       <ul>
         <li><a href="https://anjoman.ai" target="_blank" rel="noopener">Anjoman</a></li>
-        <li><a href="https://anjoman.ai/docs" target="_blank" rel="noopener">Docs</a></li>
+        <li><a href="https://anjoman.ai/docs" target="_blank" rel="noopener">Telegraph docs</a></li>
         <li><a href="https://devnode.telegraphprotocol.com/api/miners/6180" target="_blank" rel="noopener">Our miner on the node</a></li>
         <li><a href="https://x.com/Telegraphprotoc" target="_blank" rel="noopener">@Telegraphprotoc</a></li>
       </ul>
     </nav>
-    <nav class="foot-col" aria-labelledby="foot-resources">
-      <h4 id="foot-resources">Resources</h4>
+    <nav class="foot-col" aria-label="Resources">
+      <h4>Resources</h4>
       <ul>
+        <li><a href="/docs">Docs</a></li>
+        <li><a href="/docs/roadmap">Roadmap</a></li>
         <li><a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">GitHub</a></li>
-        <li><a href="https://github.com/mrnetwork0001/Truvian#readme" target="_blank" rel="noopener">Documentation</a></li>
         <li><a href="https://miner.truvian.xyz" target="_blank" rel="noopener">Truvian miner</a></li>
         <li><a href="https://github.com/mrnetwork0001/Truvian/tree/main/evaluator" target="_blank" rel="noopener">Evaluator adapters</a></li>
         <li><a href="/api/stats">Live stats</a></li>

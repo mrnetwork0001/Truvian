@@ -1,0 +1,44 @@
+<h1>Limits and <span class="accent">FAQ.</span></h1>
+<p class="lead"><strong>The facts Truvian checks are real; the money is test money.</strong> This page labels every part that is simulated, testnet or not done, so the real parts are easy to trust.</p>
+
+<h2 id="real">Real or preview</h2>
+<div class="tw"><table>
+  <thead><tr><th>Part</th><th>Status</th><th>Detail</th></tr></thead>
+  <tbody>
+    <tr><td>Token, pool, wallet and supply facts</td><td><span class="v ok">real</span></td><td>read from mainnets (or the chain you pick) at a stated block or slot</td></tr>
+    <tr><td>Telegraph answers</td><td><span class="v ok">real</span></td><td>bought live from ranked miners on Telegraph's devnode, each with a receipt and signal</td></tr>
+    <tr><td>Sanctions and registry answers, market outcomes</td><td><span class="v ok">real</span></td><td>from the miners' sources (sanctions lists, GLEIF and registries, news and official records)</td></tr>
+    <tr><td>Signed memos</td><td><span class="v ok">real</span></td><td>EIP-191 signatures anyone can verify</td></tr>
+    <tr><td>Paying Telegraph</td><td><span class="v rv">testnet</span></td><td>test USDC from an Anjoman escrow on Ethereum Sepolia</td></tr>
+    <tr><td>Visitors paying Shield</td><td><span class="v rv">testnet</span></td><td>$0.05 test USDC on Base Sepolia over x402</td></tr>
+    <tr><td>Settlements and anchors</td><td><span class="v rv">devnet</span></td><td>Solana devnet, Shield's own test tokens, at most 1 token per payment</td></tr>
+    <tr><td>The trade in a token preflight</td><td><span class="v mu">simulated</span></td><td>the buy is never placed</td></tr>
+    <tr><td>Market data for resolutions</td><td><span class="v ok">real</span></td><td>Polymarket's and Kalshi's public APIs; a Solana-native source is not wired</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="known">Known limitations</h2>
+<ul>
+  <li><b>Security reviews time out.</b> Since 22 Nov 2026 routed <code>SECURITY_REVIEW_GENERAL</code> asks have mostly ended in a gateway timeout, so token preflights and listing reviews usually end in REVIEW.</li>
+  <li><b>Solana balances.</b> No miner on the node answered a Solana wallet balance on 25 Nov. Truvian's miner now can, but the node routes those questions to it only after its registration is updated.</li>
+  <li><b>Few resolvers.</b> Few miners resolve free-text events; most markets end in REVIEW.</li>
+  <li><b>Scores move.</b> Miner scores change every epoch; the leaderboard, not this site, is the record.</li>
+  <li><b>Season I check.</b> <a href="/app">/app</a> is the Season I pre-sign check, looser than the desks: it can say SAFE with checks unanswered.</li>
+</ul>
+
+<h2 id="data">Keys and your data</h2>
+<p>There are no accounts. Shield stores what each decision needs to be re-checked: the input you sent, the reads, the answers and the memo, in the latest 100 memos on the server. It keeps a count of free runs per IP address for the day. Payments are signed in your own wallet; Shield never sees a private key. Shield's own keys live only in the server's environment.</p>
+
+<h2 id="faq">FAQ</h2>
+<h3>Why so many REVIEWs?</h3>
+<p>Because Truvian never clears on a missing or unchecked answer. A REVIEW says which check could not be made and why; that is the product working, not failing.</p>
+<h3>Can a miner game a decision?</h3>
+<p>One answer cannot clear anything on its own: supply and balances are checked against Shield's chain reads, an answer about another token or address is set aside, and a second opinion can hold a decision back but never clear it.</p>
+<h3>What does a decision cost?</h3>
+<p>About $0.01 per answer, $0.02 to $0.06 per decision in test USDC, shown in each memo's cost line. A fact bought in the last 10 minutes is reused at $0.</p>
+<h3>Is any of this mocked?</h3>
+<p>No answer is mocked. The trade is simulated and the money is testnet, as the table above says; everything else is a live read or a live, paid answer.</p>
+<h3>How do I check a memo myself?</h3>
+<p>Download it from its page, compute SHA-256 over its canonical JSON, and recover the EIP-191 signer of <code>Truvian Shield memo sha256:&lt;digest&gt;</code>. It must be 0x956aECB0b0DEfC2f2631C26ec0FF7366Ebb53245.</p>
+<h3>Is Truvian part of Telegraph?</h3>
+<p>No. It is an independent entry in Telegraph Protocol's Season II hackathon that uses Telegraph as its source of specialist answers.</p>

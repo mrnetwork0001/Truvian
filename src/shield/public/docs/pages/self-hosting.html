@@ -1,0 +1,78 @@
+<h1>Self-<span class="accent">hosting.</span></h1>
+<p class="lead"><strong>Clone the repository, put your keys in <code>.env</code>, and run <code>npm run shield</code>: the desks, the API and these docs come up on port 8788.</strong> Without a Telegraph key Shield still serves pages and memos, but cannot buy answers.</p>
+
+<h2 id="run">Run it</h2>
+<pre><code>git clone https://github.com/mrnetwork0001/Truvian && cd Truvian
+npm install
+cp .env.example .env        # then fill in the keys you have
+npm run shield              # Shield: desks, API, docs     (port 8788)
+npm run dev                 # the miner                    (port 8787)
+npm run truth               # the truth API                (port 8790)</code></pre>
+<div class="tw"><table>
+  <thead><tr><th>Script</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>npm run typecheck</code></td><td>TypeScript, no emit</td></tr>
+    <tr><td><code>npm run test:preflight</code></td><td>replays stored answers through the desk rules</td></tr>
+    <tr><td><code>npm run test:resolve</code></td><td>replays recorded resolutions twice; decision and digest must not change</td></tr>
+    <tr><td><code>npm run test:miner</code></td><td>live checks against the miner's handlers, Solana included</td></tr>
+    <tr><td><code>npm run test:shield</code>, <code>npm run test:truth</code>, <code>npm run verify:truth</code></td><td>the Season I check, the truth API, and the truth sources</td></tr>
+    <tr><td><code>npm run demo:guard</code></td><td>the <code>guard()</code> wallet wrapper in <code>src/agent/guard.ts</code></td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="env">Environment variables</h2>
+<div class="tw"><table>
+  <thead><tr><th>Variable</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>TELEGRAPH_API_KEY</code></td><td>unset</td><td>the Anjoman key the desks buy answers with, paid from its escrow; unset, nothing can be bought</td></tr>
+    <tr><td><code>TELEGRAPH_PAYER_KEY</code></td><td>unset</td><td>a wallet key for paying miners over x402 directly; also the default address visitors pay</td></tr>
+    <tr><td><code>SHIELD_MEMO_KEY</code></td><td>unset</td><td>the key memos are signed with; unset, memos are stored unsigned</td></tr>
+    <tr><td><code>SOLANA_DEVNET_KEY</code></td><td>unset</td><td>base64 secret key of the devnet wallet that sends settlements and anchors resolutions; unset, neither happens</td></tr>
+    <tr><td><code>TELEGRAPH_NODE_URL</code></td><td><code>https://devnode.telegraphprotocol.com</code></td><td>the Telegraph node</td></tr>
+    <tr><td><code>TELEGRAPH_API_URL</code></td><td><code>https://backend.telegraphprotocol.com</code></td><td>the Anjoman backend (escrow balance)</td></tr>
+    <tr><td><code>SHIELD_TRANSPORT</code></td><td>API key, else x402, else direct</td><td>force <code>apikey</code>, <code>x402</code> or <code>direct</code></td></tr>
+    <tr><td><code>SHIELD_API_ROUTE</code>, <code>SHIELD_X402_ROUTE</code></td><td>engine</td><td><code>agent</code> or <code>dispatcher</code> to use the older routes</td></tr>
+    <tr><td><code>SHIELD_ESCROW_ACCOUNT</code></td><td><code>0x2947…9055</code></td><td>the escrow whose node ledger <code>/api/stats</code> reports</td></tr>
+    <tr><td><code>SHIELD_PREFLIGHT_BUDGET_USD</code></td><td><code>0.1</code></td><td>most a decision may spend on answers</td></tr>
+    <tr><td><code>SHIELD_API_KEY_MAX_SPEND_USD</code></td><td><code>0.3</code></td><td>most the node may reserve for one ask</td></tr>
+    <tr><td><code>SHIELD_API_KEY_CONCURRENCY</code></td><td><code>3</code></td><td>asks in flight at once (Anjoman allows three jobs per account)</td></tr>
+    <tr><td><code>SHIELD_MAX_PAYMENT_USDC</code></td><td><code>0.1</code></td><td>most Shield pays a miner per x402 call</td></tr>
+    <tr><td><code>SHIELD_REUSE_TTL_MS</code></td><td><code>600000</code></td><td>how long a bought fact is reused at $0</td></tr>
+    <tr><td><code>SHIELD_SETTLEMENT_MAX</code></td><td><code>1</code></td><td>most tokens one devnet settlement sends</td></tr>
+    <tr><td><code>SHIELD_PRICE_USD</code></td><td><code>0.05</code></td><td>what a visitor pays per run past the free allowance</td></tr>
+    <tr><td><code>SHIELD_PAYTO</code></td><td>the payer wallet</td><td>where visitors' payments go</td></tr>
+    <tr><td><code>SHIELD_PAYMENTS</code></td><td>on</td><td><code>off</code> to answer 429 instead of quoting a price</td></tr>
+    <tr><td><code>X402_CHAIN_ID</code>, <code>X402_CHAIN</code></td><td><code>84532</code> (Base Sepolia)</td><td>the chain visitors pay on</td></tr>
+    <tr><td><code>X402_USDC_ADDRESS</code></td><td>Circle's USDC on that chain</td><td>the token visitors pay in</td></tr>
+    <tr><td><code>X402_FACILITATOR_URL</code></td><td><code>https://facilitator.payai.network</code></td><td>verifies and settles visitors' payments</td></tr>
+    <tr><td><code>SHIELD_FREE_CHECKS_PER_IP</code>, <code>SHIELD_BURST_PER_MIN</code></td><td><code>5</code>, <code>3</code></td><td>free runs per IP a day, and per minute</td></tr>
+    <tr><td><code>SHIELD_DAILY_CHECK_CAP</code>, <code>SHIELD_DAILY_SPEND_USD</code></td><td><code>300</code>, <code>5</code></td><td>free runs and Telegraph spend a day, across everyone</td></tr>
+    <tr><td><code>SOLANA_DEVNET_RPC_URL</code></td><td><code>https://api.devnet.solana.com</code></td><td>the RPC resolution anchors are sent through</td></tr>
+    <tr><td><code>SHIELD_MEMOS_FILE</code>, <code>SHIELD_RESOLVE_MEMOS_FILE</code>, <code>SHIELD_RECEIPTS_FILE</code>, <code>SHIELD_STATS_FILE</code></td><td><code>.shield-*.json</code> in the working directory</td><td>where memos, resolutions, Season I reports and counters are kept</td></tr>
+    <tr><td><code>SHIELD_PORT</code> / <code>PORT</code>, <code>SHIELD_HOST</code> / <code>HOST</code></td><td><code>8788</code>, <code>127.0.0.1</code></td><td>where Shield listens</td></tr>
+    <tr><td><code>SHIELD_PUBLIC_URL</code></td><td>from the request</td><td>the public origin written into payment requirements</td></tr>
+    <tr><td><code>SHIELD_TRUST_PROXY</code></td><td>on</td><td><code>0</code> when not behind a reverse proxy, so client IPs are not taken from headers</td></tr>
+  </tbody>
+</table></div>
+<div class="callout"><span class="ck">Keys</span>Keys live only in the server's <code>.env</code>, which git ignores. They are never sent to the browser, logged or written into a memo. Use a fresh wallet for <code>SHIELD_MEMO_KEY</code> and a devnet-only wallet for <code>SOLANA_DEVNET_KEY</code>.</div>
+
+<h2 id="deploy">Deploying</h2>
+<p>truvian.xyz runs Shield under pm2 behind nginx: <code>deploy/ecosystem.shield.config.cjs</code> and <code>deploy/nginx-shield.conf</code>; the miner has <code>deploy/ecosystem.config.cjs</code> and <code>deploy/nginx-miner.conf</code>. A deploy is <code>git pull --ff-only</code>, <code>npm install</code> when dependencies change, and a restart of that one pm2 app. Things that will bite you: public RPC endpoints change within days (run <code>npm run test:miner</code> before trusting the chain list), the Telegraph registry contract moves without notice (check it before any transaction), and a client IP is only right when nginx forwards it and <code>SHIELD_TRUST_PROXY</code> is on.</p>
+
+<h2 id="map">Repository map</h2>
+<div class="tw"><table>
+  <thead><tr><th>Path</th><th>What is there</th></tr></thead>
+  <tbody>
+    <tr><td><code>src/shield/server.ts</code></td><td>the Shield server: routes, free allowance, x402, stats</td></tr>
+    <tr><td><code>src/shield/preflight.ts</code>, <code>holdings.ts</code>, <code>settlement.ts</code>, <code>resolve.ts</code></td><td>the desks' plans and rules</td></tr>
+    <tr><td><code>src/shield/telegraph.ts</code></td><td>asking Telegraph: routed and pinned asks, rankings, escrow</td></tr>
+    <tr><td><code>src/shield/tokenFacts.ts</code>, <code>solana.ts</code>, <code>solanaHoldings.ts</code>, <code>solanaAnchor.ts</code></td><td>Shield's own chain reads, Solana sends and anchors</td></tr>
+    <tr><td><code>src/shield/memo.ts</code>, <code>x402server.ts</code>, <code>limits.ts</code>, <code>docs.ts</code></td><td>signing, payments, rate limits, these docs</td></tr>
+    <tr><td><code>src/shield/public/</code></td><td>the site: landing, desks, resolve, docs, <code>pay.js</code>, <code>wallet.js</code></td></tr>
+    <tr><td><code>src/miner/</code></td><td>the miner (registration 6180)</td></tr>
+    <tr><td><code>src/truth/</code></td><td>the truth API</td></tr>
+    <tr><td><code>evaluator/</code></td><td>the evaluator adapters and truth sources</td></tr>
+    <tr><td><code>telegraph/</code></td><td>the miner YAML, registration notes, PREFLIGHT.md and SETTLEMENT.md</td></tr>
+    <tr><td><code>src/scripts/</code></td><td>tests, fixtures and one-off probes</td></tr>
+  </tbody>
+</table></div>
