@@ -44,6 +44,7 @@
     // 8,632,326 ENS; the Uniswap timelock held 262,247,996 UNI. Balances move, so the labels say "expect".
     holdings: [
       { label: 'ENS DAO treasury (USDC, ENS + pool) → expect VERIFIED', cls: 'preset-safe', v: { chain: 'ethereum', wallet: '0xFe89cc7aBB2C4183683ab71653C4cdc9B02D44b7', holdings: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48, 2400000\n0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72, 8600000, 0x92560C178cE069CC014138eD3C2F5221Ba71f58a' } },
+      { label: 'Solana devnet custody: tUSD + rUSD (claw-back mint) → REVIEW', cls: '', v: { chain: 'solana-devnet', wallet: 'A4X5JKBCLobAY5MeDXkwiRV5Hr7Uu4vUhzHQczwXMBnz', holdings: 'DThEeRe6uhj2eT8SLrjiLexUiuxrggysA4zCuHE2sUFb, 990\nB6yxPoHwxdThmbJ9C58TXF2TK3JYzsC2R6ggFdUvAz1v, 1000' } },
       { label: 'Overstated claim (300M UNI in the Uniswap timelock) → REJECT', cls: 'preset-block', v: { chain: 'ethereum', wallet: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC', holdings: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984, 300000000' } },
     ],
   };
@@ -204,13 +205,14 @@
     if (!reads || !reads.length) { box.textContent = '-'; return; }
     holdingSymbols = reads.map((r) => (r.facts && r.facts.symbol) || null);
     const f0 = reads[0].facts;
-    const lines = [`${f0.chainLabel} (chain id ${f0.chainId}) at block ${f0.block}`];
+    const sol = /^solana/.test(f0.chain);
+    const lines = [sol ? `${f0.chainLabel} at slot ${f0.block} (finalized)` : `${f0.chainLabel} (chain id ${f0.chainId}) at block ${f0.block}`];
     for (const r of reads) {
       const f = r.facts;
-      if (!f.isContract) { lines.push(`${r.token}: no contract code`); continue; }
+      if (!f.isContract) { lines.push(`${r.token}: ${sol ? 'not a token mint' : 'no contract code'}`); continue; }
       const share = r.balanceRaw && f.totalSupplyRaw && f.totalSupplyRaw !== '0'
         ? ` (${(Number(BigInt(r.balanceRaw) * 1000000n / BigInt(f.totalSupplyRaw)) / 10000).toFixed(4)}% of supply)` : '';
-      lines.push(`${f.symbol || r.token} ${r.token}: balanceOf = ${r.balance === null ? 'unreadable' : Number(r.balance).toLocaleString('en-US', { maximumFractionDigits: 6 })}${share}, claimed ${Number(r.claimed).toLocaleString('en-US')}${r.pool ? `, pool ${r.pool}` : ''}`);
+      lines.push(`${f.symbol || r.token} ${r.token}: ${sol ? 'balance' : 'balanceOf'} = ${r.balance === null ? 'unreadable' : Number(r.balance).toLocaleString('en-US', { maximumFractionDigits: 6 })}${share}, claimed ${Number(r.claimed).toLocaleString('en-US')}${r.pool ? `, pool ${r.pool}` : ''}`);
     }
     box.replaceChildren(...lines.map((t) => el('div', { class: 'mono', text: t })));
   }
