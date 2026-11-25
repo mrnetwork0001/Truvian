@@ -1,0 +1,1849 @@
+{
+  "request": {
+    "source": "kalshi",
+    "market": "KXNBAGAME-26NOV24DALDEN-DAL"
+  },
+  "recorded": {
+    "now": [
+      "2026-11-25T11:38:32.286Z",
+      "2026-11-25T11:39:55.660Z"
+    ],
+    "pinned": {
+      "7456": {
+        "intent": "EVENT_OUTCOME_RESOLUTION_GENERAL",
+        "params": {
+          "event": "Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?"
+        },
+        "ok": false,
+        "fields": null,
+        "fieldStatus": {},
+        "latencyMs": 5026,
+        "error": "http 500: {\"error\":\"upstream error 404: {\\\"intent\\\":\\\"EVENT_OUTCOME_RESOLUTION\\\",\\\"event\\\":\\\"Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?\\\",\\\"resolved\\\":false,\\"
+      },
+      "73157": {
+        "intent": "EVENT_OUTCOME_RESOLUTION_GENERAL",
+        "params": {
+          "event": "Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?"
+        },
+        "ok": false,
+        "fields": null,
+        "fieldStatus": {},
+        "latencyMs": 44893,
+        "error": "http 500: {\"error\":\"upstream error 404: {\\\"intent\\\":\\\"EVENT_OUTCOME_RESOLUTION\\\",\\\"event\\\":\\\"Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?\\\",\\\"resolved\\\":false,\\"
+      },
+      "752052": {
+        "intent": "EVENT_OUTCOME_RESOLUTION_GENERAL",
+        "params": {
+          "event": "Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?"
+        },
+        "ok": false,
+        "fields": null,
+        "fieldStatus": {},
+        "latencyMs": 4626,
+        "error": "http 500: {\"error\":\"upstream error 404: {\\\"intent\\\":\\\"EVENT_OUTCOME_RESOLUTION\\\",\\\"event\\\":\\\"Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?\\\",\\\"resolved\\\":false,\\"
+      },
+      "774921": {
+        "intent": "EVENT_OUTCOME_RESOLUTION_GENERAL",
+        "params": {
+          "event": "Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?"
+        },
+        "ok": true,
+        "fields": {
+          "event": "Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?",
+          "outcome": "unresolved",
+          "resolved_yes": false,
+          "winner": null,
+          "resolved_at": null,
+          "sources": null
+        },
+        "fieldStatus": {
+          "event": "ok",
+          "outcome": "ok",
+          "resolved_yes": "ok",
+          "winner": "missing",
+          "resolved_at": "missing",
+          "sources": "missing"
+        },
+        "latencyMs": 7151,
+        "minerId": "774921",
+        "minerName": "VeriReceipt Deterministic Oracle",
+        "receipt": {
+          "hash": "0x9a7ee2374f820df5fca0d7ea392f539669e2089d1c7251980e8ef669a6283799",
+          "rail": "escrow",
+          "payer": "0x29476125898638c8634a97fdca8994530e8c9055",
+          "miner": "6188",
+          "amountUsd": 0.01,
+          "epochId": 54,
+          "settlement": "epoch"
+        },
+        "costUsd": 0.01,
+        "signalHash": "0x7f26d874af49725c5cca03280825653fb2423b28b127eaebf7ff18f33e685c53"
+      },
+      "20261117": {
+        "intent": "EVENT_OUTCOME_RESOLUTION_GENERAL",
+        "params": {
+          "event": "Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?"
+        },
+        "ok": true,
+        "fields": {
+          "event": "Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?",
+          "outcome": "unresolved",
+          "resolved_yes": false,
+          "winner": null,
+          "resolved_at": null,
+          "sources": [
+            "https://en.wikipedia.org/wiki/2024%E2%80%9325_NBA_season",
+            "https://en.wikipedia.org/wiki/Kent_State_Golden_Flashes_football",
+            "https://en.wikipedia.org/wiki/Arizona_Wildcats_men%27s_basketball"
+          ]
+        },
+        "fieldStatus": {
+          "event": "ok",
+          "outcome": "ok",
+          "resolved_yes": "ok",
+          "winner": "missing",
+          "resolved_at": "missing",
+          "sources": "ok"
+        },
+        "latencyMs": 18272,
+        "minerId": "20261117",
+        "minerName": "Takar Outcome Resolver",
+        "receipt": {
+          "hash": "0x5fb47bd2f8fd6f1020f2d89ff19eb623d35083b29eb6a1418e512493d0869b0c",
+          "rail": "escrow",
+          "payer": "0x29476125898638c8634a97fdca8994530e8c9055",
+          "miner": "6114",
+          "amountUsd": 0.01,
+          "epochId": 54,
+          "settlement": "epoch"
+        },
+        "costUsd": 0.01,
+        "signalHash": "0xb789def73d154a89930553116024ee96d4ac6691e63b96870575716d9d2b7522"
+      }
+    },
+    "market": {
+      "source": "kalshi",
+      "id": "KXNBAGAME-26NOV24DALDEN-DAL",
+      "url": "https://api.elections.kalshi.com/trade-api/v2/markets/KXNBAGAME-26NOV24DALDEN-DAL",
+      "question": "Dallas vs Denver: Dallas wins",
+      "rules": "If Dallas wins the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026, then the market resolves to Yes. If the Dallas vs Denver game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, all markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+      "closeTime": "2026-11-25T05:35:51Z",
+      "status": "finalized",
+      "settled": "yes",
+      "settledAt": "2026-11-25T05:39:54.852805Z",
+      "event": "Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?"
+    },
+    "ranking": {
+      "intent": "EVENT_OUTCOME_RESOLUTION_GENERAL",
+      "epoch": 54,
+      "miners": [
+        {
+          "minerId": "9002",
+          "slug": "txlens",
+          "name": "TxLens",
+          "rank": 1,
+          "score": 0.9994,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "20260828",
+          "slug": "a1-preflight",
+          "name": "PREFLIGHT Infrastructure Signals",
+          "rank": 2,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "83159274",
+          "slug": "telegraph-intent-miner",
+          "name": "TelegraphIntent",
+          "rank": 3,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "190016",
+          "slug": "event-openligadb-bl1",
+          "name": "Event Openligadb Bl1",
+          "rank": 4,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "59005",
+          "slug": "event-poly-series",
+          "name": "Polymarket Series",
+          "rank": 5,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "59001",
+          "slug": "event-poly-events",
+          "name": "Polymarket Active Events",
+          "rank": 6,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "190015",
+          "slug": "event-nhl-schedule",
+          "name": "Event NHL Schedule",
+          "rank": 7,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "59003",
+          "slug": "event-poly-search",
+          "name": "Polymarket Public Search",
+          "rank": 8,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "59010",
+          "slug": "event-poly-search-ai",
+          "name": "Polymarket Search AI",
+          "rank": 9,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "59007",
+          "slug": "event-poly-search-fed",
+          "name": "Polymarket Search fed",
+          "rank": 10,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "190013",
+          "slug": "event-jolpica-f1",
+          "name": "Event Jolpica F1",
+          "rank": 11,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "4433",
+          "slug": "livecert",
+          "name": "LiveCert — Sourced Answers for Agents",
+          "rank": 12,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "190014",
+          "slug": "event-mlb-statsapi",
+          "name": "Event MLB Statsapi",
+          "rank": 13,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "20261117",
+          "slug": "takar-outcome",
+          "name": "Takar Outcome Resolver",
+          "rank": 14,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "59006",
+          "slug": "event-poly-search-election",
+          "name": "Polymarket Search election",
+          "rank": 15,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "59009",
+          "slug": "event-poly-search-eth",
+          "name": "Polymarket Search ethereum",
+          "rank": 16,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "59008",
+          "slug": "event-poly-search-nba",
+          "name": "Polymarket Search nba",
+          "rank": 17,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "59004",
+          "slug": "event-poly-tags",
+          "name": "Polymarket Tags",
+          "rank": 18,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "59002",
+          "slug": "event-poly-markets",
+          "name": "Polymarket Active Markets",
+          "rank": 19,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "29301",
+          "slug": "event-poly-clob-winner",
+          "name": "Polymarket Outcome Resolve",
+          "rank": 20,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "190010",
+          "slug": "event-espn-mlb-scoreboard",
+          "name": "Event Espn MLB Scoreboard",
+          "rank": 21,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "190011",
+          "slug": "event-espn-nba-scoreboard",
+          "name": "Event Espn NBA Scoreboard",
+          "rank": 22,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "190012",
+          "slug": "event-espn-nfl-scoreboard",
+          "name": "Event Espn NFL Scoreboard",
+          "rank": 23,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "29302",
+          "slug": "event-kalshi-result",
+          "name": "Kalshi Market Result",
+          "rank": 24,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "190123",
+          "slug": "event-manifold",
+          "name": "Event Manifold",
+          "rank": 25,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "29303",
+          "slug": "event-manifold-resolution",
+          "name": "Manifold Market Resolution",
+          "rank": 26,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "190017",
+          "slug": "event-poly-closed",
+          "name": "Event Poly Closed",
+          "rank": 27,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "59011",
+          "slug": "event-poly-market-by-id",
+          "name": "Polymarket Market By Id",
+          "rank": 28,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "190018",
+          "slug": "event-poly-markets-closed",
+          "name": "Event Poly Markets Closed",
+          "rank": 29,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "190019",
+          "slug": "event-thesportsdb-last",
+          "name": "Event Thesportsdb Last",
+          "rank": 30,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "190020",
+          "slug": "event-thesportsdb-lookup",
+          "name": "Event Thesportsdb Lookup",
+          "rank": 31,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "1900999000",
+          "slug": "referenceforge-numeric",
+          "name": "ReferenceForge",
+          "rank": 32,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "7456",
+          "slug": "tradewire-event-outcome-resolution",
+          "name": "TradeWire Event Outcome Resolution",
+          "rank": 33,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "774921",
+          "slug": "verireceipt",
+          "name": "VeriReceipt Deterministic Oracle",
+          "rank": 34,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "73157",
+          "slug": "zk-event-classify",
+          "name": "ZK Source-Checked Event Results",
+          "rank": 35,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "752052",
+          "slug": "zk-event-final-g52",
+          "name": "ZK Source-Verified Event Outcome",
+          "rank": 36,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "752075",
+          "slug": "zk-event-id-g75",
+          "name": "ZK Source-Checked Event Identity",
+          "rank": 37,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "73158",
+          "slug": "zk-event-macro",
+          "name": "ZK Source-Checked Event and Fed Outcomes",
+          "rank": 38,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "73056",
+          "slug": "zk-event-oracle",
+          "name": "ZK Event Outcome Oracle",
+          "rank": 39,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "752053",
+          "slug": "zk-event-sets-g53",
+          "name": "ZK Source-Verified Event and Set Outcomes",
+          "rank": 40,
+          "score": 0,
+          "priceUsd": 0.01
+        },
+        {
+          "minerId": "752076",
+          "slug": "zk-race-id",
+          "name": "ZK Source-Checked Race and Fixture Identity",
+          "rank": 41,
+          "score": 0,
+          "priceUsd": 0.01
+        }
+      ]
+    },
+    "catalog": [
+      {
+        "id": "9002",
+        "slug": "txlens",
+        "name": "TxLens",
+        "description": "TxLens provides live, verifiable answers to on-chain and market questions from authoritative sources. Covering 123 intents across blockchain, finance, weather, content, security, and general intelligence domains—each answer includes source attribution and fetch timestamps for transparency.\n",
+        "wallet_address": "0xb3fb14fecac09efbd0c74fc07d50d7ed1eef2b53",
+        "input_schema": {
+          "properties": {
+            "address": {
+              "description": "EVM address to check. Used by /wallet-balance only.",
+              "pattern": "^0x[0-9a-fA-F]{40}$",
+              "type": "string"
+            },
+            "amount": {
+              "description": "Amount to convert on /currency-exchange. Defaults to 1.",
+              "type": "number"
+            },
+            "block": {
+              "description": "Block number for /token-total-supply and /onchain-metric-verify (default latest).\n",
+              "type": "string"
+            },
+            "card_number": {
+              "description": "Full or partial card number, or its leading 6-8 digits (the BIN), on /payment-method-verify.\n",
+              "type": "string"
+            },
+            "carrier": {
+              "description": "Carrier name (e.g. UPS, FedEx, USPS, DHL) on /carrier-serviceability and /delivery-window-verify. Optional on both.\n",
+              "type": "string"
+            },
+            "categories": {
+              "description": "Alias of labels on /text-classify.",
+              "type": "string"
+            },
+            "chain": {
+              "default": "eth",
+              "description": "Which chain to query. Defaults to eth if omitted. Used by /check-tx, /gas-price, /wallet-balance, /token-holders only — not used by /tvl or /crypto-price, which take tvl_chain / price_chain instead (see below).\n",
+              "enum": [
+                "eth",
+                "base",
+                "arbitrum",
+                "optimism",
+                "polygon"
+              ],
+              "type": "string"
+            },
+            "chains": {
+              "description": "Comma-separated list of chains to check on /cross-chain-state. Defaults to every RPC-enabled chain when omitted.\n",
+              "type": "string"
+            },
+            "claim": {
+              "description": "Claim to fact-check on /fact-check.",
+              "type": "string"
+            },
+            "code": {
+              "description": "Source code or a diff on /security-review and /code-review.\n",
+              "type": "string"
+            },
+            "coin_id": {
+              "description": "CoinGecko coin id, e.g. \"bitcoin\". Used by /crypto-price only. Exactly one of coin_id / (price_chain+token) required for /crypto-price.\n",
+              "type": "string"
+            },
+            "company": {
+              "description": "Company, product, drug, device, or industry concern to search Federal Register filings for on /regulatory-filing-monitor, or a company name to verify against the GLEIF legal-entity registry on /credit-score-verify.\n",
+              "type": "string"
+            },
+            "content": {
+              "description": "Alias of text on /text-classify, /sentiment-analyze and /content-moderate.",
+              "type": "string"
+            },
+            "contract": {
+              "description": "Contract text or clause on /contract-obligation-audit.\n",
+              "type": "string"
+            },
+            "cve": {
+              "description": "CVE id (e.g. \"CVE-2021-44228\"), a question containing one, or a product keyword to search on /cve-lookup or /vulnerability-triage. Also read from cve_id, id, vulnerability, query and question.\n",
+              "type": "string"
+            },
+            "cve_id": {
+              "description": "Alias for cve on /cve-lookup.",
+              "type": "string"
+            },
+            "date": {
+              "description": "A past date (YYYY-MM-DD) to verify actual weather conditions for on /weather-forecast-verify. A date that is today or in the future is refused; use /weather-forecast for that instead.\n",
+              "type": "string"
+            },
+            "days": {
+              "description": "Forecast length in days on /weather-forecast. Defaults to 3, or to what the question asks for.",
+              "maximum": 16,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "description": {
+              "description": "Free-text description of the figures and any claimed discrepancy on /invoice-ledger-reconcile. Also accepted as invoice, ledger, or discrepancy.\n",
+              "type": "string"
+            },
+            "destination": {
+              "description": "Ending place name or \"lat,lon\" on /route-eta. Also accepted as to, end, or target. On /delivery-window-verify, the shipment's destination place (optional; a whole route description in `route` is also accepted).\n",
+              "type": "string"
+            },
+            "domain": {
+              "description": "Host to check on /ssl-check. A bare hostname (\"example.com\") is the canonical form, but a full URL, a host:port pair, or a whole question naming the domain are all accepted and reduced to the hostname.\n",
+              "type": "string"
+            },
+            "economic_indicator": {
+              "description": "GDP growth, inflation, or unemployment on /macro-economic-indicator. Also accepted as indicator. Used with country.\n",
+              "type": "string"
+            },
+            "facts": {
+              "description": "What actually happened, on /contract-obligation-audit. Optional.\n",
+              "type": "string"
+            },
+            "focus": {
+              "description": "Optional on /weather-forecast. Which aspect the answer should lead with. Read from the question when omitted.\n",
+              "enum": [
+                "rain",
+                "wind",
+                "snow",
+                "storm",
+                "freeze",
+                "temperature"
+              ],
+              "type": "string"
+            },
+            "from": {
+              "description": "Source currency code or name on /currency-exchange, e.g. \"USD\" or \"dollars\". Also accepted as an alias of origin on /route-eta.\n",
+              "type": "string"
+            },
+            "from_year": {
+              "description": "Earliest publication year on /academic-search. Read from the question when omitted.",
+              "type": "integer"
+            },
+            "height": {
+              "description": "Bitcoin block height for /mining-hashprice, or latest.\n",
+              "type": "string"
+            },
+            "hours": {
+              "description": "Window length in hours on /storm-alert, counted from the current hour. Defaults to 48.",
+              "maximum": 384,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "indicator": {
+              "description": "IP address, domain, file hash, CVE id, or threat actor/malware family name to check on /threat-intelligence. Also accepted as ioc, ip, domain, hash, cve, or actor.\n",
+              "type": "string"
+            },
+            "instruction": {
+              "description": "What the code should do, on /code-generation.\n",
+              "type": "string"
+            },
+            "ip": {
+              "description": "IPv4 or IPv6 address to locate on /ip-geolocate, e.g. \"8.8.8.8\" or \"2001:4860:4860::8888\". A whole question containing one is also accepted.\n",
+              "type": "string"
+            },
+            "jurisdiction": {
+              "description": "State or country the company is registered in, on /corporate-registry. Optional.\n",
+              "type": "string"
+            },
+            "labels": {
+              "description": "Comma-separated candidate categories on /text-classify. When supplied, the answer must pick exactly one of these.\n",
+              "type": "string"
+            },
+            "language": {
+              "description": "Programming language on /code-generation and /code-review.\n",
+              "type": "string"
+            },
+            "length": {
+              "description": "Optional target length or style for /text-summarize, e.g. \"50 words\" or \"one sentence\".\n",
+              "type": "string"
+            },
+            "limit": {
+              "description": "How many papers to return on /academic-search. Defaults to 5.",
+              "maximum": 25,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "location": {
+              "description": "Place to forecast for, on /weather-forecast and /storm-alert, or to verify actual past conditions for, on /weather-forecast-verify. A place name (\"London\"), a \"lat,lon\" pair (\"51.5,-0.13\"), or the whole question (\"Will it rain in London tomorrow?\"), in which case the day or window and the aspect asked about are read from it too.\n",
+              "type": "string"
+            },
+            "max_results": {
+              "description": "How many web sources to draw on for /web-search (default 5) or /research-query (default 6).\n",
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "max_sources": {
+              "description": "How many web sources to draw on for /research-synthesis. Defaults to 10.",
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "message": {
+              "description": "Message to reply to on /chat-complete or /chatbot-conversation. Also accepted as an alias of text on /sentiment-analyze and /content-moderate.\n",
+              "type": "string"
+            },
+            "messages": {
+              "description": "/chat-complete and /chatbot-conversation alternative to message: an OpenAI-style JSON array of {role, content} turns. The last user turn is answered. Also accepted as history on /chatbot-conversation.\n",
+              "type": "string"
+            },
+            "mode": {
+              "description": "Travel mode on /route-eta. Only driving is reliably available on the public routing server this endpoint uses; other modes are refused honestly. Also accepted as profile or travel_mode.\n",
+              "type": "string"
+            },
+            "name": {
+              "description": "Person or entity name to screen on /sanctions-screening.",
+              "type": "string"
+            },
+            "origin": {
+              "description": "Starting place name or \"lat,lon\" on /route-eta. Also accepted as from, start, or source. On /delivery-window-verify, the shipment's origin place (optional; a whole route description in `route` is also accepted).\n",
+              "type": "string"
+            },
+            "output": {
+              "description": "The model answer to grade on /llm-output-evaluation.\n",
+              "type": "string"
+            },
+            "payment_method": {
+              "description": "Card network name or payment app name on /payment-method-verify. Alternative to card_number.\n",
+              "type": "string"
+            },
+            "price_chain": {
+              "description": "Free-text DefiLlama chain name for an on-chain token price lookup, e.g. \"ethereum\" (same namespace as tvl_chain, separate field since it's paired with `token` rather than used alone). Used by /crypto-price only, together with `token`.\n",
+              "type": "string"
+            },
+            "prompt": {
+              "description": "Instruction to write to on /text-generate.",
+              "type": "string"
+            },
+            "protocol": {
+              "description": "DefiLlama protocol slug, e.g. \"uniswap\". Used by /tvl only. Exactly one of protocol/tvl_chain required for /tvl.",
+              "type": "string"
+            },
+            "query": {
+              "description": "The whole question to answer on /web-search and /research-query, where it is the primary parameter rather than an alias. Also the general factual fraud question for /fraud-query, and a fallback alias for the main parameter on /ssl-check, /weather-forecast, /storm-alert, /ip-geolocate, /academic-search, /threat-intelligence, /package-status and /url-scan, so a caller that forwards the raw question under a generic name is still answered rather than refused.\n",
+              "type": "string"
+            },
+            "question": {
+              "description": "A question to answer on /telegraph-knowledge. Also accepted as query, q, text or input.\n",
+              "type": "string"
+            },
+            "reference": {
+              "description": "Optional expected answer on /llm-output-evaluation.\n",
+              "type": "string"
+            },
+            "result": {
+              "description": "The produced result to assess against task on /task-execution-quality. Also accepted as output or response.\n",
+              "type": "string"
+            },
+            "retailer": {
+              "description": "The retailer or store name on /return-policy-verify. Also accepted as store, merchant, or brand.\n",
+              "type": "string"
+            },
+            "review": {
+              "description": "Alias of text on /sentiment-analyze.",
+              "type": "string"
+            },
+            "route": {
+              "description": "Free-text route description on /delivery-window-verify, when origin and destination are not given separately.\n",
+              "type": "string"
+            },
+            "service": {
+              "description": "Service level (e.g. ground, express, overnight) on /delivery-window-verify. Optional.\n",
+              "type": "string"
+            },
+            "target": {
+              "description": "Target language, tone, or style on /language-generate. Also read from an instruction inside `text` when omitted.\n",
+              "type": "string"
+            },
+            "target_language": {
+              "description": "Alias of target on /language-translate. Also accepted as to, language, or langpair (\"en|de\").",
+              "type": "string"
+            },
+            "task": {
+              "description": "The original task description on /task-execution-quality. Also accepted as task_description or instructions. Used with result.\n",
+              "type": "string"
+            },
+            "team": {
+              "description": "Club or franchise name on /sports-score or /game-result.",
+              "type": "string"
+            },
+            "text": {
+              "description": "Text to classify on /text-classify, to transform on /language-generate, to summarize on /text-summarize, or to check on /grammar-spell-check and /ai-text-detect.\n",
+              "type": "string"
+            },
+            "text1": {
+              "description": "First text to compare on /semantic-similarity. Also accepted as a.",
+              "type": "string"
+            },
+            "text2": {
+              "description": "Second text to compare on /semantic-similarity. Also accepted as b.",
+              "type": "string"
+            },
+            "ticker": {
+              "description": "Stock ticker symbol, e.g. \"AAPL\". Required on /stock-price only.",
+              "type": "string"
+            },
+            "ticket": {
+              "description": "The described error or technical problem on /customer-ticket-resolution. Also accepted as description, issue, problem, error, or error_message.\n",
+              "type": "string"
+            },
+            "to": {
+              "description": "Target currency code or name on /currency-exchange, e.g. \"EUR\" or \"euros\". Also accepted as an alias of destination on /route-eta and of target_language on /language-translate.\n",
+              "type": "string"
+            },
+            "to_year": {
+              "description": "Latest publication year on /academic-search. Read from the question when omitted.",
+              "type": "integer"
+            },
+            "token": {
+              "description": "ERC-20 token contract address. Required on /token-holders. Optional on /wallet-balance (switches to ERC-20 balance instead of native). Required alongside price_chain on /crypto-price's chain_token mode.\n",
+              "pattern": "^0x[0-9a-fA-F]{40}$",
+              "type": "string"
+            },
+            "topic": {
+              "description": "Research topic to search for on /academic-search. A whole question is accepted, and a date range stated in it (\"since 2020\") is applied. On /news-headlines, the topic to list current headlines on.\n",
+              "type": "string"
+            },
+            "topic_mode": {
+              "description": "Which search index /web-search should use. Read from the wording of the question when omitted: current-events phrasing selects news and markets phrasing selects finance.\n",
+              "enum": [
+                "general",
+                "news",
+                "finance"
+              ],
+              "type": "string"
+            },
+            "tracking_number": {
+              "description": "Carrier shipment tracking number on /package-status. Also accepted as tracking, tracking_id, number, or package_id.\n",
+              "type": "string"
+            },
+            "tvl_chain": {
+              "description": "Free-text DefiLlama chain name, e.g. \"Ethereum\" (not restricted to the `chain` enum above — DefiLlama covers ~460 chains). Used by /tvl only. Exactly one of protocol/tvl_chain required for /tvl.\n",
+              "type": "string"
+            },
+            "tx_hash": {
+              "description": "EVM transaction hash to look up. Used by /check-tx and /crypto-transfer-verify.",
+              "pattern": "^0x[0-9a-fA-F]{64}$",
+              "type": "string"
+            },
+            "url": {
+              "description": "Full http or https URL to fetch on /content-extract, or to assess for safety on /url-scan. A whole question containing one is also accepted; also accepted as link, website or target on /url-scan.\n",
+              "type": "string"
+            },
+            "venue": {
+              "description": "Chain for /token-total-supply, same as chain (ethereum, eth-mainnet, or a chain id such as 1).\n",
+              "type": "string"
+            },
+            "wallet": {
+              "description": "Ethereum address assessed by /assess-wallet.",
+              "pattern": "^0x[0-9a-fA-F]{40}$",
+              "type": "string"
+            },
+            "when": {
+              "description": "Optional on /weather-forecast and /storm-alert. The day or window asked about: today, tonight, tomorrow, a weekday name, this weekend, this week, next week, or \"the next N days\"/\"the next N hours\". Overrides whatever the question itself implies.\n",
+              "type": "string"
+            },
+            "zip_code": {
+              "description": "Address or ZIP code on /carrier-serviceability. Also accepted as address.\n",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "id": "20260828",
+        "slug": "a1-preflight",
+        "name": "PREFLIGHT Infrastructure Signals",
+        "description": "Deterministic infrastructure and on-chain signals for autonomous systems, each read live at question time. TLS verification performs a real handshake with chain, hostname and validity checks; URL safety combines redirects, headers and threat feeds; DNS records come from two independent DoH resolvers; uptime and API health are probed with per-phase timings. Gas, balances, transactions, token supply and pinned-block reads come straight from public JSON-RPC on Ethereum, Base, Arbitrum, OP Mainnet, Polygon, BNB Chain, Avalanche, Linea, Scroll, Gnosis, zkSync Era, Blast, Mantle, Celo, Sonic and Unichain. Prices, TVL, FX, geolocation, papers and CVEs come from named public sources, cited in each answer.\n",
+        "wallet_address": "0x5c4b38cf6adb8c5a30242c3fc9124ce0197d2d52",
+        "input_schema": {
+          "description": "Each endpoint reads the one parameter it needs. Parameters are matched tolerantly: a hostname, URL, address or transaction hash is also recovered from a free-text question, so router-supplied phrasing still resolves.\n",
+          "properties": {
+            "address": {
+              "description": "0x-prefixed EVM address. Used by /wallet-balance.",
+              "type": "string"
+            },
+            "asset": {
+              "description": "Cryptocurrency ticker or name. Used by /crypto-price.",
+              "type": "string"
+            },
+            "block": {
+              "description": "Block number to read at. Used by /token-supply and /onchain-metric.",
+              "type": "integer"
+            },
+            "chain": {
+              "description": "EVM chain name or alias — ethereum, base, arbitrum, optimism, polygon, sepolia, base-sepolia. Defaults to ethereum. Used by the on-chain endpoints.\n",
+              "type": "string"
+            },
+            "cve_id": {
+              "description": "CVE identifier. Used by /cve.",
+              "type": "string"
+            },
+            "cve_query": {
+              "description": "The complete CVE_LOOKUP question for /cve, including the CVE identifier and every requested fact. Preserve the question verbatim rather than reducing it to the identifier.\n",
+              "type": "string"
+            },
+            "domain": {
+              "description": "Hostname, HTTPS URL, or host:port. Used by /ssl-check and /dns.",
+              "type": "string"
+            },
+            "hash": {
+              "description": "0x-prefixed transaction hash. Used by /tx-lookup.",
+              "type": "string"
+            },
+            "ip": {
+              "description": "IPv4 or IPv6 address to locate. Used by /ip-geolocation.",
+              "type": "string"
+            },
+            "pair": {
+              "description": "Currency pair or a question naming two currencies, as ISO 4217 codes or common names. Used by /fx-rate.\n",
+              "type": "string"
+            },
+            "protocol": {
+              "description": "DeFi protocol or chain name. Used by /tvl.",
+              "type": "string"
+            },
+            "query": {
+              "description": "The full question, verbatim. Accepted by every endpoint.",
+              "type": "string"
+            },
+            "symbol": {
+              "description": "Equity ticker or company name. Used by /stock-price.",
+              "type": "string"
+            },
+            "token": {
+              "description": "Token symbol or 0x contract address. Used by /token-supply.",
+              "type": "string"
+            },
+            "topic": {
+              "description": "The complete ACADEMIC_SEARCH question for /papers, including the research subject and any publication dates, result count, field constraints or requested ordering. Preserve the question verbatim rather than reducing it to keywords.\n",
+              "type": "string"
+            },
+            "type": {
+              "description": "DNS record type or types, comma-separated. Used by /dns.",
+              "type": "string"
+            },
+            "url": {
+              "description": "Absolute URL to scan. Used by /url-scan; a free-text URL_SCAN question may instead name one of the documented historical incidents.\n",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "id": "4433",
+        "slug": "livecert",
+        "name": "LiveCert — Sourced Answers for Agents",
+        "description": "Sourced answers for agents and apps across 44 intents, each read live from a named primary source so the caller can check it. Every answer opens with a one-sentence answer, then returns the values as fields, the source and the time it was checked. Compliance: sanctions screening of people, companies and wallets against the OFAC SDN and UN lists with near-match scores; company register records (status, company number, register, registered address and agent, parents) from GLEIF and SEC EDGAR; SEC filings with acceptance times and each 10-Q or 10-K's own XBRL figures; URL reputation from Cloudflare and Quad9 threat DNS, each source named. Research: question answering with every claim cited, web search with dated reports, fact checks with the source URL and evidence sentence, and academic, clinical and news search. Markets: prices and market data for coins, tokens and listed companies, 10-K revenue and earnings, exchange rates and macroeconomic prints (US CPI and unemployment from BLS, the federal funds target range from the New York Fed, euro-area HICP from Eurostat and ECB rates). On-chain: transfer verification with confirmations and the burned base fee, transaction and contract activity across EVM chains, wallet balances, gas, token holders, ERC-20 total supply and burned balance read at a pinned block from two RPCs, any named value read at a stated block height (receipt gas and Transfer amounts, storage slots, balances, block gas), and cross-chain messages. Security: live TLS certificates, URL scans, CVE records, DNS records compared across two resolvers, security reviews of packages, sites and code, and fraud signals. Weather: forecasts, current conditions and storm risk. Also translation, IP geolocation, event outcomes, text extraction, sentiment and classification. A language model (Groq gpt-oss-120b, with two fallbacks) writes chat replies, code and security reviews and requested writing, and chooses sentiment labels, fact-check ratings, news briefs and, with no market or record, recalled event outcomes; each field is checked before it is served, the request is passed as data, and a keyless answer or an honest unknown is given when no model answers. Everything else is computed, not generated.",
+        "wallet_address": "0xdad201ef02f5c1fbb8f9e931ae9b7c1bf493a39e",
+        "input_schema": {
+          "description": "Telegraph's engine fills the parameters a miner declares here and does not pass the rest of the question, so anything not declared is invisible. The query field is declared first because it carries the wording the structured fields cannot — an explicit start date, a time window, a wind threshold.",
+          "properties": {
+            "company": {
+              "description": "Company name or LEI for a register lookup, e.g. Tesla, Inc.",
+              "type": "string"
+            },
+            "company_number": {
+              "description": "The number a company is registered under, e.g. UK company number 01026167.",
+              "type": "string"
+            },
+            "country": {
+              "description": "Country or region for a macroeconomic statistic, e.g. US, euro area or Japan.",
+              "type": "string"
+            },
+            "days": {
+              "description": "Forecast span in days, converted to hours.",
+              "maximum": 16,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "domain": {
+              "description": "/ssl-check. Hostname to check. Accepts \"example.com\", \"https://example.com/path\", or \"example.com:8443\".",
+              "examples": [
+                "example.com",
+                "expired.badssl.com"
+              ],
+              "type": "string"
+            },
+            "forecast_days": {
+              "description": "Alias for days.",
+              "type": "integer"
+            },
+            "forecast_hours": {
+              "description": "Alias for hours.",
+              "type": "integer"
+            },
+            "form": {
+              "description": "SEC form type for a filing check, e.g. 10-Q, 10-K or 8-K.",
+              "type": "string"
+            },
+            "hours": {
+              "description": "/storm-alert and /weather-forecast. Forecast window in hours. Also read from the question itself, e.g. \"over the next 44 hours\".",
+              "maximum": 384,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "indicator": {
+              "description": "A macroeconomic statistic, e.g. CPI, unemployment, policy rate or GDP growth.",
+              "type": "string"
+            },
+            "ip": {
+              "description": "/ip-geolocate. IPv4 or IPv6 address.",
+              "examples": [
+                "8.8.8.8"
+              ],
+              "type": "string"
+            },
+            "lat": {
+              "description": "Alias for latitude.",
+              "type": "number"
+            },
+            "latitude": {
+              "description": "/storm-alert and /weather-forecast. Use with longitude when the question names coordinates rather than a place.",
+              "maximum": 90,
+              "minimum": -90,
+              "type": "number"
+            },
+            "location": {
+              "description": "/storm-alert and /weather-forecast. Place name, e.g. \"Chennai\" or \"Tokyo, Japan\".",
+              "examples": [
+                "Chennai",
+                "Tokyo, Japan"
+              ],
+              "type": "string"
+            },
+            "lon": {
+              "description": "Alias for longitude.",
+              "type": "number"
+            },
+            "longitude": {
+              "maximum": 180,
+              "minimum": -180,
+              "type": "number"
+            },
+            "name": {
+              "description": "Person or company to screen for sanctions, e.g. Ivan Petrov.",
+              "type": "string"
+            },
+            "q": {
+              "description": "Alias for query.",
+              "type": "string"
+            },
+            "query": {
+              "description": "The question, verbatim. Preferred over the structured fields: it carries detail they cannot, such as \"starting next Monday\", \"in 44 hours\", or \"flag winds above 25 knots\".",
+              "examples": [
+                "What is the storm risk at latitude 12.97, longitude 77.59 in 44 hours?",
+                "Can you analyze the TLS certificate chain and hostname match for api.github.com?"
+              ],
+              "type": "string"
+            },
+            "source_language": {
+              "description": "/translate. The language of the source text, when stated.",
+              "examples": [
+                "English"
+              ],
+              "type": "string"
+            },
+            "target_language": {
+              "description": "/translate. The language to translate into, by name or ISO 639-1 code.",
+              "examples": [
+                "Spanish",
+                "fr"
+              ],
+              "type": "string"
+            },
+            "text": {
+              "description": "/translate and /ai-detect. The text to translate, or the passage whose authorship is to be analysed, with or without quotes. Registration 260 declared no translation-shaped parameter and both scored epochs arrived with none filled — the engine fills only parameters a miner declares, so this field is what makes translation questions reach us.",
+              "examples": [
+                "The weather is beautiful today."
+              ],
+              "type": "string"
+            },
+            "topic": {
+              "description": "/papers. Research subject to search for, e.g. \"zero knowledge proofs\".",
+              "type": "string"
+            },
+            "wallet": {
+              "description": "Crypto wallet address to screen against OFAC's listed digital currency addresses.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "id": "20261117",
+        "slug": "takar-outcome",
+        "name": "Takar Outcome Resolver",
+        "description": "Resolves whether a real-world event happened, or who won it, from Wikipedia text, and refuses to guess. Every yes/no answer carries a sentence quoted word for word from the cited article, checked in code before it is returned; a quote or winner not found in the sources, or an event whose period has not ended, is answered \"unresolved\".",
+        "wallet_address": "0x39d2bae5eaeda9283535ddc98f1991c81ed5cd7e",
+        "input_schema": null
+      },
+      {
+        "id": "774921",
+        "slug": "verireceipt",
+        "name": "VeriReceipt Deterministic Oracle",
+        "description": "Zero-LLM deterministic provider with a SHA-256 receipt on every answer (raw_response_sha256: 64 lowercase hex characters, no 0x prefix, over the exact evidence bytes served at /receipts/{receipt_id}/raw): seven named EVM transaction chains, SEC EDGAR filing counts by company, exact form and inclusive filing-date period, DeFiLlama protocol or chain TVL, a canonical fixed-size Ethereum mainnet ETH/USDC execution quote, supported CAISO/NYISO/Elering grid prices, and finalized-root Ethereum validator effective balances. Unsupported, ambiguous or unavailable evidence is refused rather than guessed. Additional receipt-backed endpoints provide named-chain gas and balances, explicit-chain ERC20 supply, World Bank unemployment, DNS record observations, dated currency conversion, TLS certificate validity and DNS response status. Thirty-one further receipt-backed endpoints provide academic search, Chainlink reserve attestations, GitHub CI patch verification, SEC corporate registry lookup, cross-chain transaction-state agreement, CVE records, resolved prediction-market outcomes, market data, current FX rates, IP geolocation, pool liquidity, malware and threat-intelligence blocklist reads, news headlines and search, card BIN lookup, driving ETAs, sanctions screening, delivered-uptime reads, sports scores, US equity quotes, token holder counts, transaction risk reads, US airport disruption status, URL safety reads, EU VAT verification, CVE triage and weather forecasts. Declared source, scope and freshness limits apply.",
+        "wallet_address": "0xf76e6b0920e9332ff4410f6dd53f01722abc71a3",
+        "input_schema": null
+      },
+      {
+        "id": "1900999000",
+        "slug": "referenceforge-numeric",
+        "name": "ReferenceForge",
+        "description": "Original source-backed V2 subset. Weather accepts coordinates or exact 2026 Census US place name plus explicit state, with disclosed internal reference point. US NWS coverage and 1..48 hour forecast limits remain; no fuzzy place, street or global coverage. Source-backed checks and deterministic workflows with the input subsets described on individual endpoints. This release verifies alternate public sources for market data, holder counts, workflow runs, and study coverage.",
+        "wallet_address": "0xfec66e0f5c64296ff190edced88c781eeedfd9d3",
+        "input_schema": null
+      },
+      {
+        "id": "59003",
+        "slug": "event-poly-search",
+        "name": "Polymarket Public Search",
+        "description": "Polymarket public-search. Intent EVENT_OUTCOME_RESOLUTION.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "q": {
+              "default": "bitcoin",
+              "description": "Query",
+              "type": "string"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "7456",
+        "slug": "tradewire-event-outcome-resolution",
+        "name": "TradeWire Event Outcome Resolution",
+        "description": "Resolve the settled outcome of a named public event, read live at request time from English Wikipedia. Send the event, for example a match, an election or a tournament final. The miner finds the best-matching Wikipedia article, reads its summary and returns the outcome, the winner, the final score or the result, with the source article link. English Wikipedia is CC BY-SA 4.0, which permits commercial use and redistribution with attribution and share-alike, so the credit travels in the answer. No API key. Serves the EVENT_OUTCOME_RESOLUTION intent.\n",
+        "wallet_address": "0x8b224783fe5b3c52b7db0cb9b1754f8812b75287",
+        "input_schema": {
+          "properties": {
+            "event": {
+              "description": "The public event to resolve, for example \"2024 UEFA Champions League final\".",
+              "type": "string"
+            },
+            "query": {
+              "description": "The event to resolve, an alias of event.",
+              "type": "string"
+            },
+            "question": {
+              "description": "The full natural-language question, verbatim, for example \"Who won the 2022 FIFA World Cup final?\". The miner reads the event from it.\n",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "id": "73056",
+        "slug": "zk-event-oracle",
+        "name": "ZK Event Outcome Oracle",
+        "description": "Resolve a specific settled public event from source records. Named finals, US presidential elections and Super Bowls are read from live English Wikipedia infoboxes and explicit outcome sentences, with revision attribution. Formula 1 2024 winners and dates must agree with a pinned F1DB archive (CC BY 4.0). German league fixtures in 2022-23 through 2025-26 use pinned Openfootball full-time scores (CC0) only when independently checked against OpenLigaDB; the combined alias database is ODbL 1.0. Give both teams and an ISO date for fixtures. Winner questions and explicit Did X win questions are supported. Unsupported, ambiguous, future or conflicting records return unresolved. No generated event facts. Archive checks are timestamped and not live polling.",
+        "wallet_address": "0x8b224783fe5b3c52b7db0cb9b1754f8812b75287",
+        "input_schema": {
+          "properties": {
+            "event": {
+              "description": "The original event or question, including participants and year or ISO date.",
+              "maxLength": 256,
+              "type": "string"
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "190013",
+        "slug": "event-jolpica-f1",
+        "name": "Event Jolpica F1",
+        "description": "Semantic V2 miner for EVENT_OUTCOME_RESOLUTION. Resolves objective real-world event outcomes for prediction markets and conditional contracts using quorum oracles. Capture pin answers: Must state the settled outcome/result of the event asked.",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {},
+          "required": [],
+          "type": "object"
+        }
+      },
+      {
+        "id": "190015",
+        "slug": "event-nhl-schedule",
+        "name": "Event NHL Schedule",
+        "description": "Semantic V2 miner for EVENT_OUTCOME_RESOLUTION. Resolves objective real-world event outcomes for prediction markets and conditional contracts using quorum oracles. Capture pin answers: Must state the settled outcome/result of the event asked.",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {},
+          "required": [],
+          "type": "object"
+        }
+      },
+      {
+        "id": "59010",
+        "slug": "event-poly-search-ai",
+        "name": "Polymarket Search AI",
+        "description": "Polymarket search for AI. Intent EVENT_OUTCOME_RESOLUTION.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "q": {
+              "default": "AI",
+              "description": "Query",
+              "type": "string"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "83159274",
+        "slug": "telegraph-intent-miner",
+        "name": "TelegraphIntent",
+        "description": "One miner serving 33 Telegraph intents. FRAUD_RISK_GENERAL fuses IP reputation, Tor/VPN exposure, domain and phishing-feed reputation, card-BIN metadata and behavioural pattern rules into a graded risk level and abstains honestly when evidence is insufficient. FACT_CHECK_GENERAL checks a specific factual claim against multiple independent sources and returns a verdict with cited sources, abstaining when evidence is insufficient. CONTRACT_OBLIGATION_AUDIT_GENERAL extracts a contract's obligations, judges compliance and cites only clause wording verified to occur verbatim in the supplied contract (accepts the text or a link to an HTML or PDF). IP_GEOLOCATION_GENERAL locates an IP address by consensus of several keyless geolocation providers. EMAIL_SECURITY_GENERAL reports whether a DNS lookup of a given record type for a mail domain succeeds (DNS status NOERROR). URL_SAFE_GENERAL checks a URL against OpenPhish's live phishing feed and Cloudflare's malware and phishing DNS filter, counting the sources that flag it. MALWARE_DETECTION_HASH reports whether a file hash (MD5, SHA-1 or SHA-256), domain or IP address is flagged as malicious by CIRCL hashlookup, Team Cymru's malware hash registry, AlienVault OTX, OpenPhish and Cloudflare's security DNS. SANCTIONS_SCREENING_MATCH_GENERAL screens a name against OFAC's SDN and consolidated sanctions lists with fuzzy matching. CRYPTO_PRICE_USD returns a crypto asset's current dollar price as the consensus of several public exchanges. REGULATORY_FILING_MONITOR_GENERAL counts and lists SEC EDGAR filings in a period. CORPORATE_REGISTRY_LOOKUP_GENERAL looks a company up in GLEIF's LEI registry. SSL_VERIFICATION_CERT checks a host's TLS certificate with a real handshake. CVE_LOOKUP_CVSS returns a CVE's CVSS score and details from NVD. VULNERABILITY_TRIAGE_GENERAL returns a CVE's NVD CVSS base score. WEATHER_CHECK_TEMPERATURE returns a place's current air temperature in Celsius. WEATHER_FORECAST_GENERAL returns a place's forecast high, low, rain chance and condition. GAS_PRICE_GENERAL returns an EVM chain's gas price in gwei and the cost of a transfer. URL_SCAN_VERDICT says whether a URL is safe to visit. THREAT_INTELLIGENCE_INDICATOR reports whether an IP, domain or hash is flagged in public threat feeds. CURRENCY_EXCHANGE_CONVERT converts an amount between two currencies. FX_NOW_CAD returns the current USD/CAD exchange rate. FX_NOW_EUR returns the current USD/EUR exchange rate. FX_NOW_SEK returns the current USD/SEK exchange rate. DNS_RECORD_LOOKUP_GENERAL reports whether a name has a record of a given DNS type. TVL_LOOKUP_GENERAL returns the total value locked of a DeFi protocol or chain. WEB_SEARCH_GENERAL answers current-information queries from live web sources, citing them. CHAT_COMPLETION_GENERAL replies to general questions and conversation. RESEARCH_QUERY_GENERAL answers research questions with cited scholarly sources. SECURITY_REVIEW_GENERAL reviews code, dependencies, contracts, repositories and websites for security findings. EVENT_OUTCOME_RESOLUTION_GENERAL resolves named real-world events from settled markets and cited evidence. TOKEN_HOLDER_COUNT_GENERAL returns the number of addresses holding a token. SLA_COMPLIANCE_GENERAL returns a service's published uptime for a period and whether it met a stated target. RETURN_POLICY_VERIFY_GENERAL reads a retailer's return window and conditions from its own policy page.",
+        "wallet_address": "0xb0a5342bbf221c34a049f65ff4289fd02bfe2749",
+        "input_schema": null
+      },
+      {
+        "id": "29303",
+        "slug": "event-manifold-resolution",
+        "name": "Manifold Market Resolution",
+        "description": "Manifold resolved market → resolved_yes. Intent EVENT_OUTCOME_RESOLUTION.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "id": {
+              "default": "ICnSIPIgZO",
+              "description": "id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "73157",
+        "slug": "zk-event-classify",
+        "name": "ZK Source-Checked Event Results",
+        "description": "Resolve specific settled public-event questions from public source records. Formula One 2020–2025 race winners and championship winners use a pinned F1DB archive independently checked against Wikipedia. Race classifications, placing, top-N, points and disqualification questions only use independently agreeing F1DB/Wikipedia entries; full results explicitly disclose unconfirmed entries. German league fixtures require both teams and a complete date. Explicit full-time conditions use Openfootball scores checked against OpenLigaDB; equality at integer goal lines abstains. Named finals, Super Bowls and US presidential elections have bounded Wikipedia winner extraction. Unsupported, future, ambiguous and conflicting questions abstain. No generated event facts.",
+        "wallet_address": "0x8b224783fe5b3c52b7db0cb9b1754f8812b75287",
+        "input_schema": {
+          "properties": {
+            "event": {
+              "description": "Copy the complete canonical event string verbatim, preserving the date, participants and proposition polarity.",
+              "maxLength": 300,
+              "type": "string"
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "190010",
+        "slug": "event-espn-mlb-scoreboard",
+        "name": "Event Espn MLB Scoreboard",
+        "description": "Semantic V2 miner for EVENT_OUTCOME_RESOLUTION. Resolves objective real-world event outcomes for prediction markets and conditional contracts using quorum oracles. Capture pin answers: Must state the settled outcome/result of the event asked.",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "dates": {
+              "default": "20241030",
+              "description": "dates",
+              "type": "string"
+            }
+          },
+          "required": [
+            "dates"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "190016",
+        "slug": "event-openligadb-bl1",
+        "name": "Event Openligadb Bl1",
+        "description": "Semantic V2 miner for EVENT_OUTCOME_RESOLUTION. Resolves objective real-world event outcomes for prediction markets and conditional contracts using quorum oracles. Capture pin answers: Must state the settled outcome/result of the event asked.",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {},
+          "required": [],
+          "type": "object"
+        }
+      },
+      {
+        "id": "59008",
+        "slug": "event-poly-search-nba",
+        "name": "Polymarket Search nba",
+        "description": "Polymarket search for nba. Intent EVENT_OUTCOME_RESOLUTION.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "q": {
+              "default": "nba",
+              "description": "Query",
+              "type": "string"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "752052",
+        "slug": "zk-event-final-g52",
+        "name": "ZK Source-Verified Event Outcome",
+        "description": "Resolve supported public event propositions from fetched, attributed public records. The deployed TradeWire worker includes eight cross-checked 2024/2025 Wimbledon and French Open singles finals and its earlier verified archives. Preserve the complete question, edition, participants and conditions. Unknown events or unsupported conditions return unresolved, never a fabricated NO. Serves EVENT_OUTCOME_RESOLUTION_GENERAL. No API key required.\n",
+        "wallet_address": "0x8b224783fe5b3c52b7db0cb9b1754f8812b75287",
+        "input_schema": {
+          "properties": {
+            "event": {
+              "description": "The complete event or question to resolve, without paraphrasing.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "752075",
+        "slug": "zk-event-id-g75",
+        "name": "ZK Source-Checked Event Identity",
+        "description": "Resolve supported complete public event propositions with source evidence. Preserve every participant, edition, date, negation and condition. Namespaced openligadb:<matchID> identifiers resolve only independently corroborated archived finished Bundesliga fixtures. Unknown or conflicting identities return HTTP 404 and unresolved, never an invented NO.",
+        "wallet_address": "0x8b224783fe5b3c52b7db0cb9b1754f8812b75287",
+        "input_schema": {
+          "properties": {
+            "event": {
+              "description": "Complete original event input, including every criterion and negation.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "73158",
+        "slug": "zk-event-macro",
+        "name": "ZK Source-Checked Event and Fed Outcomes",
+        "description": "Resolve dated public event outcomes from source records. Adds 52 archived 2020–2026 FOMC target-rate decisions read from official Federal Reserve statements and checked against Wikipedia. Dated cut/raise/hold, single-meeting and passive wording, and exact/at-least/at-most basis-point predicates preserve negation; unknown dates, unsupported compound conditions and future decisions abstain. This is an observed event outcome, not a prediction-market platform settlement. F1 and football sources/limits are preserved from the existing worker. No generated facts.",
+        "wallet_address": "0x8b224783fe5b3c52b7db0cb9b1754f8812b75287",
+        "input_schema": {
+          "properties": {
+            "event": {
+              "description": "Copy the complete canonical event string verbatim, preserving the date, participants and proposition polarity.",
+              "maxLength": 256,
+              "type": "string"
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "190011",
+        "slug": "event-espn-nba-scoreboard",
+        "name": "Event Espn NBA Scoreboard",
+        "description": "Semantic V2 miner for EVENT_OUTCOME_RESOLUTION. Resolves objective real-world event outcomes for prediction markets and conditional contracts using quorum oracles. Capture pin answers: Must state the settled outcome/result of the event asked.",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "dates": {
+              "default": "20240617",
+              "description": "dates",
+              "type": "string"
+            }
+          },
+          "required": [
+            "dates"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "29302",
+        "slug": "event-kalshi-result",
+        "name": "Kalshi Market Result",
+        "description": "Kalshi settled/finalized/determined market result → resolved_yes. Intent EVENT_OUTCOME_RESOLUTION. Pin a market ticker with result yes|no.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "ticker": {
+              "default": "KXWTAMATCH-26SEP27LAZJIA-LAZ",
+              "description": "Kalshi market ticker",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ticker"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "190014",
+        "slug": "event-mlb-statsapi",
+        "name": "Event MLB Statsapi",
+        "description": "Semantic V2 miner for EVENT_OUTCOME_RESOLUTION. Resolves objective real-world event outcomes for prediction markets and conditional contracts using quorum oracles. Capture pin answers: Must state the settled outcome/result of the event asked.",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "date": {
+              "default": "2024-10-30",
+              "description": "date",
+              "type": "string"
+            },
+            "hydrate": {
+              "default": "decisions",
+              "description": "hydrate",
+              "type": "string"
+            },
+            "sportId": {
+              "default": "1",
+              "description": "sportId",
+              "type": "string"
+            }
+          },
+          "required": [
+            "sportId",
+            "date",
+            "hydrate"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "59002",
+        "slug": "event-poly-markets",
+        "name": "Polymarket Active Markets",
+        "description": "Polymarket gamma active markets. Intent EVENT_OUTCOME_RESOLUTION.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "active": {
+              "default": "true",
+              "description": "Active",
+              "type": "string"
+            },
+            "limit": {
+              "default": "5",
+              "description": "Limit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "limit",
+            "active"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "59006",
+        "slug": "event-poly-search-election",
+        "name": "Polymarket Search election",
+        "description": "Polymarket search for election. Intent EVENT_OUTCOME_RESOLUTION.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "q": {
+              "default": "election",
+              "description": "Query",
+              "type": "string"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "59005",
+        "slug": "event-poly-series",
+        "name": "Polymarket Series",
+        "description": "Polymarket series list. Intent EVENT_OUTCOME_RESOLUTION.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "limit": {
+              "default": "5",
+              "description": "Limit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "limit"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "190012",
+        "slug": "event-espn-nfl-scoreboard",
+        "name": "Event Espn NFL Scoreboard",
+        "description": "Semantic V2 miner for EVENT_OUTCOME_RESOLUTION. Resolves objective real-world event outcomes for prediction markets and conditional contracts using quorum oracles. Capture pin answers: Must state the settled outcome/result of the event asked.",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "dates": {
+              "default": "20240211",
+              "description": "dates",
+              "type": "string"
+            }
+          },
+          "required": [
+            "dates"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "190123",
+        "slug": "event-manifold",
+        "name": "Event Manifold",
+        "description": "Semantic V2 miner for EVENT_OUTCOME_RESOLUTION. Resolves objective real-world event outcomes for prediction markets and conditional contracts using quorum oracles. Capture pin answers: Must state the settled result of the real-world event asked (who won / final outcome).",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "filter": {
+              "default": "resolved",
+              "description": "filter",
+              "type": "string"
+            },
+            "limit": {
+              "default": "5",
+              "description": "limit",
+              "type": "string"
+            },
+            "term": {
+              "default": "presidential election",
+              "description": "term",
+              "type": "string"
+            }
+          },
+          "required": [
+            "term",
+            "filter",
+            "limit"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "29301",
+        "slug": "event-poly-clob-winner",
+        "name": "Polymarket Outcome Resolve",
+        "description": "Polymarket gamma: resolved_yes for pinned market_id from outcomePrices. Intent EVENT_OUTCOME_RESOLUTION.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "market_id": {
+              "default": "19",
+              "description": "market_id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "market_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "190017",
+        "slug": "event-poly-closed",
+        "name": "Event Poly Closed",
+        "description": "Semantic V2 miner for EVENT_OUTCOME_RESOLUTION. Resolves objective real-world event outcomes for prediction markets and conditional contracts using quorum oracles. Capture pin answers: Must state the settled outcome/result of the event asked.",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "closed": {
+              "default": "true",
+              "description": "closed",
+              "type": "string"
+            },
+            "limit": {
+              "default": "5",
+              "description": "limit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "closed",
+            "limit"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "59001",
+        "slug": "event-poly-events",
+        "name": "Polymarket Active Events",
+        "description": "Polymarket gamma active events. Intent EVENT_OUTCOME_RESOLUTION.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "active": {
+              "default": "true",
+              "description": "Active",
+              "type": "string"
+            },
+            "limit": {
+              "default": "5",
+              "description": "Limit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "limit",
+            "active"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "59011",
+        "slug": "event-poly-market-by-id",
+        "name": "Polymarket Market By Id",
+        "description": "Polymarket gamma GET /markets/{id} for a settled/closed market. Intent EVENT_OUTCOME_RESOLUTION — pinned question is market id.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "id": {
+              "default": "12",
+              "description": "Market id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "190018",
+        "slug": "event-poly-markets-closed",
+        "name": "Event Poly Markets Closed",
+        "description": "Semantic V2 miner for EVENT_OUTCOME_RESOLUTION. Resolves objective real-world event outcomes for prediction markets and conditional contracts using quorum oracles. Capture pin answers: Must state the settled outcome/result of the event asked.",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "closed": {
+              "default": "true",
+              "description": "closed",
+              "type": "string"
+            },
+            "limit": {
+              "default": "5",
+              "description": "limit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "closed",
+            "limit"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "59009",
+        "slug": "event-poly-search-eth",
+        "name": "Polymarket Search ethereum",
+        "description": "Polymarket search for ethereum. Intent EVENT_OUTCOME_RESOLUTION.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "q": {
+              "default": "ethereum",
+              "description": "Query",
+              "type": "string"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "59007",
+        "slug": "event-poly-search-fed",
+        "name": "Polymarket Search fed",
+        "description": "Polymarket search for fed. Intent EVENT_OUTCOME_RESOLUTION.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "q": {
+              "default": "fed",
+              "description": "Query",
+              "type": "string"
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "59004",
+        "slug": "event-poly-tags",
+        "name": "Polymarket Tags",
+        "description": "Polymarket tags catalog. Intent EVENT_OUTCOME_RESOLUTION.\n",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "limit": {
+              "default": "10",
+              "description": "Limit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "limit"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "190019",
+        "slug": "event-thesportsdb-last",
+        "name": "Event Thesportsdb Last",
+        "description": "Semantic V2 miner for EVENT_OUTCOME_RESOLUTION. Resolves objective real-world event outcomes for prediction markets and conditional contracts using quorum oracles. Capture pin answers: Must state the settled outcome/result of the event asked.",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "id": {
+              "default": "133602",
+              "description": "id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "190020",
+        "slug": "event-thesportsdb-lookup",
+        "name": "Event Thesportsdb Lookup",
+        "description": "Semantic V2 miner for EVENT_OUTCOME_RESOLUTION. Resolves objective real-world event outcomes for prediction markets and conditional contracts using quorum oracles. Capture pin answers: Must state the settled outcome/result of the event asked.",
+        "wallet_address": "0xbd6f696096cceeaff7406d802ba04500eeaf6976",
+        "input_schema": {
+          "properties": {
+            "id": {
+              "default": "1036723",
+              "description": "id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "752053",
+        "slug": "zk-event-sets-g53",
+        "name": "ZK Source-Verified Event and Set Outcomes",
+        "description": "Resolve supported complete public event propositions from fetched and attributed source records. Covers existing verified event archives and eight 2024/2025 Wimbledon/French Open singles finals with full-final set counts, straight sets and individual set winners. Preserve edition, division, finalists, negation and all conditions. Unsupported events or conditions return unresolved.\n",
+        "wallet_address": "0x8b224783fe5b3c52b7db0cb9b1754f8812b75287",
+        "input_schema": {
+          "properties": {
+            "event": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "id": "752076",
+        "slug": "zk-race-id",
+        "name": "ZK Source-Checked Race and Fixture Identity",
+        "description": "Resolve complete supported public event propositions from independently corroborated records. Preserve participants, edition, date, negation and every condition. Explicit f1db:<year>:<round>:race IDs identify archived finished Formula One races; openligadb:<matchID> IDs identify corroborated Bundesliga fixtures. Unknown, unsupported and conflicting identities return HTTP 404 and unresolved, never a guessed NO. Dates are local event days, not market settlement timestamps. No API key and no model-generated factual answers.",
+        "wallet_address": "0x8b224783fe5b3c52b7db0cb9b1754f8812b75287",
+        "input_schema": {
+          "properties": {
+            "event": {
+              "description": "Complete original event input with every criterion.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "type": "object"
+        }
+      }
+    ],
+    "routed": {
+      "intent": "EVENT_OUTCOME_RESOLUTION_GENERAL",
+      "params": {
+        "event": "Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?"
+      },
+      "ok": true,
+      "fields": {
+        "event": "Did Dallas win the Dallas vs Denver Pro Basketball game originally scheduled for Nov 24, 2026?",
+        "outcome": "no",
+        "resolved_yes": false,
+        "winner": "Denver",
+        "resolved_at": "Wed, 25 Nov 2026 03:00:00 GMT",
+        "sources": [
+          "https://en.wikipedia.org/wiki/2024%E2%80%9325_NBA_season"
+        ]
+      },
+      "fieldStatus": {
+        "event": "ok",
+        "outcome": "ok",
+        "resolved_yes": "ok",
+        "winner": "ok",
+        "resolved_at": "ok",
+        "sources": "ok"
+      },
+      "latencyMs": 45447,
+      "minerId": "9002",
+      "minerName": "TxLens",
+      "receipt": {
+        "hash": "0x6f736817cfc672e2b6b6c1fba6396f991da0e9a0a4c62fd7a8d86bd70ea4c4e0",
+        "rail": "escrow",
+        "payer": "0x29476125898638c8634a97fdca8994530e8c9055",
+        "miner": "6121",
+        "amountUsd": 0.01,
+        "epochId": 54,
+        "settlement": "epoch"
+      },
+      "costUsd": 0.01,
+      "servedRank": 1,
+      "signalHash": "0xe6891d51c26b26778f0e2655447bb4e6ccb917d2aa6648a2c96797fc28324740"
+    }
+  },
+  "expected": {
+    "id": "gRjkzMqM",
+    "sha256": "6761f1b7150c40c2e2b639061f305a0cf331a48f186a692c49d936c69fbaa5fa",
+    "decision": "REVIEW",
+    "outcome": null,
+    "decisionRule": "fewer than 2 sourced answers",
+    "anchor": {
+      "cluster": "devnet",
+      "anchored": true,
+      "memoText": "Truvian Resolve sha256:6761f1b7150c40c2e2b639061f305a0cf331a48f186a692c49d936c69fbaa5fa",
+      "wallet": "A4X5JKBCLobAY5MeDXkwiRV5Hr7Uu4vUhzHQczwXMBnz",
+      "signature": "2FPepq9GJRRCxtPGd78dFMWUwTx6x7smzNkbhoW3eD4LTYyAbtP8n7iiW1vNz1CWBkRNe5MvBZ1X94mKSJMH6A47",
+      "explorer": "https://explorer.solana.com/tx/2FPepq9GJRRCxtPGd78dFMWUwTx6x7smzNkbhoW3eD4LTYyAbtP8n7iiW1vNz1CWBkRNe5MvBZ1X94mKSJMH6A47?cluster=devnet",
+      "slot": 526137391
+    }
+  }
+}

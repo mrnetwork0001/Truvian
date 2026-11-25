@@ -1,0 +1,40 @@
+{
+  "request": {
+    "source": "kalshi",
+    "market": "KXFEDDECISION-26DEC-H0"
+  },
+  "recorded": {
+    "now": [
+      "2026-11-25T11:13:10.279Z"
+    ],
+    "pinned": {},
+    "market": {
+      "source": "kalshi",
+      "id": "KXFEDDECISION-26DEC-H0",
+      "url": "https://api.elections.kalshi.com/trade-api/v2/markets/KXFEDDECISION-26DEC-H0",
+      "question": "Fed decision in Dec 2026?: Will the Federal Reserve Hike rates by 0bps at their December 2026 meeting?",
+      "rules": "If the Federal Reserve does a Hike of 0bps on December 09, 2026, then the market resolves to Yes. The outcomes are mutually exclusive: at most one can resolve to Yes. For example, a 50-basis-point hike resolves “Hike   25 bps” to Yes and “Hike 25 bps” to No.\n\nIf the scheduled FOMC meeting is canceled and does not occur on its scheduled date, “Fed maintains rate” resolves to Yes and all other outcomes resolve to No.",
+      "closeTime": "2026-12-09T18:59:00Z",
+      "status": "active",
+      "settled": null,
+      "settledAt": null,
+      "event": "Will the Federal Reserve Hike rates by 0bps at their December 2026 meeting?"
+    }
+  },
+  "expected": {
+    "id": "Zt4j0DMy",
+    "sha256": "d3378e34d40bf6d070351e2ff905d7c50d24aa5f5559c9e5a6923624e27cb7cf",
+    "decision": "TOO_EARLY",
+    "outcome": null,
+    "decisionRule": "the market closes in the future and has not settled",
+    "anchor": {
+      "cluster": "devnet",
+      "anchored": true,
+      "memoText": "Truvian Resolve sha256:d3378e34d40bf6d070351e2ff905d7c50d24aa5f5559c9e5a6923624e27cb7cf",
+      "wallet": "A4X5JKBCLobAY5MeDXkwiRV5Hr7Uu4vUhzHQczwXMBnz",
+      "signature": "3xYFQk8V2J1Y5PsZaYfFN9fAzwYbytcGQw99q2sj4cNpYREiZebhoMyH7sso9fEHfiPA4qak4vW65UzfQhoXgfGS",
+      "explorer": "https://explorer.solana.com/tx/3xYFQk8V2J1Y5PsZaYfFN9fAzwYbytcGQw99q2sj4cNpYREiZebhoMyH7sso9fEHfiPA4qak4vW65UzfQhoXgfGS?cluster=devnet",
+      "slot": 526130722
+    }
+  }
+}

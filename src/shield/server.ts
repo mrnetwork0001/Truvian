@@ -41,6 +41,7 @@ import { normalizeHoldingsRequest, runHoldings, type HoldingsRequest } from './h
 import { normalizeSettlementRequest, runSettlement, SolanaReadError, type SettlementRequest } from './settlement.js';
 import { createMemoStore, memoSigner, signMemo, verifyMemo } from './memo.js';
 import { TokenFactsError } from './tokenFacts.js';
+import { registerResolveRoutes } from './resolveRoutes.js';
 import { payerAddress, payerUsdcBalance } from './payer.js';
 import {
   buildRequirements,
@@ -703,6 +704,31 @@ export function buildShieldServer() {
   app.get('/preflight', async (_req, reply) => {
     if (await sendPublicFile(reply, 'preflight.html')) return reply;
     return reply.type('text/html; charset=utf-8').send(FALLBACK_HTML);
+  });
+
+  // Truvian Resolve: prediction-market resolution desk (./resolveRoutes.ts).
+  registerResolveRoutes(app, {
+    admit,
+    settle: async (admission, reply) => {
+      if (!admission.paid) return null;
+      const settlement = await settlePayment(admission.paid.payment, admission.paid.requirements);
+      reply.header('X-PAYMENT-RESPONSE', encodeSettlement(settlement));
+      if (settlement.success) {
+        stats.earnedUsd = Number((stats.earnedUsd + Number(admission.paid.requirements.maxAmountRequired) / 1_000_000).toFixed(6));
+        stats.paidChecks += 1;
+      } else {
+        app.log.warn({ reason: settlement.reason }, 'x402 settlement failed after work was delivered');
+      }
+      return { success: settlement.success, transaction: settlement.transaction ?? null, reason: settlement.reason };
+    },
+    recordSpend: (usd, requests) => {
+      stats.telegraphRequests += requests;
+      stats.paidUsd = Number((stats.paidUsd + usd).toFixed(6));
+      limiter.recordSpend(usd);
+    },
+    checksLeft: (ip) => limiter.peek(ip).remainingForIp,
+    save,
+    sendPage: (reply, file) => sendPublicFile(reply, file),
   });
 
   app.get('/*', async (req, reply) => {

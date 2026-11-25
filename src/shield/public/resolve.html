@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Truvian Resolve · Independent prediction-market resolution</title>
+<meta name="description" content="Resolve a prediction market from independent Telegraph miners, compare them with each other and with the venue's settlement, and sign the decision, anchored on Solana devnet.">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:title" content="Truvian Resolve · Independent prediction-market resolution">
+<meta property="og:description" content="Independent Telegraph miners, checked against each other and the venue: RESOLVED, DISPUTED, TOO EARLY or REVIEW, signed and anchored on Solana.">
+<meta property="og:image" content="https://truvian.xyz/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="./style.css">
+<style>
+  .decision { border-left: 4px solid var(--edge); padding: 1rem 1.1rem; border-radius: 6px; background: var(--panel); }
+  .decision .word { font-size: 1.6rem; font-weight: 700; letter-spacing: .04em; }
+  .decision .rule { color: var(--muted); font-size: .82rem; margin-top: .3rem; }
+  .decision.RESOLVED { border-left-color: var(--safe); background: rgba(83,192,127,.07); } .decision.RESOLVED .word { color: var(--safe); }
+  .decision.REVIEW, .decision.TOO_EARLY { border-left-color: var(--warn); background: rgba(224,168,75,.07); } .decision.REVIEW .word, .decision.TOO_EARLY .word { color: var(--warn); }
+  .decision.DISPUTED { border-left-color: var(--block); background: rgba(224,92,92,.07); } .decision.DISPUTED .word { color: var(--block); }
+  .costline { display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; margin: .9rem 0 0; font-size: .8rem; color: var(--muted); }
+  .costline b { color: var(--text); font-weight: 600; }
+  table.grid { width: 100%; border-collapse: collapse; font-size: .8rem; margin-top: .6rem; }
+  table.grid th, table.grid td { text-align: left; padding: .5rem .55rem; border-bottom: 1px solid var(--edge-soft); vertical-align: top; }
+  table.grid th { color: var(--faint); font-weight: 500; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
+  .sev { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; padding: .12rem .4rem; border-radius: 4px; border: 1px solid currentColor; white-space: nowrap; }
+  .sev.block, .sev.failed, .sev.inconsistent { color: var(--block); } .sev.review, .sev.unsupported { color: var(--warn); } .sev.pass, .sev.decisive { color: var(--safe); } .sev.info, .sev.abstained, .sev.duplicate { color: var(--neutral-chip); }
+  .detail { color: var(--muted); }
+  .mono { font-family: var(--mono); word-break: break-all; }
+  .pending { color: var(--faint); }
+  .market { padding: .8rem 1rem; border: 1px solid var(--edge); border-radius: 6px; background: var(--panel); font-size: .82rem; }
+  .market .q { font-size: 1rem; color: var(--text); font-weight: 600; }
+  .market .row { margin-top: .35rem; color: var(--muted); }
+  .market .row b { color: var(--text); font-weight: 500; }
+  .sigbox { margin-top: 1rem; padding: .8rem 1rem; border: 1px solid var(--edge); border-radius: 6px; background: var(--panel); font-size: .78rem; }
+  .sigbox .row { display: flex; gap: .6rem; margin: .25rem 0; flex-wrap: wrap; }
+  .sigbox .k { color: var(--faint); min-width: 7rem; }
+  .actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .7rem; }
+  .actions button, .actions a.btnlike { background: var(--panel-2); border: 1px solid var(--edge); color: var(--text); font: inherit; font-size: .78rem; padding: .4rem .7rem; border-radius: 5px; cursor: pointer; text-decoration: none; }
+  .note-testnet { font-size: .74rem; color: var(--faint); margin-top: .6rem; }
+  .recent li { font-size: .78rem; margin: .3rem 0; color: var(--muted); }
+  .hidden { display: none !important; }
+  .srcs a { display: block; font-size: .72rem; color: var(--muted); word-break: break-all; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="site-header">
+    <div class="header-left">
+      <h1 class="brand"><a href="/"><img class="brand-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a></h1>
+      <p class="tagline">resolve a prediction market from independent Telegraph miners, checked against each other and the venue, signed and anchored on Solana</p>
+    </div>
+    <div class="header-right">
+      <div class="badge-row">
+        <span class="badge">Telegraph Season II · Apps &amp; Agents</span>
+        <a href="/preflight">token desks</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <a href="https://github.com/mrnetwork0001/Truvian/blob/main/src/shield/resolve.ts" target="_blank" rel="noopener">the rules</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="check-section" aria-labelledby="rs-heading">
+      <h2 id="rs-heading" class="section-label">Resolve a market</h2>
+      <p class="section-note">Truvian Resolve reads the market from its venue, then buys its outcome from up to three independent miners serving <span class="mono">EVENT_OUTCOME_RESOLUTION_GENERAL</span>: the node's routed pick and up to two specialists pinned by id, one per operator, never a miner that reads the same venue. An answer counts only with a source on the event. <b>RESOLVED</b> needs two that agree, and agree with the venue's settlement; sourced answers that disagree are <b>DISPUTED</b>; fewer than two is <b>REVIEW</b>; a market still open is <b>TOO EARLY</b> and buys nothing. The memo is signed, and its digest is written to Solana devnet with the Memo program.</p>
+
+      <div class="presets" aria-label="Fixtures">
+        <span class="presets-label">Try one:</span>
+        <span id="fixtures"></span>
+      </div>
+
+      <form id="rs-form" novalidate>
+        <div class="field">
+          <label for="source">venue</label>
+          <select id="source" name="source">
+            <option value="polymarket" selected>Polymarket (market id or slug)</option>
+            <option value="kalshi">Kalshi (market ticker)</option>
+            <option value="manual">Manual (question, rule, close time)</option>
+          </select>
+        </div>
+        <div class="field wide v-market">
+          <label for="market">market</label>
+          <input id="market" name="market" type="text" placeholder="253591 or KXNBAGAME-26NOV24DALDEN-DAL" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field wide v-manual hidden">
+          <label for="question">question</label>
+          <input id="question" name="question" type="text" placeholder="Did … ?" autocomplete="off">
+        </div>
+        <div class="field wide v-manual hidden">
+          <label for="rules">resolution rule <span class="label-hint">(optional)</span></label>
+          <input id="rules" name="rules" type="text" autocomplete="off">
+        </div>
+        <div class="field v-manual hidden">
+          <label for="closeTime">close time (ISO 8601)</label>
+          <input id="closeTime" name="closeTime" type="text" placeholder="2026-11-24T23:00:00Z" autocomplete="off">
+        </div>
+        <div class="field wide">
+          <label for="event">event sent to miners <span class="label-hint">(optional) - leave empty to build it from the market's question and rule</span></label>
+          <input id="event" name="event" type="text" maxlength="256" autocomplete="off">
+        </div>
+        <div class="field submit-field">
+          <button id="submit-btn" type="submit">Resolve</button>
+        </div>
+        <p id="form-error" class="form-error wide" role="alert" hidden></p>
+      </form>
+      <p class="note-testnet">Telegraph Season II settles on testnet: each answer is $0.01 in test USDC from Shield's Anjoman escrow on Ethereum Sepolia. Market data is read from the venue's free public API. Same free allowance as the token desks (5 a day per IP), then x402.</p>
+    </section>
+
+    <section id="out" class="report hidden" aria-live="polite">
+      <h2 class="section-label">Market</h2>
+      <div id="market-card" class="market"><span class="pending">reading the venue…</span></div>
+
+      <h2 class="section-label" style="margin-top:1.4rem">Decision</h2>
+      <div id="decision" class="decision"><div class="word pending">working…</div></div>
+      <div id="costline" class="costline"></div>
+
+      <h3 class="section-label" style="margin-top:1.6rem">Telegraph answers</h3>
+      <table class="grid"><thead><tr><th>miner</th><th>answer</th><th>counts as</th><th>cost · latency · receipt</th></tr></thead><tbody id="answers"><tr><td colspan="4" class="pending">waiting for the miners…</td></tr></tbody></table>
+
+      <h3 class="section-label" style="margin-top:1.6rem">Findings</h3>
+      <table class="grid"><thead><tr><th>severity</th><th>finding</th></tr></thead><tbody id="findings"></tbody></table>
+
+      <h3 class="section-label" style="margin-top:1.6rem">Who was asked</h3>
+      <div id="selection" class="detail" style="font-size:.78rem"></div>
+
+      <div id="sig" class="sigbox hidden"></div>
+    </section>
+
+    <section class="how-section">
+      <h2 class="section-label">Recent resolutions</h2>
+      <ul id="recent" class="recent"><li class="pending">loading…</li></ul>
+      <p class="how-footnote">For agents: <span class="mono">POST /api/resolve</span> with <span class="mono">{"source":"polymarket","market":"253591"}</span>, <span class="mono">{"source":"kalshi","market":"KXNBAGAME-26NOV24DALDEN-DAL"}</span> or <span class="mono">{"source":"manual","question":"…","rules":"…","closeTime":"2026-11-24T23:00:00Z"}</span>, optionally <span class="mono">"event"</span>; add <span class="mono">?stream=1</span> for NDJSON progress. <span class="mono">GET /api/resolution/&lt;id&gt;</span> returns the signed memo and its Solana anchor; verify it with <span class="mono">POST /api/memo/verify {"memo","signature"}</span>.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="foot-grid">
+      <div class="foot-brand-col">
+        <a class="foot-brand" href="/"><img class="foot-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
+        <p class="foot-desc">Built for the Telegraph Protocol Season II hackathon. Every answer above was bought through Telegraph and can be resolved on the node by its signal hash.</p>
+      </div>
+      <nav class="foot-col"><h4>Shield</h4><ul>
+        <li><a href="/preflight">Token desks</a></li>
+        <li><a href="/resolve">Market resolution</a></li>
+        <li><a href="/api/resolutions">Resolution feed (JSON)</a></li>
+      </ul></nav>
+      <nav class="foot-col"><h4>Telegraph</h4><ul>
+        <li><a href="https://anjoman.ai" target="_blank" rel="noopener">anjoman.ai</a></li>
+      </ul></nav>
+      <nav class="foot-col"><h4>Source</h4><ul>
+        <li><a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="https://github.com/mrnetwork0001/Truvian/blob/main/src/shield/resolve.ts" target="_blank" rel="noopener">The rules</a></li>
+      </ul></nav>
+    </div>
+  </footer>
+</div>
+<script src="./resolve.js"></script>
+</body>
+</html>
