@@ -9,7 +9,7 @@
     <tr><td><code>POST /api/resolve</code></td><td>resolves a prediction market</td></tr>
     <tr><td><code>GET /api/memo/:id</code></td><td>a stored desk memo with its sha256, message, signature and signer</td></tr>
     <tr><td><code>GET /api/memos?limit=n</code></td><td>the latest desk decisions (up to 50) and the signer</td></tr>
-    <tr><td><code>GET /api/resolution/:id</code>, <code>GET /api/resolutions</code></td><td>a stored resolution with its Solana anchor; the latest resolutions</td></tr>
+    <tr><td><code>GET /api/resolution/:id</code>, <code>GET /api/resolutions</code></td><td>a stored resolution with its Solana anchor; the latest resolutions (<code>?current=1</code> keeps only the latest run of each market)</td></tr>
     <tr><td><code>POST /api/memo/verify</code></td><td><code>{memo, signature}</code>: recomputes the digest and recovers the signer; free</td></tr>
     <tr><td><code>GET /api/signal/:hash</code></td><td>looks up a Telegraph signal hash on the node</td></tr>
     <tr><td><code>GET /api/stats</code></td><td>live counters, the free allowance left for you, the price, and the node's ledger for Shield's escrow</td></tr>
