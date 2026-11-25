@@ -1,7 +1,7 @@
 /* Truvian desks (/preflight). Same system as the landing page (tokens.css).
    Element ids and the classes preflight.js writes are unchanged. */
 
-.page { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 var(--gutter) 0; }
+.page { width: 100%; max-width: var(--wrap); margin: 0 auto; padding: 0 var(--gutter) 0; }
 
 /* ---------- header ---------- */
 .site-header { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; padding: 22px 0; border-bottom: 1px solid var(--rule-soft); }

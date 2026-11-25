@@ -35,8 +35,8 @@
   --serif: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --wrap: 1240px;
-  --gutter: clamp(20px, 4vw, 48px);
+  --wrap: 1340px;
+  --gutter: clamp(16px, 2vw, 24px);
 }
 
 /* ---------- base ---------- */
