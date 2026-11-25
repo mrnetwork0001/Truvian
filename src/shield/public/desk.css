@@ -103,7 +103,6 @@ textarea.holdings:focus { border-color: var(--gold); }
   border-radius: 0;
   transition: background .15s;
 }
-#submit-btn::after { content: "  →"; font-family: var(--mono); }
 #submit-btn:hover:not(:disabled) { background: var(--gold-soft); }
 #submit-btn:disabled { opacity: .55; cursor: wait; }
 .form-error { margin: 0; padding: .7rem .9rem; border-left: 3px solid var(--reject); background: rgba(208,100,90,.08); color: var(--bone); font-size: .86rem; }

@@ -161,7 +161,6 @@ code, .mono { font-family: var(--mono); }
 .btn:hover { border-color: var(--bone-faint); }
 .btn-gold { background: var(--gold); border-color: var(--gold); color: #17140c; }
 .btn-gold:hover { background: var(--gold-soft); border-color: var(--gold-soft); }
-.btn .arr { font-family: var(--mono); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
