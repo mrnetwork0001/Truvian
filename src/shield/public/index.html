@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Truvian Shield - decide before you act</title>
 <meta name="description" content="Truvian Shield decides about a token or a payment before anyone acts on it: Telegraph's specialist miners supply the evidence, the chain checks it, and a signed memo records it. Four desks, including settlement assurance on Solana.">
-<meta name="theme-color" content="#0a0a0a">
+<meta name="theme-color" content="#0d0c0a">
 <meta name="color-scheme" content="dark">
 <meta property="og:title" content="Truvian Shield">
 <meta property="og:description" content="Decide before you act: Telegraph's specialist miners supply the evidence, the chain checks it, a signed memo records it.">
@@ -16,6 +16,10 @@
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=Inter+Tight:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./tokens.css">
 <link rel="stylesheet" href="./landing.css">
 </head>
 <body>
@@ -27,14 +31,14 @@
       <img class="brand-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176">
     </a>
     <nav class="topnav" aria-label="Page sections">
-      <a href="#desks">Desks</a>
-      <a href="#proof">Proof</a>
-      <a href="#how">How it works</a>
-      <a href="#tracks">Miner &amp; evaluators</a>
-      <a href="#agents">API</a>
-      <a href="#limits">Limits</a>
+      <a href="#desks"><i>01</i>Desks</a>
+      <a href="#evidence"><i>02</i>Evidence</a>
+      <a href="#how"><i>03</i>Method</a>
+      <a href="#tracks"><i>04</i>Tracks</a>
+      <a href="#agents"><i>05</i>API</a>
+      <a href="#limits"><i>06</i>Limits</a>
     </nav>
-    <a class="btn btn-primary btn-sm top-cta" href="/preflight">Open the desks</a>
+    <a class="btn btn-gold top-cta" href="/preflight">Open the desks <span class="arr" aria-hidden="true">→</span></a>
   </div>
 </header>
 
@@ -42,147 +46,211 @@
 
   <!-- ============ HERO ============ -->
   <section class="hero" aria-labelledby="hero-title">
-    <div class="wrap">
-      <div class="hero-grid">
-        <div>
-          <span class="badge-s2">Telegraph Season II · Apps, Miner &amp; Evaluator</span>
-          <h1 id="hero-title">Decide before you act.</h1>
-          <p class="lede">Telegraph's specialist miners supply the evidence, the chain checks it, and a signed memo records it. Four decision desks, from a trading agent's token buy to a custodian's payment on Solana.</p>
-          <div class="cta-row">
-            <a class="btn btn-primary" href="/preflight">Open the desks</a>
-            <a class="btn" href="#agents">API for agents</a>
-            <a class="btn" href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">Source ↗</a>
-          </div>
-          <p class="stats" id="stats" hidden><span class="dot" aria-hidden="true"></span><span id="stats-main"></span><span class="src" id="stats-detail"></span></p>
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <p class="kicker"><span class="live-dot" aria-hidden="true"></span>Live on Telegraph's devnode · Season II · <b>Apps, Miner, Evaluator</b></p>
+        <h1 id="hero-title">Decide before you <span class="accent">act.</span></h1>
+        <p class="lede">Telegraph's specialist miners supply the evidence. The chain checks it. A signed memo records the decision, its receipts and its cost, before a token is bought, listed, held or paid.</p>
+        <div class="cta-row">
+          <a class="btn btn-gold" href="/preflight">Open the desks <span class="arr" aria-hidden="true">→</span></a>
+          <a class="btn" href="#agents">API for agents</a>
+          <a class="btn btn-quiet" href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">Source ↗</a>
         </div>
-
-        <figure class="fig memo-fig" aria-labelledby="memo-cap">
-          <div class="memo-card">
-            <div class="memo-head"><span>Settlement · Solana devnet</span><b>memo Py5ehwTL</b></div>
-            <div class="memo-row"><span class="k">Counterparty</span><span>Garantex Europe OU, Estonia</span></div>
-            <div class="memo-row"><span class="k">Sanctions screen</span><span class="bad">match: US OFAC SDN</span></div>
-            <div class="memo-row"><span class="k">Registry</span><span class="bad">not active</span></div>
-            <div class="memo-row"><span class="k">Payer funds</span><span class="ok">covered, read on chain</span></div>
-            <div class="memo-verdict reject"><span>REJECT</span><small>payment not sent</small></div>
-          </div>
-          <figcaption id="memo-cap">A real decision from 25 Nov 2026: two answers bought through Telegraph for $0.04 in test USDC blocked a payment before it was signed. <a href="/preflight?m=Py5ehwTL">Open the signed memo</a>.</figcaption>
-        </figure>
       </div>
+
+      <figure class="hero-memo" aria-labelledby="memo-cap">
+        <article class="paper perf memo" aria-label="Signed memo Py5ehwTL: settlement rejected">
+          <header class="memo-top">
+            <span class="doc-k">Truvian Shield · decision memo</span>
+            <span class="doc-k">No. <b>Py5ehwTL</b></span>
+          </header>
+          <h2 class="memo-title">Settlement assurance<span>Solana devnet · 25 Nov 2026, 11:14 UTC</span></h2>
+          <dl class="memo-fields">
+            <div><dt>Counterparty</dt><dd>Garantex Europe OU <span class="dim">· Estonia</span></dd></div>
+            <div><dt>Payment</dt><dd class="mono">1 tUSD → Afb8…voYZ</dd></div>
+            <div><dt>Sanctions <span class="src">78004 · OpenSanctions US OFAC · $0.01</span></dt><dd class="hit">match · us_ofac_sdn</dd></div>
+            <div><dt>Registry <span class="src">6164 · Praman Desk · $0.01</span></dt><dd class="hit">not active</dd></div>
+            <div><dt>Payer funds <span class="src">Solana, read twice</span></dt><dd>covered</dd></div>
+            <div><dt>Rule</dt><dd>a blocking finding: payment not sent</dd></div>
+          </dl>
+          <footer class="memo-sign">
+            <div class="sig-line"><span class="doc-k">Signed EIP-191</span><span class="mono">0x956a…3245</span></div>
+            <div class="sig-meta mono">sha256 6b04009c…47ecbb · $0.04 test USDC · 3 answers</div>
+          </footer>
+          <span class="stamp xl reject memo-stamp" aria-hidden="true">Reject</span>
+        </article>
+        <figcaption id="memo-cap"><a href="/preflight?m=Py5ehwTL">Open this memo</a> and press <i>Verify signature</i>: the hash is recomputed and the signer recovered in your browser.</figcaption>
+      </figure>
+    </div>
+
+    <!-- the ledger tape: static rows of verified memos, replaced live by landing.js from /api/memos -->
+    <div class="wrap">
+      <div class="ledger fig-frame" id="ledger">
+        <p class="fig-cap"><span><b>FIG. 00</b> · The ledger · latest signed decisions</span><span id="ledger-state">verified 25 Nov 2026</span></p>
+        <div class="ledger-scroll">
+          <table class="tape">
+            <thead><tr><th scope="col">UTC</th><th scope="col">Desk</th><th scope="col">Subject</th><th scope="col">Chain</th><th scope="col" class="num">Cost</th><th scope="col">Memo</th><th scope="col" class="v">Verdict</th></tr></thead>
+            <tbody id="tape-body">
+              <tr><td>11-25 11:16</td><td>Settlement</td><td>Coinbase Global · tUSD</td><td>solana-devnet</td><td class="num">$0.00</td><td><a href="/preflight?m=sEDw0qBk">sEDw0qBk</a></td><td class="v"><span class="stamp ok">Release</span></td></tr>
+              <tr><td>11-25 11:14</td><td>Settlement</td><td>Coinbase Global · rUSD</td><td>solana-devnet</td><td class="num">$0.04</td><td><a href="/preflight?m=HB7ZGFGr">HB7ZGFGr</a></td><td class="v"><span class="stamp review">Review</span></td></tr>
+              <tr><td>11-25 11:14</td><td>Settlement</td><td>Garantex Europe OU · tUSD</td><td>solana-devnet</td><td class="num">$0.04</td><td><a href="/preflight?m=Py5ehwTL">Py5ehwTL</a></td><td class="v"><span class="stamp reject">Reject</span></td></tr>
+              <tr><td>11-23 09:17</td><td>Holdings</td><td>ENS DAO treasury</td><td>ethereum</td><td class="num">$0.06</td><td><a href="/preflight?m=JYjvJrmy">JYjvJrmy</a></td><td class="v"><span class="stamp review">Review</span></td></tr>
+              <tr><td>11-21 08:19</td><td>Preflight</td><td>WETH</td><td>ethereum</td><td class="num">$0.04</td><td><a href="/preflight?m=B4k2AxbY">B4k2AxbY</a></td><td class="v"><span class="stamp review">Review</span></td></tr>
+              <tr><td>11-20 20:38</td><td>Listing</td><td>Garantex Europe OU · USDC</td><td>ethereum</td><td class="num">$0.04</td><td><a href="/preflight?m=WOYbyG3x">WOYbyG3x</a></td><td class="v"><span class="stamp reject">Reject</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <dl class="stats" id="stats">
+        <div><dt>Desk decisions</dt><dd id="st-decisions">20</dd></div>
+        <div><dt>Telegraph requests</dt><dd id="st-requests">126</dd></div>
+        <div><dt>Paid to miners</dt><dd id="st-paid">$1.05 <small>test USDC</small></dd></div>
+        <div><dt>Champion evaluators</dt><dd>2 <small>ids 187 · 242</small></dd></div>
+        <div><dt>Miner</dt><dd>6180 <small>EVM + Solana</small></dd></div>
+      </dl>
+      <p class="stats-note" id="stats-note">Counters from <a href="/api/stats">/api/stats</a>; nearly all decisions so far are our own test runs.</p>
     </div>
   </section>
 
-  <!-- ============ DESKS ============ -->
-  <section class="band-alt" id="desks" aria-labelledby="desks-title">
+  <!-- ============ 01 DESKS ============ -->
+  <section class="sec" id="desks" aria-labelledby="desks-title">
     <div class="wrap">
-      <span class="label">The desks</span>
-      <h2 id="desks-title">One engine, one decision per desk.</h2>
-      <p class="sub">Each desk reads the chain itself, buys the facts it cannot read through Telegraph, applies fixed rules and signs the result. Five free runs a day per IP; nothing to install, no wallet needed to look.</p>
+      <header class="sec-head">
+        <p class="sec-no"><span>01</span> · Desks</p>
+        <h2 id="desks-title">One engine. A desk per <span class="accent">decision.</span></h2>
+        <p class="sub">Each desk reads the chain itself, buys what it cannot read through Telegraph, applies fixed rules and signs the result. Five free runs a day per IP, no wallet needed.</p>
+      </header>
+
       <div class="desks">
-        <a class="desk" href="/preflight?desk=trade">
-          <div class="desk-top"><h3>Token preflight</h3><span class="chip chip-muted">Mission 14</span></div>
+        <article class="desk">
+          <p class="desk-no">D-01 <span>Mission 14</span></p>
+          <h3><a href="/preflight?desk=trade">Token preflight</a></h3>
           <p>A trading agent asks: may I buy this token through this pool? Shield buys a security review, total supply, a wash-trading check and pool depth, and checks the supply against its own chain read.</p>
-          <div class="row"><span class="chip chip-pass">HOLD</span><span class="chip chip-warn">REVIEW</span><span class="chip chip-fail">REJECT</span></div>
-          <span class="desk-meta">Trading agents · 7 EVM chains · buy simulated, never sent</span>
-        </a>
-        <a class="desk" href="/preflight?desk=listing">
-          <div class="desk-top"><h3>Listing review</h3><span class="chip chip-muted">Mission 01</span></div>
-          <p>An exchange's listings desk checks a token, its issuer and its treasury: the token checks above, the issuer's legal name screened against sanctions lists, the treasury balance matched to the chain within 5 bps.</p>
-          <div class="row"><span class="chip chip-pass">LIST</span><span class="chip chip-warn">REVIEW</span><span class="chip chip-fail">REJECT</span></div>
-          <span class="desk-meta">Exchanges · sanctions screening · treasury check</span>
-        </a>
-        <a class="desk" href="/preflight?desk=holdings">
-          <div class="desk-top"><h3>Holdings proof</h3><span class="chip chip-muted">Mission 13</span></div>
+          <p class="vocab"><span class="stamp flat ok">Hold</span><span class="stamp flat review">Review</span><span class="stamp flat reject">Reject</span></p>
+          <p class="desk-foot"><span>Trading agents · 7 EVM chains · buy simulated</span><a href="/preflight?m=FKLfi2qT">FKLfi2qT →</a></p>
+        </article>
+        <article class="desk">
+          <p class="desk-no">D-02 <span>Mission 01</span></p>
+          <h3><a href="/preflight?desk=listing">Listing review</a></h3>
+          <p>An exchange's listings desk checks a token, its issuer and its treasury: the token checks, the issuer's legal name screened against sanctions lists, the treasury balance matched to the chain within 5 bps.</p>
+          <p class="vocab"><span class="stamp flat ok">List</span><span class="stamp flat review">Review</span><span class="stamp flat reject">Reject</span></p>
+          <p class="desk-foot"><span>Exchanges · sanctions · treasury</span><a href="/preflight?m=WOYbyG3x">WOYbyG3x →</a></p>
+        </article>
+        <article class="desk">
+          <p class="desk-no">D-03 <span>Mission 13</span></p>
+          <h3><a href="/preflight?desk=holdings">Holdings proof</a></h3>
           <p>An investor checks what a fund or index says a custody wallet holds, without trusting the issuer. Every claim is read on chain at one block and compared with bought balances and supply; an overstated claim is rejected with the exact shortfall.</p>
-          <div class="row"><span class="chip chip-pass">VERIFIED</span><span class="chip chip-warn">REVIEW</span><span class="chip chip-fail">REJECT</span></div>
-          <span class="desk-meta">Funds &amp; custodians · EVM chains and Solana</span>
-        </a>
-        <a class="desk desk-new" href="/preflight?desk=settlement">
-          <div class="desk-top"><h3>Settlement assurance <span class="sol">on Solana</span></h3><span class="chip chip-gold">New</span></div>
-          <p>A custodian is about to pay a counterparty in a Solana token. Shield screens the counterparty for sanctions, looks it up in its corporate registry, checks the payer's funds, and reads what the token's issuer can still do: freeze it, claw it back through a permanent delegate, tax it, hook it. On RELEASE it sends the payment on devnet and confirms the exact amount arrived at finalized.</p>
-          <div class="row"><span class="chip chip-pass">RELEASE</span><span class="chip chip-warn">REVIEW</span><span class="chip chip-fail">REJECT</span></div>
-          <span class="desk-meta">Custodians &amp; treasuries · real devnet settlement, test tokens only</span>
-        </a>
+          <p class="vocab"><span class="stamp flat ok">Verified</span><span class="stamp flat review">Review</span><span class="stamp flat reject">Reject</span></p>
+          <p class="desk-foot"><span>Funds &amp; custodians · EVM and Solana</span><a href="/preflight?m=JYjvJrmy">JYjvJrmy →</a></p>
+        </article>
+        <article class="desk desk-new">
+          <p class="desk-no">D-04 <span class="new">New · Solana</span></p>
+          <h3><a href="/preflight?desk=settlement">Settlement assurance</a></h3>
+          <p>A custodian is about to pay a counterparty in a Solana token. Shield screens the counterparty, looks it up in its registry, checks the payer's funds, and reads what the token's issuer can still do: freeze it, claw it back through a permanent delegate, tax it, hook it. On RELEASE it pays on devnet and confirms the exact amount arrived at finalized.</p>
+          <p class="vocab"><span class="stamp flat ok">Release</span><span class="stamp flat review">Review</span><span class="stamp flat reject">Reject</span></p>
+          <p class="desk-foot"><span>Custodians · real devnet settlement, test tokens</span><a href="/preflight?m=sEDw0qBk">sEDw0qBk →</a></p>
+        </article>
         <!-- DESK SLOT 5: Prediction-market resolution. Fill in when the desk ships (link /preflight?desk=... or /resolve). -->
-        <div class="desk desk-soon" aria-label="Prediction-market resolution, in progress">
-          <div class="desk-top"><h3>Prediction-market resolution</h3><span class="chip chip-muted">In progress</span></div>
+        <article class="desk desk-soon" aria-label="Prediction-market resolution, in progress">
+          <p class="desk-no">D-05 <span>In progress</span></p>
+          <h3>Prediction-market resolution</h3>
           <p>Several ranked miners asked for an event's outcome, compared with each other and with the market's resolution rules, before a market settles.</p>
-          <div class="row"><span class="chip chip-muted">RESOLVED</span><span class="chip chip-muted">DISPUTED</span><span class="chip chip-muted">TOO EARLY</span></div>
-          <span class="desk-meta">Being built · not live yet</span>
-        </div>
+          <p class="vocab"><span class="stamp flat muted">Resolved</span><span class="stamp flat muted">Disputed</span><span class="stamp flat muted">Too early</span></p>
+          <p class="desk-foot"><span>Being built · not live yet</span></p>
+        </article>
       </div>
     </div>
   </section>
 
-  <!-- ============ PROOF ============ -->
-  <section id="proof" aria-labelledby="proof-title">
+  <!-- ============ 02 EVIDENCE ============ -->
+  <section class="sec" id="evidence" aria-labelledby="evidence-title">
     <div class="wrap">
-      <span class="label">Proof</span>
-      <h2 id="proof-title">Real decisions you can open and re-verify.</h2>
-      <p class="sub">Each link is a signed memo: the chain reads, every answer bought with its miner, cost and receipt, the findings and the decision. <b>Verify signature</b> on the page recomputes the hash and recovers the signer.</p>
-      <div class="proofs">
-        <a class="proof" href="/preflight?m=Py5ehwTL"><span class="v reject">REJECT</span><b>Garantex payment blocked</b><span>Settlement on Solana devnet: sanctions match (US OFAC SDN) and an inactive registry record. Not sent. 25 Nov, $0.04.</span></a>
-        <a class="proof" href="/preflight?m=HB7ZGFGr"><span class="v review">REVIEW</span><b>Issuer can claw it back</b><span>Settlement in a devnet token whose issuer holds a permanent delegate: a person must accept that before release. 25 Nov, $0.04.</span></a>
-        <a class="proof" href="/preflight?m=sEDw0qBk"><span class="v ok">RELEASE</span><b>Paid and verified on Solana</b><span>Coinbase Global, Inc.: sanctions clear, registry active, payer funded. 1 test token sent on devnet and read back at finalized. 25 Nov.</span></a>
-        <a class="proof" href="/preflight?m=FKLfi2qT"><span class="v review">REVIEW</span><b>A rug pull rated "Secure"</b><span>SQUID on BSC: a miner called the 2021 rug pull Secure; Shield's chain read caught a total supply 514 bps off. Not cleared. 20 Nov, $0.04.</span></a>
-        <a class="proof" href="/preflight?m=WOYbyG3x"><span class="v reject">REJECT</span><b>Sanctioned issuer, listing refused</b><span>Listing review: "Garantex Europe OU" matched a sanctions list. 20 Nov, $0.04.</span></a>
-        <a class="proof" href="/preflight?m=B4k2AxbY"><span class="v review">REVIEW</span><b>WETH, a receipt per answer</b><span>Token preflight: four answers, each with its miner, node signal and escrow receipt, $0.01 each. 21 Nov.</span></a>
-        <a class="proof" href="/preflight?m=JYjvJrmy"><span class="v review">REVIEW</span><b>ENS DAO treasury holdings</b><span>Holdings proof: covered on chain, but the balance miner the node chose answered for another address, so it is no evidence. 23 Nov, $0.06.</span></a>
-      </div>
-      <section class="recent" id="recent" aria-labelledby="recent-title" hidden>
-        <h3 id="recent-title">Latest decisions</h3>
-        <div class="recent-list" id="recent-list"></div>
-      </section>
-    </div>
-  </section>
-
-  <!-- ============ HOW ============ -->
-  <section class="band-alt" id="how" aria-labelledby="how-title">
-    <div class="wrap">
-      <span class="label">How it works</span>
-      <h2 id="how-title">Read, buy, rule, sign.</h2>
-      <ol class="steps">
-        <li><span class="why-step">1 · Read</span><h3>The chain first, for free</h3><p>Shield reads what the chain can answer itself: the token contract or Solana mint, balances, supply, authorities. Solana mainnet reads go to two RPC providers that must agree.</p></li>
-        <li><span class="why-step">2 · Buy</span><h3>One paid ask per fact</h3><p>What the chain cannot say (a security review, a sanctions screen, a registry record, an independent balance) is one routed ask to Telegraph, paid from escrow with a receipt. When an answer is no evidence, one more ask goes to the next-best ranked miner.</p></li>
-        <li><span class="why-step">3 · Rule</span><h3>Fixed, public rules</h3><p>The same evidence always gives the same decision. An unanswered check, an answer about the wrong address, or a figure that disagrees with the chain can never clear anything.</p></li>
-        <li><span class="why-step">4 · Sign</span><h3>A memo anyone can check</h3><p>The decision, findings, receipts and cost are hashed and signed under EIP-191. Each memo has a permalink, a JSON download and a free <code>POST /api/memo/verify</code>.</p></li>
+      <header class="sec-head">
+        <p class="sec-no"><span>02</span> · Evidence</p>
+        <h2 id="evidence-title">Real decisions you can open and <span class="accent">re-verify.</span></h2>
+        <p class="sub">Each entry is a signed memo: the chain reads, every answer bought with its miner, cost and receipt, the findings and the decision.</p>
+      </header>
+      <ol class="cases">
+        <li><a href="/preflight?m=Py5ehwTL"><span class="stamp reject">Reject</span><span class="case-t">Garantex payment blocked</span><span class="case-d">Settlement on Solana devnet: sanctions match (US OFAC SDN) and an inactive registry record. Not sent.</span><span class="case-m">25 Nov · $0.04 · Py5ehwTL</span></a></li>
+        <li><a href="/preflight?m=HB7ZGFGr"><span class="stamp review">Review</span><span class="case-t">The issuer can claw it back</span><span class="case-d">Settlement in a devnet token whose issuer holds a permanent delegate: a person must accept that before release.</span><span class="case-m">25 Nov · $0.04 · HB7ZGFGr</span></a></li>
+        <li><a href="/preflight?m=sEDw0qBk"><span class="stamp ok">Release</span><span class="case-t">Paid and verified on Solana</span><span class="case-d">Coinbase Global, Inc.: sanctions clear, registry active, payer funded. One test token sent on devnet and read back at finalized.</span><span class="case-m">25 Nov · answers reused · sEDw0qBk</span></a></li>
+        <li><a href="/preflight?m=FKLfi2qT"><span class="stamp review">Review</span><span class="case-t">A rug pull rated "Secure"</span><span class="case-d">SQUID on BSC: a miner called the 2021 rug pull Secure; Shield's chain read caught a total supply 514 bps off. Not cleared.</span><span class="case-m">20 Nov · $0.04 · FKLfi2qT</span></a></li>
+        <li><a href="/preflight?m=WOYbyG3x"><span class="stamp reject">Reject</span><span class="case-t">Sanctioned issuer, listing refused</span><span class="case-d">Listing review: "Garantex Europe OU" matched a sanctions list.</span><span class="case-m">20 Nov · $0.04 · WOYbyG3x</span></a></li>
+        <li><a href="/preflight?m=B4k2AxbY"><span class="stamp review">Review</span><span class="case-t">WETH, a receipt per answer</span><span class="case-d">Token preflight: four answers, each with its miner, node signal and escrow receipt, $0.01 each.</span><span class="case-m">21 Nov · $0.04 · B4k2AxbY</span></a></li>
+        <li><a href="/preflight?m=JYjvJrmy"><span class="stamp review">Review</span><span class="case-t">ENS DAO treasury holdings</span><span class="case-d">Holdings proof: covered on chain, but the balance miner the node chose answered for another address, so it is no evidence.</span><span class="case-m">23 Nov · $0.06 · JYjvJrmy</span></a></li>
       </ol>
     </div>
   </section>
 
-  <!-- ============ TRACKS ============ -->
-  <section id="tracks" aria-labelledby="tracks-title">
+  <!-- ============ 03 HOW ============ -->
+  <section class="sec" id="how" aria-labelledby="how-title">
     <div class="wrap">
-      <span class="label">All three tracks</span>
-      <h2 id="tracks-title">We run a miner, two champion evaluators and the app.</h2>
-      <p class="sub">The desks buy from the same network our miner answers in and our evaluators judge.</p>
+      <header class="sec-head">
+        <p class="sec-no"><span>03</span> · How a decision is made</p>
+        <h2 id="how-title">Read, buy, rule, <span class="accent">sign.</span></h2>
+      </header>
+      <figure class="fig-frame flow" aria-labelledby="flow-cap">
+        <figcaption class="fig-cap" id="flow-cap"><span><b>FIG. 01</b> · One decision, left to right</span><span>POST /api/preflight</span></figcaption>
+        <ol class="flow-steps">
+          <li><span class="step-n">1 · Read</span><h3>The chain first, free</h3><p>Token contract or Solana mint, balances, supply, authorities. Solana mainnet reads go to two RPC providers that must agree.</p><span class="step-tag">chain · $0</span></li>
+          <li><span class="step-n">2 · Buy</span><h3>One paid ask per fact</h3><p>What the chain cannot say (a security review, a sanctions screen, a registry record, an independent balance) is one routed ask to Telegraph, paid from escrow with a receipt.</p><span class="step-tag">telegraph · $0.01 each</span></li>
+          <li class="branch"><span class="step-n">2b · Second opinion</span><h3>Only when it is no evidence</h3><p>No answer, no figure, or about another address: one more ask, pinned to the next-best ranked miner. It may hold a decision back, never clear one alone.</p><span class="step-tag">at most one per fact</span></li>
+          <li><span class="step-n">3 · Rule</span><h3>Fixed, public rules</h3><p>The same evidence always gives the same decision. A missing answer, or a figure that disagrees with the chain, can never clear anything.</p><span class="step-tag">deterministic</span></li>
+          <li><span class="step-n">4 · Sign</span><h3>A memo anyone can check</h3><p>Decision, findings, receipts and cost, hashed and signed under EIP-191, with a permalink, a JSON download and a free <code>POST /api/memo/verify</code>.</p><span class="step-tag">0x956a…3245</span></li>
+        </ol>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ============ 04 TRACKS ============ -->
+  <section class="sec" id="tracks" aria-labelledby="tracks-title">
+    <div class="wrap">
+      <header class="sec-head">
+        <p class="sec-no"><span>04</span> · Three tracks</p>
+        <h2 id="tracks-title">We answer, we judge, and we <span class="accent">use.</span></h2>
+        <p class="sub">The desks buy from the same network our miner answers in and our evaluators judge.</p>
+      </header>
       <div class="tracks">
         <article class="track">
-          <span class="why-step">Miner</span>
-          <h3>Registration 6180</h3>
-          <p>Six intents on Telegraph's devnode: transaction lookup, gas price, wallet balance, total supply, transfer verification and pool liquidity, across 14 EVM chains. On 25 Nov it added Solana balances, supply and transfers, when no miner on the node answered a Solana balance. Scores move every epoch: <a href="https://devnode.telegraphprotocol.com/api/miners/6180" target="_blank" rel="noopener">status</a> · <a href="https://miner.truvian.xyz" target="_blank" rel="noopener">miner.truvian.xyz</a>.</p>
+          <p class="track-k">Miner</p>
+          <p class="track-fig">6180</p>
+          <p>Six intents on Telegraph's devnode: transaction lookup, gas price, wallet balance, total supply, transfer verification and pool liquidity, across 14 EVM chains. On 25 Nov it added Solana balances, supply and transfers, when no miner on the node answered a Solana balance. Scores move every epoch.</p>
+          <p class="track-links"><a href="https://devnode.telegraphprotocol.com/api/miners/6180" target="_blank" rel="noopener">Status on the node ↗</a><a href="https://miner.truvian.xyz" target="_blank" rel="noopener">miner.truvian.xyz ↗</a></p>
         </article>
         <article class="track">
-          <span class="why-step">Evaluator</span>
-          <h3>Two champion adapters</h3>
-          <p>LoRA adapters that judge other teams' miners. <b>SMART_CONTRACT_AUDIT</b> (id 187): first canonical for its intent, 83.33% on 30 hidden pairs. <b>CORPORATE_REGISTRY_LOOKUP</b> (id 242): first canonical, 76.67% on 30 hidden pairs, promoted 25 Nov. Our truth sources are also eligible in the node's evaluation pool. <a href="https://devnode.telegraphprotocol.com/api/wasm/187" target="_blank" rel="noopener">187</a> · <a href="https://devnode.telegraphprotocol.com/api/wasm/242" target="_blank" rel="noopener">242</a></p>
+          <p class="track-k">Evaluator</p>
+          <p class="track-fig">2 <span>champions</span></p>
+          <p>LoRA adapters that judge other teams' miners, each the first canonical scorer for its intent:</p>
+          <table class="mini">
+            <tr><th scope="row">SMART_CONTRACT_AUDIT</th><td>id 187</td><td class="num">83.33%</td></tr>
+            <tr><th scope="row">CORPORATE_REGISTRY_LOOKUP</th><td>id 242</td><td class="num">76.67%</td></tr>
+          </table>
+          <p class="fine">On 30 hidden pairs each; 242 promoted 25 Nov. Our truth sources are also eligible in the node's evaluation pool.</p>
+          <p class="track-links"><a href="https://devnode.telegraphprotocol.com/api/wasm/187" target="_blank" rel="noopener">187 ↗</a><a href="https://devnode.telegraphprotocol.com/api/wasm/242" target="_blank" rel="noopener">242 ↗</a></p>
         </article>
         <article class="track">
-          <span class="why-step">Apps</span>
-          <h3>Truvian Shield</h3>
-          <p>The four desks above, live at <a href="/preflight">truvian.xyz/preflight</a>, plus the agent API below. The settlement desk's counterparty check buys CORPORATE_REGISTRY_LOOKUP answers, the intent our adapter 242 judges.</p>
+          <p class="track-k">Apps</p>
+          <p class="track-fig">4 <span>desks live</span></p>
+          <p>Truvian Shield at <a href="/preflight">truvian.xyz/preflight</a>, plus the agent API below. The settlement desk's counterparty check buys CORPORATE_REGISTRY_LOOKUP answers, the intent our adapter 242 judges.</p>
+          <p class="track-links"><a href="/preflight">Open the desks →</a></p>
         </article>
       </div>
     </div>
   </section>
 
-  <!-- ============ AGENTS ============ -->
-  <section class="band-alt" id="agents" aria-labelledby="agents-title">
+  <!-- ============ 05 AGENTS ============ -->
+  <section class="sec" id="agents" aria-labelledby="agents-title">
     <div class="wrap">
-      <span class="label">For agents</span>
-      <h2 id="agents-title">One POST, one signed decision.</h2>
-      <p class="sub">Same endpoint for every desk; <code>mode</code> picks the desk. Add <code>?stream=1</code> for newline-delimited events as each answer lands. Five free runs per IP a day (reset 00:00 UTC), then $0.05 in test USDC on Base Sepolia over x402: one EIP-3009 signature, settled only after the work succeeded.</p>
+      <header class="sec-head">
+        <p class="sec-no"><span>05</span> · For agents</p>
+        <h2 id="agents-title">One POST, one signed <span class="accent">decision.</span></h2>
+        <p class="sub">Same endpoint for every desk; <code>mode</code> picks the desk. Add <code>?stream=1</code> for newline-delimited events as each answer lands. Five free runs per IP a day (reset 00:00 UTC), then $0.05 in test USDC on Base Sepolia over x402: one EIP-3009 signature, settled only after the work succeeded.</p>
+      </header>
       <div class="agents-grid">
-        <div class="code" aria-label="Example requests"><pre><span class="c"># trading agent: may I buy $1,000 of WETH through this pool?</span>
+        <figure class="fig-frame code" aria-label="Example requests">
+          <figcaption class="fig-cap"><span><b>FIG. 02</b> · Two requests</span><span>curl</span></figcaption>
+<pre><span class="c"># trading agent: may I buy $1,000 of WETH through this pool?</span>
 curl -s https://truvian.xyz/api/preflight \
   -H 'content-type: application/json' -d '{
   <span class="k">"mode"</span>: <span class="s">"trade"</span>, <span class="k">"chain"</span>: <span class="s">"ethereum"</span>,
@@ -197,40 +265,43 @@ curl -s https://truvian.xyz/api/preflight \
   <span class="k">"mint"</span>: <span class="s">"TUSD"</span>, <span class="k">"amount"</span>: <span class="s">"1"</span>,
   <span class="k">"recipient"</span>: <span class="s">"Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ"</span>,
   <span class="k">"counterparty"</span>: <span class="s">"Coinbase Global, Inc."</span>,
-  <span class="k">"jurisdiction"</span>: <span class="s">"US-DE"</span>, <span class="k">"execute"</span>: false }'</pre></div>
-        <ul class="endpoints">
-          <li><span><span class="m">POST</span><code>/api/preflight</code></span><span>modes <code>trade</code>, <code>listing</code>, <code>holdings</code>, <code>settlement</code>; returns the signed memo and its permalink</span></li>
-          <li><span><span class="m">GET</span><code>/api/memo/&lt;id&gt;</code></span><span>a stored memo with its sha256, message and signature</span></li>
-          <li><span><span class="m">POST</span><code>/api/memo/verify</code></span><span>free: recompute the digest and recover who signed it</span></li>
-          <li><span><span class="m">GET</span><code>/api/memos</code></span><span>the latest decisions across all desks</span></li>
-          <li><span><span class="m">GET</span><code>/api/stats</code></span><span>live counters, spend and remaining free runs</span></li>
-          <li><span><span class="m">TS</span><code>guard(wallet)</code></span><span>wraps a viem wallet so <code>sendTransaction</code> throws on a BLOCK from the Season I pre-sign check; fails closed (<code>src/agent/guard.ts</code>)</span></li>
-        </ul>
+  <span class="k">"jurisdiction"</span>: <span class="s">"US-DE"</span>, <span class="k">"execute"</span>: false }'</pre>
+        </figure>
+        <table class="endpoints">
+          <caption class="fig-cap"><span><b>Endpoints</b></span></caption>
+          <tr><th scope="row"><span class="m">POST</span><code>/api/preflight</code></th><td>modes <code>trade</code>, <code>listing</code>, <code>holdings</code>, <code>settlement</code>; returns the signed memo and its permalink</td></tr>
+          <tr><th scope="row"><span class="m">GET</span><code>/api/memo/&lt;id&gt;</code></th><td>a stored memo with its sha256, message and signature</td></tr>
+          <tr><th scope="row"><span class="m">POST</span><code>/api/memo/verify</code></th><td>free: recompute the digest and recover who signed it</td></tr>
+          <tr><th scope="row"><span class="m">GET</span><code>/api/memos</code></th><td>the latest decisions across all desks</td></tr>
+          <tr><th scope="row"><span class="m">GET</span><code>/api/stats</code></th><td>live counters, spend and remaining free runs</td></tr>
+          <tr><th scope="row"><span class="m">TS</span><code>guard(wallet)</code></th><td>wraps a viem wallet so <code>sendTransaction</code> throws on a BLOCK from the Season I pre-sign check; fails closed (<code>src/agent/guard.ts</code>)</td></tr>
+        </table>
       </div>
     </div>
   </section>
 
-  <!-- ============ LIMITS ============ -->
-  <section id="limits" aria-labelledby="limits-title">
+  <!-- ============ 06 LIMITS ============ -->
+  <section class="sec" id="limits" aria-labelledby="limits-title">
     <div class="wrap">
-      <span class="label">Limits</span>
-      <h2 id="limits-title">What is not true yet.</h2>
-      <ul class="limits">
+      <header class="sec-head">
+        <p class="sec-no"><span>06</span> · Limits</p>
+        <h2 id="limits-title">What is not true <span class="accent">yet.</span></h2>
+      </header>
+      <ol class="limits">
         <li><b>Testnet money.</b> Telegraph answers are paid in test USDC from an Anjoman escrow on Ethereum Sepolia; Shield's own charge is test USDC on Base Sepolia; settlements are sent on Solana devnet in test tokens. Token facts are read from mainnets.</li>
         <li><b>Security reviews time out.</b> Since 22 Nov every routed SECURITY_REVIEW ask has ended in a gateway timeout, so token preflights and listing reviews usually end in REVIEW: nothing is cleared on a missing answer.</li>
         <li><b>Solana balances.</b> On 25 Nov no miner on the node answered a Solana wallet balance. Ours now does; until the node routes those questions to it, the settlement desk's funds check rests on its own two-provider chain read.</li>
         <li><b>Prediction-market resolution</b> is in progress, not live.</li>
         <li>The <a href="/app">Season I pre-sign check</a> is still online at <code>/app</code>; it is looser than the desks and keeps its Season I wording.</li>
-      </ul>
+      </ol>
     </div>
   </section>
 
-  <section class="final band-alt" aria-labelledby="final-title">
-    <div class="wrap">
-      <h2 id="final-title">Run a decision against live miners now.</h2>
-      <p class="sub">Pick a desk, press an example, and read the memo it signs.</p>
+  <section class="final" aria-labelledby="final-title">
+    <div class="wrap final-inner">
+      <h2 id="final-title">Run a decision against live miners <span class="accent">now.</span></h2>
       <div class="cta-row">
-        <a class="btn btn-primary" href="/preflight">Open the desks</a>
+        <a class="btn btn-gold" href="/preflight">Open the desks <span class="arr" aria-hidden="true">→</span></a>
         <a class="btn" href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">Source ↗</a>
       </div>
     </div>
@@ -239,47 +310,46 @@ curl -s https://truvian.xyz/api/preflight \
 </main>
 
 <footer class="site-foot">
-  <div class="wrap">
-    <div class="foot-grid">
-      <div class="foot-brand-col">
-        <a class="foot-brand" href="/"><img class="foot-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
-        <p class="foot-desc">Decide before you act: Telegraph's specialist miners supply the evidence, the chain checks it, a signed memo records it. Built for Telegraph Season II; independent, not affiliated with Telegraph Protocol or Anjoman.</p>
-        <div class="foot-social">
-          <a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener" aria-label="Truvian on GitHub"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
-          <a href="https://x.com/Telegraphprotoc" target="_blank" rel="noopener" aria-label="Telegraph Protocol on X"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117Z"/></svg></a>
-        </div>
+  <div class="wrap foot-grid">
+    <div class="foot-brand-col">
+      <a class="foot-brand" href="/"><img class="foot-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
+      <p class="foot-desc">Decide before you act. Built for Telegraph Season II; independent, not affiliated with Telegraph Protocol or Anjoman.</p>
+      <div class="foot-social">
+        <a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener" aria-label="Truvian on GitHub"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+        <a href="https://x.com/Telegraphprotoc" target="_blank" rel="noopener" aria-label="Telegraph Protocol on X"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117Z"/></svg></a>
       </div>
-      <nav class="foot-col" aria-labelledby="foot-product">
-        <h4 id="foot-product">Shield</h4>
-        <ul>
-          <li><a href="/preflight?desk=trade">Token preflight</a></li>
-          <li><a href="/preflight?desk=listing">Listing review</a></li>
-          <li><a href="/preflight?desk=holdings">Holdings proof</a></li>
-          <li><a href="/preflight?desk=settlement">Settlement on Solana</a></li>
-          <li><a href="/app">Season I pre-sign check</a></li>
-        </ul>
-      </nav>
-      <nav class="foot-col" aria-labelledby="foot-telegraph">
-        <h4 id="foot-telegraph">Telegraph</h4>
-        <ul>
-          <li><a href="https://anjoman.ai" target="_blank" rel="noopener">Anjoman</a></li>
-          <li><a href="https://anjoman.ai/docs" target="_blank" rel="noopener">Docs</a></li>
-          <li><a href="https://devnode.telegraphprotocol.com/api/miners/6180" target="_blank" rel="noopener">Our miner on the node</a></li>
-          <li><a href="https://x.com/Telegraphprotoc" target="_blank" rel="noopener">@Telegraphprotoc</a></li>
-        </ul>
-      </nav>
-      <nav class="foot-col" aria-labelledby="foot-resources">
-        <h4 id="foot-resources">Resources</h4>
-        <ul>
-          <li><a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">GitHub</a></li>
-          <li><a href="https://github.com/mrnetwork0001/Truvian#readme" target="_blank" rel="noopener">Documentation</a></li>
-          <li><a href="https://miner.truvian.xyz" target="_blank" rel="noopener">Truvian miner</a></li>
-          <li><a href="https://github.com/mrnetwork0001/Truvian/tree/main/evaluator" target="_blank" rel="noopener">Evaluator adapters</a></li>
-          <li><a href="/api/stats">Live stats</a></li>
-        </ul>
-      </nav>
     </div>
+    <nav class="foot-col" aria-labelledby="foot-product">
+      <h4 id="foot-product">Shield</h4>
+      <ul>
+        <li><a href="/preflight?desk=trade">Token preflight</a></li>
+        <li><a href="/preflight?desk=listing">Listing review</a></li>
+        <li><a href="/preflight?desk=holdings">Holdings proof</a></li>
+        <li><a href="/preflight?desk=settlement">Settlement on Solana</a></li>
+        <li><a href="/app">Season I pre-sign check</a></li>
+      </ul>
+    </nav>
+    <nav class="foot-col" aria-labelledby="foot-telegraph">
+      <h4 id="foot-telegraph">Telegraph</h4>
+      <ul>
+        <li><a href="https://anjoman.ai" target="_blank" rel="noopener">Anjoman</a></li>
+        <li><a href="https://anjoman.ai/docs" target="_blank" rel="noopener">Docs</a></li>
+        <li><a href="https://devnode.telegraphprotocol.com/api/miners/6180" target="_blank" rel="noopener">Our miner on the node</a></li>
+        <li><a href="https://x.com/Telegraphprotoc" target="_blank" rel="noopener">@Telegraphprotoc</a></li>
+      </ul>
+    </nav>
+    <nav class="foot-col" aria-labelledby="foot-resources">
+      <h4 id="foot-resources">Resources</h4>
+      <ul>
+        <li><a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="https://github.com/mrnetwork0001/Truvian#readme" target="_blank" rel="noopener">Documentation</a></li>
+        <li><a href="https://miner.truvian.xyz" target="_blank" rel="noopener">Truvian miner</a></li>
+        <li><a href="https://github.com/mrnetwork0001/Truvian/tree/main/evaluator" target="_blank" rel="noopener">Evaluator adapters</a></li>
+        <li><a href="/api/stats">Live stats</a></li>
+      </ul>
+    </nav>
   </div>
+  <div class="wrap foot-base"><span>truvian.xyz</span><span>Every decision on this site is a signed memo.</span></div>
 </footer>
 
 <script src="./landing.js"></script>

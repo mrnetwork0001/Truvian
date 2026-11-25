@@ -1,121 +1,81 @@
-/* Truvian Shield landing - live stats strip.
-   GET /api/stats (same origin) -> {preflightsRun, telegraphRequests, paidUsd, you}. Strip stays hidden until real numbers arrive. */
+/* Truvian landing: the live ledger and the stats strip.
+   Both start as static, verified content in the HTML; these only replace it
+   with live numbers when the API answers. Nothing breaks with JS off. */
 (function () {
   'use strict';
-  var strip = document.getElementById('stats');
-  var main = document.getElementById('stats-main');
-  var det = document.getElementById('stats-detail');
-  if (!strip || !main || !det || typeof fetch !== 'function') return;
-  function n(x) { return typeof x === 'number' && isFinite(x) ? Math.round(x).toLocaleString('en-US') : '0'; }
-  function load() {
-    try {
-      fetch('/api/stats', { headers: { accept: 'application/json' } })
-        .then(function (r) { if (!r.ok) throw new Error('stats ' + r.status); return r.json(); })
-        .then(function (s) {
-          if (!s || typeof s !== 'object') throw new Error('bad body');
-          var head = [n(s.preflightsRun) + ' desk decisions', n(s.telegraphRequests) + ' Telegraph requests'];
-          if (typeof s.paidUsd === 'number' && s.paidUsd > 0) head.push('$' + s.paidUsd.toFixed(2) + ' test USDC paid to miners');
-          main.textContent = head.join(' · ');
-          var parts = [];
-          if (s.you && typeof s.you.checksLeftToday === 'number') parts.push(n(s.you.checksLeftToday) + ' free runs left for you today');
-          det.textContent = parts.join(' · ');
-          strip.hidden = false;
-        })
-        .catch(function () { /* stay hidden */ });
-    } catch (e) { /* stay hidden */ }
-  }
-  load();
-  setInterval(load, 30000);
-})();
+  if (typeof fetch !== 'function') return;
 
-/* Latest decisions: the signed memos from every desk (GET /api/memos). Hidden
-   until there is something real to show. */
-(function () {
-  'use strict';
-  var section = document.getElementById('recent');
-  var list = document.getElementById('recent-list');
-  if (!section || !list || typeof fetch !== 'function') return;
-
-  var KIND = { 'token-preflight': 'Token preflight', 'listing-review': 'Listing review', 'holdings-proof': 'Holdings proof', 'settlement-assurance': 'Settlement' };
-  var CLASS = { HOLD: 'ok', LIST: 'ok', VERIFIED: 'ok', RELEASE: 'ok', REVIEW: 'review', REJECT: 'reject' };
-
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined && text !== null) node.textContent = text;
-    return node;
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = text;
+    return n;
   }
-  function ago(iso) {
-    var then = Date.parse(iso);
-    if (!isFinite(then)) return '';
-    var s = Math.max(0, Math.round((Date.now() - then) / 1000));
-    if (s < 60) return s + 's ago';
-    if (s < 3600) return Math.round(s / 60) + 'm ago';
-    if (s < 86400) return Math.round(s / 3600) + 'h ago';
-    return Math.round(s / 86400) + 'd ago';
-  }
-  function row(m) {
-    var link = el('a', 'recent-row');
-    link.href = '/preflight?m=' + encodeURIComponent(m.id);
-    var d = String(m.decision || '');
-    link.appendChild(el('span', 'recent-verdict ' + (CLASS[d] || 'review'), d));
-    link.appendChild(el('span', '', (KIND[m.kind] || m.kind) + ' · ' + (m.symbol || String(m.token || '').slice(0, 10)) + ' on ' + m.chain));
-    if (typeof m.costUsd === 'number') link.appendChild(el('span', '', '$' + m.costUsd.toFixed(2)));
-    link.appendChild(el('span', 'recent-when', ago(m.createdAt)));
-    return link;
-  }
-  function load() {
-    fetch('/api/memos?limit=6', { headers: { accept: 'application/json' } })
-      .then(function (r) { if (!r.ok) throw new Error('memos ' + r.status); return r.json(); })
-      .then(function (data) {
-        var memos = (data && data.memos) || [];
-        if (!memos.length) return;
-        list.textContent = '';
-        memos.forEach(function (m) { list.appendChild(row(m)); });
-        section.hidden = false;
-      })
-      .catch(function () { /* leave the section hidden */ });
-  }
-  load();
-  setInterval(load, 60000);
-})();
-
-/* Scroll reveal: each section's blocks (and each card inside a grid) fade and
-   rise into place the first time they enter the viewport, staggered. Once a
-   block has arrived its helper classes are removed so nothing lingers. */
-(function () {
-  'use strict';
-  if (!('IntersectionObserver' in window) || !document.body.classList) return;
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  var GRIDS = '.hero-grid, .desks, .proofs, .steps, .tracks, .agents-grid, .limits';
-  var items = [];
-  Array.prototype.forEach.call(document.querySelectorAll('main section > .wrap'), function (wrap) {
-    var i = 0;
-    Array.prototype.forEach.call(wrap.children, function (el) {
-      var kids = el.matches && el.matches(GRIDS) ? el.children : [el];
-      Array.prototype.forEach.call(kids, function (k) {
-        if (k.hidden) return;
-        k.classList.add('rv');
-        k.style.setProperty('--rv-d', Math.min(i, 8) * 90 + 'ms');
-        i += 1;
-        items.push(k);
-      });
+  function json(url) {
+    return fetch(url, { headers: { accept: 'application/json' } }).then(function (r) {
+      if (!r.ok) throw new Error(url + ' ' + r.status);
+      return r.json();
     });
-  });
-  if (!items.length) return;
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) {
-      if (!e.isIntersecting) return;
-      var el = e.target;
-      io.unobserve(el);
-      el.classList.add('in');
-      el.addEventListener('transitionend', function done(ev) {
-        if (ev.propertyName !== 'opacity') return;
-        el.removeEventListener('transitionend', done);
-        el.classList.remove('rv', 'in');
-        el.style.removeProperty('--rv-d');
-      });
-    });
-  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.1 });
-  items.forEach(function (el) { io.observe(el); });
+  }
+
+  /* ---- stats strip: GET /api/stats ---- */
+  function money(x) { return '$' + x.toFixed(2); }
+  function stats() {
+    json('/api/stats').then(function (s) {
+      if (!s || typeof s !== 'object') return;
+      if (typeof s.preflightsRun === 'number') $('st-decisions').textContent = s.preflightsRun.toLocaleString('en-US');
+      if (typeof s.telegraphRequests === 'number') $('st-requests').textContent = s.telegraphRequests.toLocaleString('en-US');
+      if (typeof s.paidUsd === 'number') {
+        var dd = $('st-paid');
+        dd.textContent = money(s.paidUsd) + ' ';
+        dd.appendChild(el('small', null, 'test USDC'));
+      }
+      var left = s.you && typeof s.you.checksLeftToday === 'number' ? s.you.checksLeftToday : null;
+      if (left !== null) {
+        var note = $('stats-note');
+        note.textContent = 'Live from ';
+        var a = el('a', null, '/api/stats'); a.href = '/api/stats'; note.appendChild(a);
+        note.appendChild(document.createTextNode(' · ' + left + ' free runs left for you today · nearly all decisions so far are our own test runs.'));
+      }
+    }).catch(function () { /* keep the static figures */ });
+  }
+
+  /* ---- the ledger tape: GET /api/memos ---- */
+  var DESK = { 'token-preflight': 'Preflight', 'listing-review': 'Listing', 'holdings-proof': 'Holdings', 'settlement-assurance': 'Settlement' };
+  var STAMP = { HOLD: 'ok', LIST: 'ok', VERIFIED: 'ok', RELEASE: 'ok', REVIEW: 'review', REJECT: 'reject' };
+  function short(s) { s = String(s || ''); return s.length > 14 ? s.slice(0, 6) + '…' + s.slice(-4) : s; }
+  function utc(iso) { var s = String(iso || ''); return s.length >= 16 ? s.slice(5, 10) + ' ' + s.slice(11, 16) : s; }
+  function cap(s) { s = String(s || ''); return s.charAt(0) + s.slice(1).toLowerCase(); }
+
+  function row(m, i) {
+    var tr = el('tr', 'in');
+    tr.style.animationDelay = (i * 70) + 'ms';
+    tr.appendChild(el('td', null, utc(m.createdAt)));
+    tr.appendChild(el('td', null, DESK[m.kind] || m.kind));
+    tr.appendChild(el('td', null, m.symbol || (m.kind === 'holdings-proof' ? 'wallet ' : '') + short(m.token)));
+    tr.appendChild(el('td', null, m.chain));
+    tr.appendChild(el('td', 'num', typeof m.costUsd === 'number' ? money(m.costUsd) : '-'));
+    var td = el('td'); var a = el('a', null, m.id); a.href = '/preflight?m=' + encodeURIComponent(m.id); td.appendChild(a); tr.appendChild(td);
+    var v = el('td', 'v'); v.appendChild(el('span', 'stamp ' + (STAMP[m.decision] || 'review'), cap(m.decision))); tr.appendChild(v);
+    return tr;
+  }
+  var lastTop = null;
+  function tape() {
+    json('/api/memos?limit=6').then(function (d) {
+      var memos = (d && d.memos) || [];
+      if (!memos.length) return;
+      $('ledger-state').textContent = 'live · /api/memos';
+      if (memos[0].id === lastTop) return;
+      lastTop = memos[0].id;
+      var body = $('tape-body');
+      body.textContent = '';
+      memos.forEach(function (m, i) { body.appendChild(row(m, i)); });
+    }).catch(function () { /* keep the static rows */ });
+  }
+
+  stats();
+  tape();
+  setInterval(stats, 30000);
+  setInterval(tape, 45000);
 })();
