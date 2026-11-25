@@ -85,8 +85,10 @@ endpoints:
     external_path: /balance
     method: GET
     description: >
-      Current balance of one address or ENS name on an EVM chain, in whole
-      units of the native coin or of an ERC-20 token, with decimals applied.
+      Current balance of one address or ENS name on an EVM chain, or of a
+      Solana wallet on mainnet-beta or devnet, in whole units of the native
+      coin or of a token (ERC-20 or SPL, Token and Token-2022), with decimals
+      applied.
     intents: [WALLET_BALANCE_CHECK_GENERAL]
     params:
       query:
@@ -94,7 +96,7 @@ endpoints:
           - name: address
             type: string
             intents: ["*"]
-            description: "The wallet: a 0x address (40 hexadecimal characters) or an ENS name ending in .eth."
+            description: "The wallet: a 0x address (40 hexadecimal characters), an ENS name ending in .eth, or a base58 Solana address."
           - name: chain
             type: string
             intents: ["*"]
@@ -102,21 +104,23 @@ endpoints:
               Chain to read, as a name or EIP-155 chain id: ethereum (1), base
               (8453), arbitrum (42161), optimism (10), polygon (137), bsc (56),
               avalanche (43114), scroll, linea, gnosis, zksync, xlayer, sepolia,
-              base-sepolia.
+              base-sepolia, solana (mainnet-beta), solana-devnet.
         optional:
           - name: token
             type: string
             intents: ["*"]
             description: >-
-              ERC-20 contract address, or a symbol (USDC, USDT, DAI, WETH, WBTC);
-              empty or the native symbol (ETH, POL, BNB, AVAX) for the chain's
-              native coin.
+              ERC-20 contract address or Solana mint address, or a symbol (USDC,
+              USDT, DAI, WETH, WBTC; on Solana USDC, USDT, PYUSD); empty or the
+              native symbol (ETH, POL, BNB, AVAX, SOL) for the chain's native
+              coin.
   - path: /total-supply
     external_path: /total-supply
     method: GET
     description: >
       Current total supply of one ERC-20 token, in whole tokens with decimals
-      applied, read from totalSupply() on its contract.
+      applied, read from totalSupply() on its contract; or of one Solana SPL
+      mint (Token or Token-2022), read from the mint account.
     intents: [TOKEN_TOTAL_SUPPLY_VERIFY_GENERAL]
     params:
       query:
@@ -148,7 +152,7 @@ endpoints:
           - name: tx_hash
             type: string
             intents: ["*"]
-            description: "Complete transaction hash: 0x followed by exactly 64 hexadecimal characters."
+            description: "Complete transaction hash: 0x followed by exactly 64 hexadecimal characters, or a base58 Solana transaction signature."
         optional:
           - name: chain
             type: string
@@ -156,8 +160,9 @@ endpoints:
             description: >-
               Chain the transaction is on, as a name or EIP-155 chain id
               (ethereum, base, arbitrum, optimism, polygon, bsc, avalanche,
-              scroll, linea, gnosis, zksync, xlayer, sepolia, base-sepolia).
-              When omitted, every listed chain is searched.
+              scroll, linea, gnosis, zksync, xlayer, sepolia, base-sepolia,
+              solana, solana-devnet). When omitted, every listed chain is
+              searched.
   - path: /liquidity
     external_path: /liquidity
     method: GET
@@ -300,10 +305,10 @@ intent_mapping:
     input:
       address:
         from: address
-        how: "Copy the 0x address or ENS name exactly."
+        how: "Copy the 0x address, ENS name or base58 Solana address exactly."
       chain:
         from: chain
-        how: "Lower-case chain name such as ethereum, base, arbitrum, optimism, polygon, or the EIP-155 chain id."
+        how: "Lower-case chain name such as ethereum, base, arbitrum, optimism, polygon, solana or solana-devnet, or the EIP-155 chain id."
       token:
         from: token
         how: "The token's contract address if given, otherwise its symbol; leave empty for the native coin."
