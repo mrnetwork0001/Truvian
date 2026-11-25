@@ -55,7 +55,7 @@
 .sig-meta { margin-top: .45rem; font-size: .66rem; color: var(--paper-dim); word-break: break-word; }
 .memo-stamp { position: absolute; left: 50%; margin-left: -6.6rem; bottom: 88px; transform: rotate(-7deg); mix-blend-mode: multiply; opacity: .92; animation: press .55s cubic-bezier(.2,.8,.2,1) .45s both; }
 /* memos differ in length: a fixed floor keeps the hero still while they cycle */
-@media (min-width: 861px) { .memo { min-height: 640px; display: flex; flex-direction: column; } .memo-body { flex: 1; display: flex; flex-direction: column; } .memo-sign { margin-top: auto; padding-top: 5.6rem; } }
+@media (min-width: 901px) { .memo { min-height: 640px; display: flex; flex-direction: column; } .memo-body { flex: 1; display: flex; flex-direction: column; } .memo-sign { margin-top: auto; padding-top: 5.6rem; } }
 .memo-cycle { display: flex; gap: 2px; margin-top: .5rem; }
 .memo-cycle button { display: block; width: 24px; height: 22px; padding: 0; border: 0; background: transparent; cursor: pointer; }
 .memo-cycle button::before { content: ""; display: block; height: 2px; margin: 0 3px; background: var(--rule); transition: background .3s; }
@@ -231,7 +231,7 @@
   .stats > div:nth-child(4) { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); }
   .stats > div:nth-child(5) { border-top: 1px solid var(--rule); }
 }
-@media (max-width: 860px) {
+@media (max-width: 900px) {
   .tape-row { grid-template-columns: 7.2rem minmax(0, 1fr) 4.4rem 6.6rem 7rem; }
   .tape-row .c-d, .tape-row .c-c { display: none; }
   .hero-grid { grid-template-columns: minmax(0, 1fr); }
@@ -278,4 +278,74 @@
   .tape .c-v { grid-area: v; }
   .ledger.looping .tape-track .tape-row { height: 4.2rem; }
   .ledger.looping .tape-window { height: calc(var(--rows, 5) * 4.2rem); }
+}
+
+/* ---------- phones and tablets: sticky bar, burger, left drawer (900px and below) ----------
+   Desktop (901px and up) never shows any of this. */
+.burger, .mnav, .mbackdrop { display: none; }
+.grid-safe > * { min-width: 0; }
+@media (max-width: 900px) {
+  html, body { overflow-x: clip; }
+  .top { z-index: 40; background: rgba(13,12,10,.82); backdrop-filter: saturate(140%) blur(12px); -webkit-backdrop-filter: saturate(140%) blur(12px); }
+  .top-inner { height: 60px; gap: 1rem; }
+  .brand-logo { height: 30px; }
+  .topnav { display: none; }
+  .burger {
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+    width: 44px; height: 44px; margin-left: auto; margin-right: -8px; padding: 0;
+    background: transparent; border: 0; color: var(--bone); cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .burger span { display: block; width: 20px; height: 1.5px; background: currentColor; transition: transform .25s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+  .burger[aria-expanded="true"] span:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+  .burger[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+  .burger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
+  .burger:active { color: var(--gold); }
+
+  .mbackdrop { display: block; position: fixed; inset: 0; z-index: 48; background: rgba(5,5,4,.62); opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+  .mnav {
+    display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; z-index: 49;
+    width: min(88vw, 320px); height: 100dvh; overflow-y: auto; overscroll-behavior: contain;
+    padding: 0 20px calc(18px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+    background: var(--ink-2); border-right: 1px solid var(--rule);
+    transform: translate3d(-102%, 0, 0); transition: transform .3s cubic-bezier(.2,.75,.2,1); visibility: hidden;
+  }
+  body.menu-open { overflow: hidden; }
+  body.menu-open .mbackdrop { opacity: 1; pointer-events: auto; }
+  body.menu-open .mnav { transform: none; visibility: visible; box-shadow: 24px 0 60px rgba(0,0,0,.55); }
+  .mhead { display: flex; align-items: center; justify-content: space-between; height: 60px; flex: none; border-bottom: 1px solid var(--rule-soft); margin-bottom: 1.2rem; }
+  .mclose { position: relative; width: 44px; height: 44px; margin-right: -10px; background: transparent; border: 0; cursor: pointer; color: var(--bone); }
+  .mclose span { position: absolute; left: 12px; top: 21px; width: 20px; height: 1.5px; background: currentColor; transform: rotate(45deg); }
+  .mclose span + span { transform: rotate(-45deg); }
+  .mlabel { margin: .6rem 0 .3rem; font: 500 .62rem/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--bone-faint); }
+  .mlink { display: flex; align-items: center; min-height: 48px; font: 300 1.45rem/1.1 var(--sans); letter-spacing: -.02em; color: var(--bone); text-decoration: none; border-bottom: 1px solid var(--rule-soft); }
+  .mlink:active, .mlink:focus-visible { color: var(--gold-soft); }
+  .mlink.msub { min-height: 44px; font: 400 .84rem/1.2 var(--mono); letter-spacing: .02em; color: var(--bone-dim); }
+  .mfoot { margin-top: auto; padding-top: 1.6rem; }
+  .mcta { display: flex; justify-content: center; width: 100%; min-height: 50px; }
+
+  .hero { padding-top: 18px; }
+  .hero-copy { padding-top: 0; }
+  .hero h1 { font-size: clamp(3rem, 13vw, 5.6rem); }
+  .cta-row .btn { min-height: 46px; }
+  .hero-memo { max-width: 560px; margin: 8px auto 0; width: 100%; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stats > div { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); }
+  .stats > div:nth-child(-n+2) { border-top: 0; }
+  .stats > div:nth-child(even) { border-left: 1px solid var(--rule); padding-left: 1rem; }
+  .stats > div:nth-child(5) { grid-column: 1 / -1; border-left: 0; padding-left: 0; }
+  .code pre, .endpoints-wrap, .tape { max-width: 100%; }
+  .code pre { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .foot-base { flex-direction: column; }
+}
+@media (max-width: 600px) {
+  .cta-row { display: grid; grid-template-columns: 1fr 1fr; }
+  .cta-row .btn-gold { grid-column: 1 / -1; justify-content: center; }
+  .cta-row .btn { justify-content: center; }
+  .memo { padding: 24px 16px 20px; }
+  /* the stamp sits in the gap above the signature, never on it */
+  .memo-sign { margin-top: 7.4rem; }
+  .memo-stamp { font-size: 1.6rem; margin-left: -5rem; bottom: 112px; }
+  .memo-live .memo-ink { bottom: 98px; }
+  .foot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 1.2rem; }
+  .foot-brand-col { grid-column: 1 / -1; }
 }

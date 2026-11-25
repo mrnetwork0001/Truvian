@@ -358,3 +358,42 @@
   }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 });
   Array.prototype.forEach.call(targets, function (el) { io.observe(el); });
 })();
+
+/* Phones and tablets (900px and below): the menu is a left drawer. It opens
+   from the burger; it closes on the backdrop, Esc, the close button, any link,
+   and when the window grows past 900px. Focus moves into it on open and back
+   to the burger on close; the page behind does not scroll while it is open. */
+(function () {
+  'use strict';
+  var burger = document.getElementById('burger');
+  var nav = document.getElementById('mnav');
+  var backdrop = document.getElementById('mbackdrop');
+  var closeBtn = document.getElementById('mclose');
+  if (!burger || !nav) return;
+  function isOpen() { return document.body.classList.contains('menu-open'); }
+  function open() {
+    document.body.classList.add('menu-open');
+    nav.removeAttribute('inert');
+    burger.setAttribute('aria-expanded', 'true');
+    burger.setAttribute('aria-label', 'Close menu');
+    setTimeout(function () { (nav.querySelector('.mlink') || closeBtn).focus({ preventScroll: true }); }, 60);
+  }
+  function close(returnFocus) {
+    if (!isOpen()) return;
+    document.body.classList.remove('menu-open');
+    nav.setAttribute('inert', '');
+    burger.setAttribute('aria-expanded', 'false');
+    burger.setAttribute('aria-label', 'Open menu');
+    if (returnFocus) burger.focus({ preventScroll: true });
+  }
+  burger.addEventListener('click', function () { if (isOpen()) close(true); else open(); });
+  if (closeBtn) closeBtn.addEventListener('click', function () { close(true); });
+  if (backdrop) backdrop.addEventListener('click', function () { close(true); });
+  Array.prototype.forEach.call(nav.querySelectorAll('a'), function (a) { a.addEventListener('click', function () { close(false); }); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(true); });
+  if (window.matchMedia) {
+    var wide = window.matchMedia('(min-width: 901px)');
+    var onWide = function () { if (wide.matches) close(false); };
+    if (wide.addEventListener) wide.addEventListener('change', onWide); else if (wide.addListener) wide.addListener(onWide);
+  }
+})();

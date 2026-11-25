@@ -145,6 +145,12 @@
 @media (min-width: 861px) { .memo-ghost { display: flex; flex-direction: column; } .memo-ghost .memo-body { flex: 1; display: flex; flex-direction: column; } }
 @keyframes tear { 0% { transform: none; opacity: 1; } 100% { transform: translate3d(0, -46px, 0) rotate(-3.5deg); opacity: 0; } }
 
+/* phones: a smaller sway and a little inset, so the corners stay on screen */
+@media (max-width: 600px) {
+  .memo-live .memo-float { animation-name: sway-sm; margin: 0 8px; }
+  @keyframes sway-sm { 0%, 100% { transform: translate3d(0, -4px, 0) rotate(-1.2deg); } 50% { transform: translate3d(0, 4px, 0) rotate(-.2deg); } }
+}
+
 /* hover, focus or a hidden tab: everything holds still */
 .held .memo-float, .held .memo-float::after, .held .memo-scan::before { animation-play-state: paused; }
 

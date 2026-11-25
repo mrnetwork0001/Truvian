@@ -39,8 +39,29 @@
       <a href="#agents">API</a>
       <a href="#limits" class="nav-opt">Limits</a>
     </nav>
+    <button class="burger" id="burger" type="button" aria-expanded="false" aria-controls="mnav" aria-label="Open menu"><span></span><span></span><span></span></button>
   </div>
 </header>
+
+<!-- phones and tablets (900px and below): the menu is a left drawer -->
+<div class="mbackdrop" id="mbackdrop" aria-hidden="true"></div>
+<nav class="mnav" id="mnav" aria-label="Menu" inert>
+  <div class="mhead">
+    <a class="brand" href="/" aria-label="Truvian Shield home"><img class="brand-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
+    <button class="mclose" id="mclose" type="button" aria-label="Close menu"><span></span><span></span></button>
+  </div>
+  <p class="mlabel">On this page</p>
+  <a class="mlink" href="#desks">Desks</a>
+  <a class="mlink" href="#evidence">Evidence</a>
+  <a class="mlink" href="#how">Method</a>
+  <a class="mlink" href="#tracks">Tracks</a>
+  <a class="mlink" href="#agents">API</a>
+  <a class="mlink" href="#limits">Limits</a>
+  <p class="mlabel">Also</p>
+  <a class="mlink msub" href="/resolve">Resolve a market</a>
+  <a class="mlink msub" href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">Source on GitHub</a>
+  <div class="mfoot"><a class="btn btn-gold mcta" href="/preflight">Open the desks</a></div>
+</nav>
 
 <main id="main">
 
