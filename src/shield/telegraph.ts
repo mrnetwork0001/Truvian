@@ -859,8 +859,13 @@ async function askApiKeyWithRetry(
   key: string,
   question: string,
 ): Promise<{ body: unknown; headers: Headers; latencyMs: number; receipt?: Record<string, unknown> }> {
+  // A 504 is not retried: the gateway gives up after about 60 s while the
+  // node may still answer and bill the ask, so a retry can pay twice and
+  // costs another minute. Since Nov 22 every routed SECURITY_REVIEW_GENERAL
+  // ask has ended in a 504; retrying it twice held each decision for about
+  // three minutes before the second opinion could run.
   const transient = (message: string) =>
-    /^(terminated|fetch failed)$|^http 5\d\d|api stream ended without a miner answer|payment was rejected by the facilitator/i.test(message);
+    /^(terminated|fetch failed)$|^http 5(?!04)\d\d|api stream ended without a miner answer|payment was rejected by the facilitator/i.test(message);
   // The engine route first; the agent route only if the engine route is not
   // there at all (404/405), never after an answer may have been bought.
   let useAgent = process.env.SHIELD_API_ROUTE === 'agent';
