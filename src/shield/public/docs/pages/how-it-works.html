@@ -1,0 +1,35 @@
+<h1>How a decision <span class="accent">is made.</span></h1>
+<p class="lead"><strong>Every desk runs the same loop: read the chain, buy each fact once from a ranked Telegraph miner, apply fixed rules, sign the memo.</strong> The rules are public and pure, so the same reads and answers always give the same decision, and anyone can re-derive it from the memo.</p>
+
+<h2 id="loop">The loop</h2>
+<div class="stages">
+  <div class="stage"><b>Read the chain</b><span>Free, direct JSON-RPC reads by Shield itself: a token's code, supply and decimals, a wallet's balance, a Solana mint's authorities and extensions. On Solana mainnet two providers must agree.</span></div>
+  <div class="stage"><b>Buy each fact</b><span>One routed ask per fact through Telegraph's engine (<code>POST /engine/ask</code>), paid from escrow. The node picks its ranked miner and returns the answer with a receipt and a signal hash.</span></div>
+  <div class="stage"><b>Second opinion</b><span>When an answer is no evidence (no answer, no figure, nothing examined, about another token), one more ask goes to the next-best miner on the node's leaderboard, pinned by id, within the budget.</span></div>
+  <div class="stage"><b>Fixed rules</b><span>Each finding is block, review, info or pass. Any block rejects; any review sends it to a person; only a clean set clears.</span></div>
+  <div class="stage"><b>Signed memo</b><span>SHA-256 over canonical JSON, signed under EIP-191. Settlements are then paid on Solana devnet; resolutions are anchored there with the Memo program.</span></div>
+</div>
+
+<p>A second opinion may hold a decision back but never clears one on its own: when the ranked miner did answer but gave no evidence, a clean pinned answer is recorded and not used (<code>withSecondOpinion</code> in <code>src/shield/preflight.ts</code>). A fact bought in the last 10 minutes is reused at $0 (<code>SHIELD_REUSE_TTL_MS</code>); a failed answer is never reused. Each decision has a budget, $0.10 by default (<code>SHIELD_PREFLIGHT_BUDGET_USD</code>); a plan over it buys nothing and ends in REVIEW.</p>
+
+<h2 id="life">The life of one decision</h2>
+<p>Memo <a href="/preflight?m=Py5ehwTL">Py5ehwTL</a>, 25 Nov 2026 at 11:14 UTC: a custodian asks to pay 1 tUSD on Solana devnet to a wallet belonging to "Garantex Europe OU", registered in Estonia.</p>
+<ol>
+  <li><b>Chain reads.</b> The tUSD mint is a plain SPL token with a freeze and a mint authority. The payer holds 999 tUSD at slot 526131101. Both are disclosed as info and pass.</li>
+  <li><b>Sanctions.</b> Routed to miner 78004, OpenSanctions US OFAC Index, $0.01, 57.7 s: <code>matched: true</code> on <code>us_ofac_sdn</code>. Finding <code>sanctions.match</code>: block.</li>
+  <li><b>Registry.</b> Routed to miner 6164, Praman Desk, $0.01, 44.5 s: the entity is not active. Finding <code>registry.inactive</code>: block.</li>
+  <li><b>Payer balance.</b> Routed to miner 20260828, which answered with no figure; a second opinion was asked and was no evidence either. On 25 Nov no miner on the node answered Solana balances, so the funds check rests on the chain read (info, not a hold).</li>
+  <li><b>Decision.</b> REJECT, "at least one finding blocks the payment". The payment was not sent. Four paid answers, $0.04 of test USDC, 73.9 s end to end.</li>
+  <li><b>Memo.</b> sha256 <code>6b04009c…47ecbb</code>, signed by 0x956aECB0b0DEfC2f2631C26ec0FF7366Ebb53245. Open it and press <i>Verify signature</i>: the browser recomputes the digest and recovers the signer.</li>
+</ol>
+
+<h2 id="glance">The site at a glance</h2>
+<div class="tw narrow"><table>
+  <thead><tr><th>Area</th><th>What it holds</th></tr></thead>
+  <tbody>
+    <tr><td><a href="/">Landing</a></td><td>The desks, real decisions, the live ledger tape and counters, the three tracks, the API.</td></tr>
+    <tr><td><a href="/preflight">/preflight</a></td><td>Four desks as tabs (a bottom bar on phones), fixtures to try, the streamed decision, findings, every answer with its miner, cost and receipt, and the signed memo.</td></tr>
+    <tr><td><a href="/resolve">/resolve</a></td><td>The market resolution desk: the market as its venue states it, each miner's answer and how it counts, the decision and its Solana anchor.</td></tr>
+    <tr><td><a href="/app">/app</a></td><td>The Season I pre-sign check, kept online with its Season I wording.</td></tr>
+  </tbody>
+</table></div>

@@ -1,0 +1,44 @@
+<h1>Settlement <span class="accent">assurance.</span></h1>
+<p class="lead"><strong>Before a custodian pays a counterparty in a token on Solana, Shield decides RELEASE, REVIEW or REJECT, and on RELEASE it can pay on devnet and confirm the exact amount arrived.</strong> This answers Telegraph's Solana use case 1, institutional transaction intelligence and settlement assurance.</p>
+
+<h2 id="use">How to use it</h2>
+<p>Open <a href="/preflight?desk=settlement">/preflight?desk=settlement</a> or call <code>POST /api/preflight</code> with <code>mode: "settlement"</code>.</p>
+<div class="tw"><table>
+  <thead><tr><th>Field</th><th>What it is</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>network</code></td><td><code>solana-devnet</code> or <code>solana</code></td><td>mainnet is decision only</td></tr>
+    <tr><td><code>mint</code></td><td>a mint address, or TUSD, RUSD or USDC</td><td>symbols resolve per network</td></tr>
+    <tr><td><code>amount</code></td><td>whole tokens</td><td>at most the token's decimals</td></tr>
+    <tr><td><code>payer</code></td><td>the paying wallet</td><td>defaults to Shield's devnet wallet</td></tr>
+    <tr><td><code>recipient</code></td><td>the counterparty's wallet</td><td>required</td></tr>
+    <tr><td><code>counterparty</code>, <code>jurisdiction</code></td><td>its legal name and where it is registered</td><td>screened and looked up</td></tr>
+    <tr><td><code>execute</code></td><td><code>true</code> to pay on RELEASE</td><td>devnet, Shield's wallet, at most 1 token (<code>SHIELD_SETTLEMENT_MAX</code>)</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="rules">What is checked</h2>
+<div class="tw"><table>
+  <thead><tr><th>Check</th><th>Source</th><th>Rule</th></tr></thead>
+  <tbody>
+    <tr><td>What the issuer can still do to the recipient's tokens</td><td>the mint account, read from two mainnet providers that must agree</td><td>non-transferable or paused: <span class="v rj">block</span>. Permanent delegate, transfer hook, a non-zero transfer fee, accounts frozen by default: <span class="v rv">review</span>. Freeze authority, mint authority, confidential transfers: <span class="v mu">info</span></td></tr>
+    <tr><td>Payer can cover the payment</td><td>the payer's accounts of the mint on Solana</td><td>short or frozen: <span class="v rj">block</span></td></tr>
+    <tr><td>Recipient</td><td>Solana</td><td>frozen account: <span class="v rj">block</span>; a program address, not a wallet: <span class="v rv">review</span></td></tr>
+    <tr><td>Counterparty on a sanctions list</td><td><code>SANCTIONS_SCREENING_MATCH_GENERAL</code></td><td>match: <span class="v rj">block</span>; near match or unclear: <span class="v rv">review</span></td></tr>
+    <tr><td>Counterparty registered and active</td><td><code>CORPORATE_REGISTRY_LOOKUP_GENERAL</code>, whose champion evaluator is Truvian's adapter 242</td><td>inactive: <span class="v rj">block</span>; another entity, another country, no answer: <span class="v rv">review</span></td></tr>
+    <tr><td>Payer balance, independently</td><td><code>WALLET_BALANCE_CHECK_GENERAL</code></td><td>disagrees with the chain: <span class="v rv">review</span>; no answer is noted as info</td></tr>
+  </tbody>
+</table></div>
+<p><b>Sending.</b> Only on RELEASE, only with <code>execute</code>, only on devnet, only from Shield's devnet wallet, at most 1 token. Shield waits for finalized, reads the transaction back and checks the recipient's accounts gained exactly the amount; otherwise the decision becomes REJECT.</p>
+
+<h2 id="built">How it is built</h2>
+<p><code>runSettlement</code> in <code>src/shield/settlement.ts</code>: <code>chainSettlementFindings</code> for the reads, its own judges for each bought fact, <code>evaluateSettlement</code> for the decision. Solana reads, <code>mintRestrictions</code>, <code>sendDevnetSettlement</code> and <code>verifySettlement</code> are in <code>src/shield/solana.ts</code>. The devnet test tokens come from <code>src/scripts/solana-devnet-fixtures.ts</code>. The full write-up is <a href="https://github.com/mrnetwork0001/Truvian/blob/main/telegraph/SETTLEMENT.md">telegraph/SETTLEMENT.md</a>.</p>
+
+<h2 id="memos">Real memos, 25 Nov 2026</h2>
+<ul>
+  <li><a href="/preflight?m=sEDw0qBk">sEDw0qBk</a> - Coinbase Global, Inc., 1 tUSD: sanctions clear, registry active, payer funded. RELEASE, paid and verified at finalized (<a href="https://explorer.solana.com/tx/382vFshku8AJtsnPWiPHVbsmDu3DRqKqM9LMzVyGSuQXDsBTRHQ38PCgwfHixRhLw5o2H6Tj6fLipWcFwyF3Ukkg?cluster=devnet">transaction</a>). $0, answers reused from a run minutes earlier.</li>
+  <li><a href="/preflight?m=Py5ehwTL">Py5ehwTL</a> - Garantex Europe OU: on the US OFAC list, inactive in its registry. REJECT, not sent, $0.04.</li>
+  <li><a href="/preflight?m=HB7ZGFGr">HB7ZGFGr</a> - Coinbase Global, Inc., 1 rUSD: the token's issuer holds a permanent delegate and could take the payment back. REVIEW, not sent, $0.04.</li>
+</ul>
+<p>The same check on Solana mainnet: PayPal USD (PYUSD) is a Token-2022 mint with a permanent delegate, a transfer-fee authority and confidential transfers. An institution accepting PYUSD accepts that its issuer can move the tokens; Shield says so before the payment.</p>
+
+<div class="callout warn"><span class="ck">Honest caveat</span>Payments are devnet only, in Shield's own test tokens tUSD and rUSD (Circle's devnet USDC faucet was rate-limited when the desk was built). Devnet has one public RPC that answers, so devnet reads name one source. No miner on the node answered Solana balances on 25 Nov, so the funds check rests on the chain read.</div>

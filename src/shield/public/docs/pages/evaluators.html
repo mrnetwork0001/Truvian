@@ -1,0 +1,24 @@
+<h1><span class="accent">Evaluators.</span></h1>
+<p class="lead"><strong>Truvian holds two of Telegraph's champion evaluators: the models the node uses to decide which of two miners' answers is better for SMART_CONTRACT_AUDIT and for CORPORATE_REGISTRY_LOOKUP.</strong> An evaluator never scores Truvian's own miner; it judges other teams' answers.</p>
+
+<h2 id="adapters">The adapters</h2>
+<p>Each is a low-rank adaptation (LoRA) layer on Telegraph's ModernBERT-base foundation, trained only on pairs Truvian generated itself, registered on the Diamond with <code>registerWasm</code>, and served by an executor on <code>scorer.truvian.xyz</code>. The node first checks it on 15 public pairs, then on a hidden sample; with no incumbent it needs at least 70%.</p>
+<div class="tw"><table>
+  <thead><tr><th>Registration</th><th>Intent</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td><a href="https://devnode.telegraphprotocol.com/api/wasm/187">187</a></td><td><code>SMART_CONTRACT_AUDIT</code></td><td><span class="v ok">champion</span> first Canonical, 83.33% on 30 hidden pairs (registered 22 Nov 2026)</td></tr>
+    <tr><td><a href="https://devnode.telegraphprotocol.com/api/wasm/242">242</a></td><td><code>CORPORATE_REGISTRY_LOOKUP</code></td><td><span class="v ok">champion</span> first Canonical, 76.67% on 30 hidden pairs (promoted 25 Nov 2026)</td></tr>
+    <tr><td><a href="https://devnode.telegraphprotocol.com/api/wasm/234">234</a></td><td><code>CONTRACT_OBLIGATION_AUDIT</code></td><td><span class="v rj">lost</span> 79.31%, did not beat the incumbent</td></tr>
+    <tr><td><a href="https://devnode.telegraphprotocol.com/api/wasm/209">209</a></td><td><code>OPTIMAL_EXECUTION_ROUTE</code></td><td><span class="v rv">waiting</span> the node has 9 usable public pairs and needs 10</td></tr>
+    <tr><td><a href="https://devnode.telegraphprotocol.com/api/wasm/227">227</a></td><td><code>CORPORATE_REGISTRY_LOOKUP</code> v1</td><td><span class="v rj">rejected</span> 10 of 15 public pairs, needed 11; v3 became 242</td></tr>
+  </tbody>
+</table></div>
+<p>The corporate-registry champion matters to the settlement desk: its registry checks are answered by miners this adapter judges.</p>
+
+<h2 id="truth">Truth sources</h2>
+<p>Three keyless sources Truvian submitted are eligible in the node's evaluation pool: Routescan's balance history and Truvian's own truth API (<a href="https://truth.truvian.xyz">truth.truvian.xyz</a>) for <code>ONCHAIN_METRIC_VERIFY_GENERAL</code>, and MetaMask's gas API for <code>GAS_PRICE_GENERAL</code>. The truth API answers a balance at a block only when two archive endpoints from different providers agree exactly.</p>
+
+<h2 id="built">How it is built</h2>
+<p>Each adapter has its folder under <a href="https://github.com/mrnetwork0001/Truvian/tree/main/evaluator">evaluator/</a> with its pair generator, training record, package and keccak hash: <code>adapter/</code> (187), <code>adapter-crl/</code> (242), <code>adapter-coa/</code>, <code>adapter-oer/</code>. Training runs on one CPU; the node's hidden pairs are never used for training.</p>
+
+<div class="callout warn"><span class="ck">Honest caveat</span>Eligible is not used: no request from the node had reached the truth API by 25 Nov. Nothing calls <code>SMART_CONTRACT_AUDIT_GENERAL</code> yet, because the node has not opened that intent, so adapter 187 is champion of an intent with no paid traffic today.</div>

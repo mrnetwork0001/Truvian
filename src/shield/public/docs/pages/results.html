@@ -1,0 +1,60 @@
+<h1>Results and <span class="accent">receipts.</span></h1>
+<p class="lead"><strong>Every decision below is a stored, signed memo; open any one and press <i>Verify signature</i>.</strong> This list was read from <code>/api/memos</code> and <code>/api/resolutions</code> on 25 Nov 2026 at 12:20 UTC; the live lists are at <a href="/api/memos">/api/memos</a> and <a href="/api/resolutions">/api/resolutions</a>. Costs are test USDC.</p>
+
+<h2 id="spend">What Telegraph charged</h2>
+<p>The node keeps its own ledger for Shield's escrow, and <code>/api/stats</code> reads it at most once a minute. On 25 Nov 2026 at 12:19 UTC:</p>
+<div class="tw narrow"><table>
+  <thead><tr><th>Ledger</th><th>Test USDC</th></tr></thead>
+  <tbody>
+    <tr><td>Deposited</td><td>22.00</td></tr>
+    <tr><td>Charged</td><td>2.38</td></tr>
+    <tr><td>Not yet billed</td><td>1.08</td></tr>
+    <tr><td>Spent (charged plus unbilled)</td><td>3.46</td></tr>
+    <tr><td>Available</td><td>18.54</td></tr>
+  </tbody>
+</table></div>
+<p>Shield's own counter is lower: runs before 21 Nov used a route that made extra billed calls the memos did not record, and the resolution desk was first run outside the production server. <a href="https://devnode.telegraphprotocol.com/v1/ledger/account/0x29476125898638c8634a97fdca8994530e8c9055">The ledger</a> is the exact record. Almost all of these runs are Truvian's own tests; no visitor had paid for a run by 25 Nov.</p>
+
+<h2 id="desks">Desk decisions</h2>
+<div class="tw"><table>
+  <thead><tr><th>UTC</th><th>Desk</th><th>Subject</th><th>Decision</th><th>Cost</th><th>Memo</th></tr></thead>
+  <tbody>
+    <tr><td>11-25 12:13</td><td>Preflight</td><td>WETH, Ethereum</td><td><span class="v rv">review</span></td><td>$0.04</td><td><a href="/preflight?m=s0muJjUe">s0muJjUe</a></td></tr>
+    <tr><td>11-25 11:16</td><td>Settlement</td><td>Coinbase Global, 1 tUSD</td><td><span class="v ok">release</span></td><td>$0.00</td><td><a href="/preflight?m=sEDw0qBk">sEDw0qBk</a></td></tr>
+    <tr><td>11-25 11:14</td><td>Settlement</td><td>Coinbase Global, 1 rUSD</td><td><span class="v rv">review</span></td><td>$0.04</td><td><a href="/preflight?m=HB7ZGFGr">HB7ZGFGr</a></td></tr>
+    <tr><td>11-25 11:14</td><td>Settlement</td><td>Garantex Europe OU, 1 tUSD</td><td><span class="v rj">reject</span></td><td>$0.04</td><td><a href="/preflight?m=Py5ehwTL">Py5ehwTL</a></td></tr>
+    <tr><td>11-25 08:46</td><td>Preflight</td><td>UNI, Ethereum</td><td><span class="v rv">review</span></td><td>$0.05</td><td><a href="/preflight?m=JAdz203v">JAdz203v</a></td></tr>
+    <tr><td>11-25 08:44</td><td>Holdings</td><td>Lido LDO holdings</td><td><span class="v ok">verified</span></td><td>$0.02</td><td><a href="/preflight?m=IfNN2L2y">IfNN2L2y</a></td></tr>
+    <tr><td>11-25 08:41</td><td>Listing</td><td>AAVE</td><td><span class="v rv">review</span></td><td>$0.06</td><td><a href="/preflight?m=x0bwcUae">x0bwcUae</a></td></tr>
+    <tr><td>11-25 08:38</td><td>Preflight</td><td>LINK</td><td><span class="v rv">review</span></td><td>$0.05</td><td><a href="/preflight?m=-gDEis7Y">-gDEis7Y</a></td></tr>
+    <tr><td>11-25 08:38</td><td>Preflight</td><td>not a token (vitalik.eth)</td><td><span class="v rj">reject</span></td><td>$0.00</td><td><a href="/preflight?m=jQHbAXy3">jQHbAXy3</a></td></tr>
+    <tr><td>11-23 09:17</td><td>Holdings</td><td>ENS DAO treasury</td><td><span class="v rv">review</span></td><td>$0.06</td><td><a href="/preflight?m=JYjvJrmy">JYjvJrmy</a></td></tr>
+    <tr><td>11-21 08:19</td><td>Preflight</td><td>WETH, four receipts</td><td><span class="v rv">review</span></td><td>$0.04</td><td><a href="/preflight?m=B4k2AxbY">B4k2AxbY</a></td></tr>
+    <tr><td>11-20 20:38</td><td>Listing</td><td>Garantex Europe OU</td><td><span class="v rj">reject</span></td><td>$0.04</td><td><a href="/preflight?m=WOYbyG3x">WOYbyG3x</a></td></tr>
+    <tr><td>11-20 20:37</td><td>Listing</td><td>UNI by Uniswap Labs</td><td><span class="v rv">review</span></td><td>$0.04</td><td><a href="/preflight?m=Pi1JfTCY">Pi1JfTCY</a></td></tr>
+    <tr><td>11-20 20:33</td><td>Preflight</td><td>SQUID rug pull, BSC</td><td><span class="v rv">review</span></td><td>$0.04</td><td><a href="/preflight?m=FKLfi2qT">FKLfi2qT</a></td></tr>
+    <tr><td>11-20 20:32</td><td>Preflight</td><td>WETH, all clean</td><td><span class="v ok">hold</span></td><td>$0.04</td><td><a href="/preflight?m=63zSY25V">63zSY25V</a></td></tr>
+  </tbody>
+</table></div>
+<p>Six more stored memos (repeat WETH and SQUID runs, and an earlier not-a-token check) are in <a href="/api/memos?limit=50">the full list</a>.</p>
+
+<h2 id="resolutions">Market resolutions</h2>
+<div class="tw"><table>
+  <thead><tr><th>UTC</th><th>Market</th><th>Decision</th><th>Cost</th><th>Memo</th></tr></thead>
+  <tbody>
+    <tr><td>11-25 12:14</td><td>Polymarket 253591, Trump 2024</td><td><span class="v ok">resolved yes</span></td><td>$0.03</td><td><a href="/resolve?r=I_3i-4CU">I_3i-4CU</a></td></tr>
+    <tr><td>11-25 11:45</td><td>Kalshi, Fed December 2026</td><td><span class="v mu">too early</span></td><td>$0.00</td><td><a href="/resolve?r=Osb8KXlo">Osb8KXlo</a></td></tr>
+    <tr><td>11-25 11:42</td><td>Polymarket 521607, Ukraine minerals deal</td><td><span class="v rj">disputed</span></td><td>$0.02</td><td><a href="/resolve?r=f0rHop0u">f0rHop0u</a></td></tr>
+    <tr><td>11-25 11:39</td><td>Kalshi, Dallas vs Denver</td><td><span class="v rv">review</span></td><td>$0.03</td><td><a href="/resolve?r=gRjkzMqM">gRjkzMqM</a></td></tr>
+    <tr><td>11-25 11:37</td><td>Kalshi, Fed October 2026</td><td><span class="v rv">review</span></td><td>$0.03</td><td><a href="/resolve?r=N2xhK0n_">N2xhK0n_</a></td></tr>
+    <tr><td>11-25 11:36</td><td>Polymarket 253591, Trump 2024</td><td><span class="v ok">resolved yes</span></td><td>$0.03</td><td><a href="/resolve?r=UnLKfa5v">UnLKfa5v</a></td></tr>
+  </tbody>
+</table></div>
+<p>Six earlier resolutions, run while the desk's miner selection was being tuned, are in <a href="/api/resolutions">the full list</a>; most end in REVIEW.</p>
+
+<h2 id="onchain">On chain</h2>
+<ul>
+  <li>Devnet settlement for sEDw0qBk: <a href="https://explorer.solana.com/tx/382vFshku8AJtsnPWiPHVbsmDu3DRqKqM9LMzVyGSuQXDsBTRHQ38PCgwfHixRhLw5o2H6Tj6fLipWcFwyF3Ukkg?cluster=devnet">382vFshk…Ukkg</a>, 1 tUSD received exactly.</li>
+  <li>Anchor for f0rHop0u: <a href="https://explorer.solana.com/tx/pSc2seaLDyAeHLNRper9M8S3EaPwiKNSxFJ5Z7wWwzhCXSFKVHbW5rsFLzrkunic1VQQKGF8snS2fvk5wAcGNBZ?cluster=devnet">pSc2seaL…GNBZ</a>; its memo text is the resolution's sha256.</li>
+  <li>Every answer's escrow receipt is inside its memo (<code>purchases[].receipt</code>: hash, payer, miner, amount, epoch).</li>
+</ul>
