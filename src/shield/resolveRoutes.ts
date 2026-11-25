@@ -97,7 +97,20 @@ export function registerResolveRoutes<A extends { admitted: boolean; paid?: unkn
   app.get('/api/resolutions', async (req) => {
     const q = (req.query ?? {}) as Record<string, unknown>;
     const limit = Number(q.limit);
-    return { resolutions: store.recent(Number.isFinite(limit) && limit > 0 ? Math.min(50, Math.floor(limit)) : 12) };
+    const n = Number.isFinite(limit) && limit > 0 ? Math.min(50, Math.floor(limit)) : 12;
+    // ?current=1: only the latest resolution of each market. Earlier runs of the same market
+    // (tuning runs, reruns) stay stored and served by id, but are superseded on the page.
+    if (q.current === '1' || q.current === 'true') {
+      const seen = new Set<string>();
+      const latest = store.recent(50).filter((r) => {
+        const key = `${r.source} ${r.market}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      return { resolutions: latest.slice(0, n), current: true };
+    }
+    return { resolutions: store.recent(n) };
   });
 
   app.get('/resolve', async (_req, reply) => {

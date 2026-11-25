@@ -205,7 +205,8 @@
 
   async function loadRecent() {
     try {
-      const r = await fetch('/api/resolutions?limit=10');
+      // The latest run of each market; earlier runs stay available by id and in /api/resolutions
+      const r = await fetch('/api/resolutions?limit=10&current=1');
       const { resolutions } = await r.json();
       $('recent').replaceChildren(...(resolutions.length ? resolutions.map((x) => el('li', {}, [
         el('a', { href: `/resolve?r=${x.id}`, text: x.id }),
