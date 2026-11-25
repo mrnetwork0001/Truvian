@@ -356,9 +356,12 @@
 
   for (const tab of document.querySelectorAll('.tab')) tab.addEventListener('click', () => setMode(tab.dataset.mode));
   $('pf-form').addEventListener('submit', run);
-  setMode('trade');
-  fill(FIXTURES.trade[0].v);
-  const id = new URLSearchParams(location.search).get('m');
+  // ?desk=trade|listing|holdings opens that desk, so each desk has its own link.
+  const params = new URLSearchParams(location.search);
+  const desk = ['trade', 'listing', 'holdings'].includes(params.get('desk')) ? params.get('desk') : 'trade';
+  setMode(desk);
+  fill(FIXTURES[desk][0].v);
+  const id = params.get('m');
   if (id) loadPermalink(id);
   loadRecent();
 })();
