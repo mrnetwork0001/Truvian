@@ -35,10 +35,18 @@
       if (!s || typeof s !== 'object') return;
       if (typeof s.preflightsRun === 'number') $('st-decisions').textContent = s.preflightsRun.toLocaleString('en-US');
       if (typeof s.telegraphRequests === 'number') $('st-requests').textContent = s.telegraphRequests.toLocaleString('en-US');
-      if (typeof s.paidUsd === 'number') {
-        var dd = $('st-paid');
-        dd.textContent = money(s.paidUsd) + ' ';
-        dd.appendChild(el('small', null, 'test USDC'));
+      // What Telegraph billed Shield's escrow, from the node's own ledger (charged + unbilled);
+      // Shield's own count only when the ledger could not be read.
+      var L = s.telegraphLedger, link = $('st-paid-link'), note = $('st-paid-note');
+      if (L && typeof L.spentUsd === 'number') {
+        link.textContent = money(L.spentUsd);
+        if (L.url) link.href = L.url;
+        link.title = 'charged ' + money(L.chargedUsd || 0) + ' + unbilled ' + money(L.unbilledUsd || 0) + ", from the node's ledger for Shield's escrow";
+        note.textContent = 'test USDC · node ledger';
+      } else if (typeof s.paidUsd === 'number') {
+        link.textContent = money(s.paidUsd);
+        link.removeAttribute('href'); link.removeAttribute('title');
+        note.textContent = "test USDC · Shield's own count";
       }
       var left = s.you && typeof s.you.checksLeftToday === 'number' ? s.you.checksLeftToday : null;
       if (left !== null) {
@@ -328,6 +336,11 @@
   function countUp(el) {
     var node = null;
     for (var i = 0; i < el.childNodes.length; i++) if (el.childNodes[i].nodeType === 3 && /\d/.test(el.childNodes[i].textContent)) { node = el.childNodes[i]; break; }
+    // a figure wrapped in its own element (a link or span, not the small note)
+    if (!node) {
+      var inner = el.querySelector(':scope > a, :scope > span');
+      if (inner && inner.firstChild && inner.firstChild.nodeType === 3 && /\d/.test(inner.firstChild.textContent)) node = inner.firstChild;
+    }
     if (!node) return;
     var m = node.textContent.match(/^(\s*\$?)([\d,]*\.?\d+)(.*)$/);
     if (!m) return;
