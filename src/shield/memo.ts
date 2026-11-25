@@ -74,6 +74,19 @@ export async function signMemo(memo: PreflightMemo): Promise<Omit<SignedMemo, 'i
   return { memo, sha256, message, signature: await account.signMessage({ message }), signer: account.address };
 }
 
+/**
+ * Sign any memo-shaped value the same way (the resolution desk's memos are
+ * not PreflightMemos). POST /api/memo/verify checks these too, since it only
+ * recomputes the digest of whatever memo it is given.
+ */
+export async function signAnyMemo(memo: unknown): Promise<{ sha256: string; message: string; signature: Hex | null; signer: `0x${string}` | null }> {
+  const sha256 = memoDigest(memo);
+  const message = memoMessage(sha256);
+  const account = memoAccount();
+  if (!account) return { sha256, message, signature: null, signer: null };
+  return { sha256, message, signature: await account.signMessage({ message }), signer: account.address };
+}
+
 export interface MemoVerification {
   sha256: string;
   message: string;
