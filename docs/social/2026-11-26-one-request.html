@@ -1,0 +1,101 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  :root { --bg:#0a0a0a; --panel:#131313; --panel2:#181818; --line:#262626; --text:#ededed; --dim:#8f8f8f; --gold:#d4a53a; --gold-soft:#f0cf7a; --ok:#6fcf97; --warn:#e0a84b; --bad:#e07a7a; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { width:1600px; height:900px; background:var(--bg); color:var(--text); font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif; overflow:hidden; }
+  .mono { font-family:"SF Mono",Menlo,Monaco,monospace; }
+  .page { position:relative; width:1600px; height:900px; padding:46px 72px 0; background:
+     radial-gradient(900px 520px at 88% -8%, rgba(212,165,58,.16), transparent 62%),
+     radial-gradient(700px 480px at -6% 108%, rgba(212,165,58,.08), transparent 60%), var(--bg); }
+  .grid { position:absolute; inset:0; background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px); background-size:80px 80px; opacity:.22; mask-image:linear-gradient(180deg,rgba(0,0,0,.9),transparent 78%); }
+  .top { position:relative; display:flex; align-items:center; justify-content:space-between; }
+  .logo { height:78px; width:auto; display:block; margin-left:-6px; }
+  .tag { font-size:16px; letter-spacing:.2em; color:var(--gold); border:1px solid rgba(212,165,58,.45); padding:10px 18px; border-radius:999px; text-transform:uppercase; }
+  .cols { position:relative; display:grid; grid-template-columns:1.05fr .95fr; gap:52px; margin-top:40px; }
+  h1 { font-size:72px; line-height:1.06; font-weight:700; letter-spacing:-.022em; }
+  h1 span { color:var(--gold); }
+  .lede { margin-top:18px; font-size:21px; line-height:1.45; color:#bdbdbd; }
+  .lede b { color:var(--text); font-weight:600; }
+
+  .memo { margin-top:26px; background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .memo .head { display:flex; justify-content:space-between; align-items:center; padding:14px 22px; border-bottom:1px solid var(--line); font-size:15px; color:var(--dim); letter-spacing:.08em; text-transform:uppercase; }
+  .memo .head b { color:var(--text); letter-spacing:0; text-transform:none; font-size:17px; }
+  .row { display:grid; grid-template-columns:200px 1fr; gap:16px; padding:13px 22px; border-bottom:1px solid #1d1d1d; font-size:18px; align-items:center; }
+  .row .k { color:var(--dim); font-size:14px; letter-spacing:.06em; }
+  .row .bad { color:var(--bad); font-weight:600; }
+  .row .note { color:#a8a8a8; }
+  .verdict { display:flex; justify-content:space-between; align-items:center; padding:16px 22px; background:rgba(224,168,75,.08); border-left:4px solid var(--warn); }
+  .verdict .w { font-size:30px; font-weight:800; letter-spacing:.06em; color:var(--warn); }
+  .verdict .s { font-size:18px; color:#d9d9d9; }
+
+  .desks { display:flex; flex-direction:column; gap:16px; }
+  .label { font-size:14px; letter-spacing:.18em; text-transform:uppercase; color:var(--gold); margin-bottom:2px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 22px; }
+  .card .t { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
+  .card .n { font-size:23px; font-weight:700; }
+  .card .who { font-size:14px; color:var(--dim); letter-spacing:.06em; text-transform:uppercase; }
+  .card .v { margin-top:8px; font-size:18px; line-height:1.42; color:#c9c9c9; }
+  .card .v b { color:var(--gold-soft); font-weight:600; }
+  .chips { margin-top:10px; display:flex; gap:8px; }
+  .chip { font-size:13px; font-weight:700; letter-spacing:.08em; padding:4px 10px; border-radius:5px; border:1px solid currentColor; }
+  .g { color:var(--ok); } .y { color:var(--warn); } .r { color:var(--bad); }
+  .paid { background:linear-gradient(90deg, rgba(212,165,58,.12), rgba(212,165,58,.03)); border:1px solid rgba(212,165,58,.35); border-radius:12px; padding:16px 22px; font-size:19px; line-height:1.4; }
+  .paid b { color:var(--gold-soft); }
+
+  .foot { position:absolute; left:72px; right:72px; bottom:30px; display:flex; justify-content:space-between; align-items:flex-end; font-size:16px; color:var(--dim); }
+  .foot .url { font-size:28px; color:var(--text); font-weight:600; }
+  .foot .url span { color:var(--gold); }
+  .one { position:relative; display:grid; grid-template-columns:1.1fr .9fr; gap:70px; margin-top:100px; align-items:center; }
+  .big { background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .big .row { grid-template-columns:1fr auto; padding:20px 26px; font-size:24px; }
+  .big .row .k { font-size:16px; }
+  .big .verdict { padding:22px 26px; }
+  .big .verdict .w { font-size:42px; }
+  .big .verdict .s { font-size:22px; }
+  .desk3 { position:relative; display:flex; gap:18px; margin-top:96px; }
+  .bhead { display:flex; justify-content:space-between; align-items:center; padding:16px 26px; border-bottom:1px solid var(--line); font-size:15px; color:var(--dim); letter-spacing:.12em; text-transform:uppercase; }
+  .bhead b { color:var(--text); font-size:19px; letter-spacing:0; text-transform:none; }
+  .desk3 div { flex:1; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 22px; font-size:22px; font-weight:600; }
+  .desk3 small { display:block; font-size:14px; color:var(--dim); letter-spacing:.12em; text-transform:uppercase; font-weight:500; margin-top:4px; }
+  .code { background:#0f0f0f; border:1px solid var(--line); border-radius:14px; padding:26px 30px; font-family:"SF Mono",Menlo,monospace; font-size:21px; line-height:1.6; color:#cfcfcf; }
+  .code .c { color:var(--dim); } .code .s { color:var(--gold-soft); } .code .p { color:var(--ok); }
+  .arrow { font-size:46px; color:var(--gold); text-align:center; }
+  .ans { display:flex; flex-direction:column; gap:14px; }
+  .v3 { display:flex; justify-content:space-between; align-items:center; border-radius:12px; padding:18px 26px; border:1px solid var(--line); background:var(--panel); }
+  .v3 .w { font-size:34px; font-weight:800; letter-spacing:.06em; }
+  .v3 .d { font-size:20px; color:#cfcfcf; }
+  .v3.g { border-left:5px solid var(--ok); } .v3.g .w { color:var(--ok); }
+  .v3.y { border-left:5px solid var(--warn); } .v3.y .w { color:var(--warn); }
+  .v3.r { border-left:5px solid var(--bad); } .v3.r .w { color:var(--bad); }
+  .three { position:relative; display:grid; grid-template-columns:1.15fr 70px .85fr; align-items:center; margin-top:48px; }
+  .pills { position:relative; display:flex; gap:14px; margin-top:44px; }
+  .pill { font-size:18px; color:#d6d6d6; border:1px solid var(--line); background:var(--panel); padding:10px 18px; border-radius:999px; }
+  .pill b { color:var(--gold-soft); }
+</style></head>
+<body><div class="page"><div class="grid"></div>
+  <div class="top">
+    <img class="logo" src="../../src/shield/public/brand/truvian-header.png" alt="Truvian">
+    <div class="tag">Telegraph Season II</div>
+  </div>
+  <h1 style="position:relative;margin-top:40px;font-size:64px">One request before your agent trades. <span>Nothing unchecked gets through.</span></h1>
+  <div class="three">
+    <div class="code"><span class="c"># before the trade</span><br>POST <span class="s">truvian.xyz/api/preflight</span><br>{ <span class="p">"chain"</span>: <span class="s">"base"</span>,<br>&nbsp;&nbsp;<span class="p">"token"</span>: <span class="s">"0x…"</span>, <span class="p">"pool"</span>: <span class="s">"0x…"</span>,<br>&nbsp;&nbsp;<span class="p">"tradeUsd"</span>: <span class="s">1000</span> }</div>
+    <div class="arrow">→</div>
+    <div class="ans">
+      <div class="v3 g"><span class="w">HOLD</span><span class="d">trade</span></div>
+      <div class="v3 y"><span class="w">REVIEW</span><span class="d">ask a human</span></div>
+      <div class="v3 r"><span class="w">REJECT</span><span class="d">don't</span></div>
+    </div>
+  </div>
+  <div class="pills">
+    <span class="pill"><b>7</b> chains</span>
+    <span class="pill">No key, no SDK</span>
+    <span class="pill"><b>5</b> free a day, then x402</span>
+    <span class="pill">Signed memo</span>
+  </div>
+  <div class="foot">
+    <div class="url">truvian.xyz<span>/preflight</span></div>
+    <div>Season II hackathon entry</div>
+  </div>
+</div></body></html>
