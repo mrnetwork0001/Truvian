@@ -110,8 +110,16 @@
       </figure>
     </div>
 
-    <!-- the ledger tape: static rows of verified memos, replaced live by landing.js from /api/memos -->
+    <!-- right under the hero: the live counters, then the ledger tape (static rows of verified memos, replaced live by landing.js from /api/memos) -->
     <div class="wrap">
+      <dl class="stats" id="stats">
+        <div><dt>Desk decisions</dt><dd><span id="st-decisions">20</span> <small>incl. market resolutions since 25 Nov</small></dd></div>
+        <div><dt>Telegraph requests</dt><dd id="st-requests">126</dd></div>
+        <div><dt>Paid to Telegraph</dt><dd id="st-paid"><a class="st-src" id="st-paid-link" href="https://devnode.telegraphprotocol.com/v1/ledger/account/0x29476125898638c8634a97fdca8994530e8c9055" target="_blank" rel="noopener" title="charged $2.38 + unbilled $0.90, from the node's ledger for Shield's escrow">$3.28</a> <small id="st-paid-note">test USDC · node ledger</small></dd></div>
+        <div><dt>Champion evaluators</dt><dd>2 <small>ids 187 · 242</small></dd></div>
+        <div><dt>Miner</dt><dd>6180 <small>EVM + Solana</small></dd></div>
+      </dl>
+      <p class="stats-note" id="stats-note">Counters from <a href="/api/stats">/api/stats</a>; nearly all decisions so far are our own test runs.</p>
       <div class="ledger fig-frame" id="ledger">
         <p class="fig-cap"><span><b>FIG. 00</b> · The ledger · latest signed decisions</span><span id="ledger-state">verified 25 Nov 2026</span></p>
         <div class="tape" role="table" aria-label="Latest signed decisions">
@@ -129,14 +137,6 @@
         </div>
       </div>
 
-      <dl class="stats" id="stats">
-        <div><dt>Desk decisions</dt><dd><span id="st-decisions">20</span> <small>incl. market resolutions from 25 Nov on</small></dd></div>
-        <div><dt>Telegraph requests</dt><dd id="st-requests">126</dd></div>
-        <div><dt>Paid to Telegraph</dt><dd id="st-paid"><a class="st-src" id="st-paid-link" href="https://devnode.telegraphprotocol.com/v1/ledger/account/0x29476125898638c8634a97fdca8994530e8c9055" target="_blank" rel="noopener" title="charged $2.38 + unbilled $0.90, from the node's ledger for Shield's escrow">$3.28</a> <small id="st-paid-note">test USDC · node ledger</small></dd></div>
-        <div><dt>Champion evaluators</dt><dd>2 <small>ids 187 · 242</small></dd></div>
-        <div><dt>Miner</dt><dd>6180 <small>EVM + Solana</small></dd></div>
-      </dl>
-      <p class="stats-note" id="stats-note">Counters from <a href="/api/stats">/api/stats</a>; nearly all decisions so far are our own test runs.</p>
     </div>
   </section>
 
