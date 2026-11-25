@@ -1031,6 +1031,48 @@ export async function apiKeyBalanceUsd(): Promise<number | null> {
   }
 }
 
+/**
+ * The Anjoman escrow account Shield pays Telegraph from, as the node's own
+ * ledger records it: what was deposited, charged, and is still unbilled.
+ * Amounts are test USDC with 6 decimals on the ledger; returned in dollars.
+ * SHIELD_ESCROW_ACCOUNT overrides the account (default: Shield's escrow).
+ */
+export interface EscrowLedger {
+  account: string;
+  depositedUsd: number;
+  chargedUsd: number;
+  unbilledUsd: number;
+  /** charged + unbilled: everything the node has taken or will take */
+  spentUsd: number;
+  availableUsd: number;
+  url: string;
+  readAt: string;
+}
+
+export async function escrowLedger(): Promise<EscrowLedger | null> {
+  const account = (process.env.SHIELD_ESCROW_ACCOUNT ?? '0x29476125898638c8634a97fdca8994530e8c9055').trim().toLowerCase();
+  const url = `${NODE_URL}/v1/ledger/account/${account}`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
+    const b = asRecord(await res.json());
+    const usd = (k: string) => {
+      const v = b?.[k];
+      return typeof v === 'string' && /^\d+$/.test(v) ? Number(BigInt(v)) / 1e6 : typeof v === 'number' ? v / 1e6 : NaN;
+    };
+    const out = { deposited: usd('deposited'), charged: usd('charged'), unbilled: usd('unbilled'), available: usd('available') };
+    if (![out.deposited, out.charged, out.unbilled].every(Number.isFinite)) return null;
+    return {
+      account, depositedUsd: out.deposited, chargedUsd: out.charged, unbilledUsd: out.unbilled,
+      spentUsd: Number((out.charged + out.unbilled).toFixed(6)),
+      availableUsd: Number.isFinite(out.available) ? out.available : Number((out.deposited - out.charged - out.unbilled).toFixed(6)),
+      url, readAt: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function payerAccount(): PrivateKeyAccount | null {
   const key = process.env.TELEGRAPH_PAYER_KEY?.trim();
   if (!key) return null;
