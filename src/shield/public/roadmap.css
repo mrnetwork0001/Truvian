@@ -13,7 +13,7 @@
 .seg-0 { left: 0; } .seg-1 { left: 25%; } .seg-2 { left: 50%; } .seg-3 { left: 75%; }
 .road:has(.ph:nth-child(1):hover) .seg-0, .road:has(.ph:nth-child(2):hover) .seg-1,
 .road:has(.ph:nth-child(3):hover) .seg-2, .road:has(.ph:nth-child(4):hover) .seg-3 { opacity: .9; }
-.spark { position: absolute; left: 0; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--gold-soft); box-shadow: 0 0 10px 2px rgba(227, 196, 111, .55); opacity: 0; }
+.spark { position: absolute; left: 0; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--gold-soft); box-shadow: 0 0 10px 2px rgba(var(--gold-rgb), .55); opacity: 0; }
 
 .phases { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ph { position: relative; min-width: 0; padding: 1.3rem 1.4rem 1.2rem 0; margin-right: 1.4rem; border-right: 1px solid var(--rule-soft); transition: transform .3s cubic-bezier(.2,.8,.2,1); }

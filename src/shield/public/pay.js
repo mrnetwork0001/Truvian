@@ -17,7 +17,7 @@
   var STYLE_ID = 'truvian-pay-style';
   var CSS = [
     '.tpay,.tpay *{box-sizing:border-box}',
-    '.tpay-backdrop{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.58);display:flex;align-items:center;justify-content:center;padding:16px}',
+    '.tpay-backdrop{position:fixed;inset:0;z-index:60;background:var(--scrim,rgba(0,0,0,.58));display:flex;align-items:center;justify-content:center;padding:16px}',
     '.tpay{width:100%;max-width:440px;background:var(--ink-2,#13120f);color:var(--bone,#ece5d6);border:1px solid var(--rule,#2b2822);box-shadow:0 30px 80px rgba(0,0,0,.6);font-family:var(--sans,system-ui,sans-serif)}',
     '.tpay-head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--rule,#2b2822);font:500 .66rem/1.3 var(--mono,monospace);letter-spacing:.16em;text-transform:uppercase;color:var(--bone-faint,#8d8678)}',
     '.tpay-head b{color:var(--gold,#caa53d);font-weight:500}',
@@ -29,7 +29,7 @@
     '.tpay dl{margin:1rem 0 0;display:grid;grid-template-columns:7rem minmax(0,1fr);gap:.4rem .8rem;font:400 .74rem/1.5 var(--mono,monospace)}',
     '.tpay dt{color:var(--bone-faint,#8d8678);text-transform:uppercase;letter-spacing:.12em;font-size:.62rem;padding-top:.15rem}',
     '.tpay dd{margin:0;color:var(--bone,#ece5d6);overflow-wrap:anywhere}',
-    '.tpay-go{margin-top:1.2rem;width:100%;min-height:48px;border:0;background:var(--gold,#caa53d);color:#15120a;font:600 .95rem var(--sans,system-ui);cursor:pointer}',
+    '.tpay-go{margin-top:1.2rem;width:100%;min-height:48px;border:0;background:var(--gold-fill,#caa53d);color:var(--on-gold,#15120a);font:600 .95rem var(--sans,system-ui);cursor:pointer}',
     '.tpay-go:disabled{opacity:.6;cursor:progress}',
     '.tpay-status{margin-top:.8rem;min-height:1.2em;font:400 .76rem/1.5 var(--mono,monospace);color:var(--bone-faint,#8d8678)}',
     '.tpay-status.err{color:var(--reject,#d0645a)}',

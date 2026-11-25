@@ -30,6 +30,21 @@
   --ok-paper: #2f5f2b;
   --review-paper: #7a4f00;
   --reject-paper: #8b2219;
+  /* surfaces and effects that change with the theme */
+  --gold-rgb: 202,165,61;
+  --gold-fill: #caa53d;      /* gold behind dark text: buttons, the skip link */
+  --gold-fill-2: #e3c46f;
+  --on-gold: #17140c;
+  --bar: rgba(13,12,10,.9);  /* sticky headers and bars, translucent page colour */
+  --bar-strong: rgba(13,12,10,.96);
+  --panel-glass: rgba(19,18,15,.9);
+  --tint: rgba(255,255,255,.03);       /* hover wash on rows */
+  --tint-faint: rgba(255,255,255,.012);
+  --shadow: rgba(0,0,0,.9);
+  --shadow-soft: rgba(0,0,0,.55);
+  --scrim: rgba(5,5,4,.62);            /* behind drawers and sheets */
+  --sheet-edge: rgba(255,255,255,.04);
+  --ink-btn-hover: #33302a;
 
   --sans: "Inter Tight", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --serif: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
@@ -39,6 +54,70 @@
   --gutter: clamp(16px, 2vw, 24px);
   /* the header bar sits at half the content inset: (100vw - wrap)/2 + gutter, halved; never under 12px */
   --head-inset: max(12px, calc((100vw - var(--wrap)) / 4 + var(--gutter) / 2));
+}
+
+/* ---------- light theme: the page becomes the paper ----------
+   Set by theme.js (and an inline script in each <head>, so there is no flash)
+   as data-theme="light" on <html>. The dark names keep their roles: --ink is
+   the page, --bone the text, --rule the hairlines. The memo sheet goes whiter
+   than the page so it still reads as a document; verdicts take their ink
+   colours, like real stamps on paper. */
+html[data-theme="light"] {
+  color-scheme: light;
+  --ink: #f1ebde;
+  --ink-2: #e9e2d2;
+  --ink-3: #e0d8c5;
+  --rule: #c9bfa8;
+  --rule-soft: #ddd5c2;
+  --bone: #1c1a16;
+  --bone-dim: #4b463c;
+  --bone-faint: #655f52;
+  --paper: #fcfaf4;
+  --paper-2: #f4efe3;
+  --paper-rule: #d9d0bd;
+  --gold: #7f600f;
+  --gold-soft: #6a4f08;
+  --gold-on-paper: #7d5f12;
+  --ok: #2f5f2b;
+  --review: #7a4f00;
+  --reject: #8b2219;
+  --gold-rgb: 127,96,15;
+  --gold-fill: #caa53d;
+  --gold-fill-2: #d9b552;
+  --on-gold: #17140c;
+  --bar: rgba(241,235,222,.9);
+  --bar-strong: rgba(241,235,222,.96);
+  --panel-glass: rgba(233,226,210,.92);
+  --tint: rgba(28,26,22,.045);
+  --tint-faint: rgba(28,26,22,.025);
+  --shadow: rgba(70,52,18,.32);
+  --shadow-soft: rgba(70,52,18,.22);
+  --scrim: rgba(28,26,22,.38);
+  --sheet-edge: rgba(28,26,22,.06);
+  --ink-btn-hover: #3a362d;
+}
+/* colours glide on a toggle (theme.js adds .theme-anim briefly), never on first load */
+html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *::after {
+  transition: background-color .2s ease, color .2s ease, border-color .2s ease, fill .2s ease, stroke .2s ease !important;
+}
+
+/* ---------- theme toggle ---------- */
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0; flex: none;
+  border: 1px solid var(--rule); border-radius: 50%;
+  background: transparent; color: var(--bone-dim); cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.theme-toggle:hover, .theme-toggle:focus-visible { color: var(--gold); border-color: var(--gold); }
+.theme-toggle svg { width: 17px; height: 17px; display: block; }
+.theme-toggle .ic-sun { display: none; }
+html[data-theme="light"] .theme-toggle .ic-sun { display: block; }
+html[data-theme="light"] .theme-toggle .ic-moon { display: none; }
+
+/* the logo PNG is drawn for ink; on paper it sits on a small ink plate */
+html[data-theme="light"] img[src*="truvian-header"] {
+  background: #13120f; padding: 6px 10px; border-radius: 4px; box-sizing: content-box;
 }
 
 /* ---------- base ---------- */
@@ -55,9 +134,9 @@ body {
 }
 img { max-width: 100%; }
 a { color: inherit; }
-::selection { background: var(--gold); color: var(--ink); }
+::selection { background: var(--gold-fill); color: var(--on-gold); }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 2px; }
-.skip { position: absolute; left: -9999px; top: 8px; z-index: 50; background: var(--gold); color: var(--ink); padding: .5rem .8rem; font: 500 .85rem var(--mono); }
+.skip { position: absolute; left: -9999px; top: 8px; z-index: 50; background: var(--gold-fill); color: var(--on-gold); padding: .5rem .8rem; font: 500 .85rem var(--mono); }
 .skip:focus { left: 8px; }
 code, .mono { font-family: var(--mono); }
 .hidden { display: none !important; }
@@ -71,7 +150,7 @@ code, .mono { font-family: var(--mono); }
   color: var(--bone-faint);
 }
 .kicker b { color: var(--bone); font-weight: 500; }
-.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); margin-right: .55em; vertical-align: 1px; box-shadow: 0 0 0 3px rgba(202,165,61,.16); }
+.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); margin-right: .55em; vertical-align: 1px; box-shadow: 0 0 0 3px rgba(var(--gold-rgb),.16); }
 
 /* ---------- the stamp ---------- */
 .stamp {
@@ -159,9 +238,12 @@ code, .mono { font-family: var(--mono); }
   transition: border-color .15s, background .15s, color .15s;
 }
 .btn:hover { border-color: var(--bone-faint); }
-.btn-gold { background: var(--gold); border-color: var(--gold); color: #17140c; }
-.btn-gold:hover { background: var(--gold-soft); border-color: var(--gold-soft); }
+.btn-gold { background: var(--gold-fill); border-color: var(--gold-fill); color: var(--on-gold); }
+.btn-gold:hover { background: var(--gold-fill-2); border-color: var(--gold-fill-2); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* the animated background stays behind figures, never under their text */
+.fig-frame { background-color: var(--ink); }

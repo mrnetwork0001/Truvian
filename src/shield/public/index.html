@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{if(localStorage.getItem("truvian-theme")==="light")document.documentElement.setAttribute("data-theme","light")}catch(e){}</script>
 <title>Truvian Shield - decide before you act</title>
 <meta name="description" content="Truvian Shield decides about a token or a payment before anyone acts on it: Telegraph's specialist miners supply the evidence, the chain checks it, and a signed memo records it. Four desks, including settlement assurance on Solana.">
 <meta name="theme-color" content="#0d0c0a">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="dark light">
 <meta property="og:title" content="Truvian Shield">
 <meta property="og:description" content="Decide before you act: Telegraph's specialist miners supply the evidence, the chain checks it, a signed memo records it.">
 <meta property="og:url" content="https://truvian.xyz/">
@@ -39,6 +40,7 @@
       <a href="#agents">API</a>
       <a href="/docs">Docs</a>
     </nav>
+    <button class="theme-toggle" type="button" aria-label="Switch to light mode" aria-pressed="false"></button>
     <button class="burger" id="burger" type="button" aria-expanded="false" aria-controls="mnav" aria-label="Open menu"><span></span><span></span><span></span></button>
   </div>
 </header>
@@ -48,7 +50,7 @@
 <nav class="mnav" id="mnav" aria-label="Menu" inert>
   <div class="mhead">
     <a class="brand" href="/" aria-label="Truvian Shield home"><img class="brand-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
-    <button class="mclose" id="mclose" type="button" aria-label="Close menu"><span></span><span></span></button>
+    <div class="mhead-r"><button class="theme-toggle" type="button" aria-label="Switch to light mode" aria-pressed="false"></button><button class="mclose" id="mclose" type="button" aria-label="Close menu"><span></span><span></span></button></div>
   </div>
   <p class="mlabel">Menu</p>
   <a class="mlink" href="#desks">Desks</a>
@@ -422,6 +424,7 @@ curl -s https://truvian.xyz/api/preflight \
   </div>
 </footer>
 
+<script src="./theme.js"></script>
 <script src="./field.js"></script>
 <script src="./landing.js"></script>
 </body>

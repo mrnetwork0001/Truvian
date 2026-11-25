@@ -74,6 +74,9 @@ export function renderDocsPage(groups: DocGroup[], slug: string, article: string
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>try{if(localStorage.getItem("truvian-theme")==="light")document.documentElement.setAttribute("data-theme","light")}catch(e){}</script>
+<meta name="theme-color" content="#0d0c0a">
+<meta name="color-scheme" content="dark light">
 <title>${esc(page.title)} · Truvian Docs</title>
 <meta name="description" content="${esc(page.blurb)}">
 <link rel="icon" href="/favicon.ico" sizes="any">
@@ -99,6 +102,7 @@ export function renderDocsPage(groups: DocGroup[], slug: string, article: string
       <a href="/api/stats">Stats</a>
       <a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">GitHub</a>
     </nav>
+    <button class="theme-toggle" type="button" aria-label="Switch to light mode" aria-pressed="false"></button>
     <button class="burger" id="dburger" type="button" aria-expanded="false" aria-controls="dnav" aria-label="Open the docs menu"><span></span><span></span><span></span></button>
   </div>
 </header>
@@ -119,6 +123,7 @@ export function renderDocsPage(groups: DocGroup[], slug: string, article: string
   </main>
 </div>
 ${footer}
+<script src="/theme.js"></script>
 <script src="/docs/docs.js"></script>
 </body>
 </html>`;

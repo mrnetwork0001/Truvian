@@ -3,7 +3,7 @@
 .wrap { width: 100%; max-width: var(--wrap); margin: 0 auto; padding: 0 var(--gutter); }
 
 /* ---------- top bar ---------- */
-.top { position: sticky; top: 0; z-index: 20; background: rgba(13,12,10,.9); backdrop-filter: saturate(140%) blur(8px); -webkit-backdrop-filter: saturate(140%) blur(8px); border-bottom: 1px solid var(--rule-soft); }
+.top { position: sticky; top: 0; z-index: 20; background: var(--bar); backdrop-filter: saturate(140%) blur(8px); -webkit-backdrop-filter: saturate(140%) blur(8px); border-bottom: 1px solid var(--rule-soft); }
 .top-inner { display: flex; align-items: center; gap: 2rem; height: 68px; }
 .top .top-inner { max-width: none; padding-left: var(--head-inset); padding-right: var(--head-inset); }
 .brand { line-height: 0; flex: none; }
@@ -35,7 +35,7 @@
 .memo {
   padding: 30px 28px 24px;
   transform: rotate(1.1deg);
-  box-shadow: 0 1px 0 rgba(255,255,255,.04), 0 30px 60px -30px rgba(0,0,0,.9);
+  box-shadow: 0 1px 0 var(--sheet-edge), 0 30px 60px -30px var(--shadow);
 }
 .memo-top { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: .9rem; border-bottom: 2px solid var(--paper-ink); }
 .memo-top b { color: var(--paper-ink); font-weight: 600; letter-spacing: .04em; }
@@ -270,7 +270,7 @@
 .grid-safe > * { min-width: 0; }
 @media (max-width: 900px) {
   html, body { overflow-x: clip; }
-  .top { z-index: 40; background: rgba(13,12,10,.95); backdrop-filter: saturate(140%) blur(12px); -webkit-backdrop-filter: saturate(140%) blur(12px); }
+  .top { z-index: 40; background: var(--bar-strong); backdrop-filter: saturate(140%) blur(12px); -webkit-backdrop-filter: saturate(140%) blur(12px); }
   .top-inner { height: 60px; gap: 1rem; }
   .brand-logo { height: 30px; }
   .topnav { display: none; }
@@ -285,7 +285,7 @@
   .burger[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
   .burger:active { color: var(--gold); }
 
-  .mbackdrop { display: block; position: fixed; inset: 0; z-index: 48; background: rgba(5,5,4,.62); opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+  .mbackdrop { display: block; position: fixed; inset: 0; z-index: 48; background: var(--scrim); opacity: 0; pointer-events: none; transition: opacity .25s ease; }
   .mnav {
     display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; left: 0; z-index: 49;
     width: min(88vw, 320px); height: 100dvh; overflow-y: auto; overscroll-behavior: contain;
@@ -295,7 +295,7 @@
   }
   body.menu-open { overflow: hidden; }
   body.menu-open .mbackdrop { opacity: 1; pointer-events: auto; }
-  body.menu-open .mnav { transform: none; visibility: visible; box-shadow: 24px 0 60px rgba(0,0,0,.55); }
+  body.menu-open .mnav { transform: none; visibility: visible; box-shadow: 24px 0 60px var(--shadow-soft); }
   .mhead { display: flex; align-items: center; justify-content: space-between; height: 60px; flex: none; border-bottom: 1px solid var(--rule-soft); margin-bottom: 1.2rem; }
   .mclose { position: relative; width: 44px; height: 44px; margin-right: -10px; background: transparent; border: 0; cursor: pointer; color: var(--bone); }
   .mclose span { position: absolute; left: 12px; top: 21px; width: 20px; height: 1.5px; background: currentColor; transform: rotate(45deg); }
@@ -329,4 +329,12 @@
   .memo-sign { margin-top: 7.4rem; }
   .memo-stamp { font-size: 1.6rem; margin-left: -5rem; bottom: 112px; }
   .memo-live .memo-ink { bottom: 98px; }
+}
+
+/* ---------- theme toggle placement ---------- */
+.top .theme-toggle { margin-left: -.4rem; }
+.mhead-r { display: flex; align-items: center; gap: .4rem; }
+@media (max-width: 900px) {
+  .top .theme-toggle { margin-left: auto; }
+  .top .theme-toggle + .burger { margin-left: 0; }
 }
