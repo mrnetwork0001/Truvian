@@ -243,23 +243,10 @@ table.grid a { color: var(--bone); text-decoration-color: var(--gold); text-unde
 .how-footnote { margin: 1.6rem 0 0; font-size: .8rem; line-height: 1.8; color: var(--bone-faint); }
 .how-footnote .mono { font-size: .72rem; color: var(--bone-dim); }
 
-/* ---------- footer ---------- */
-.site-footer { border-top: 1px solid var(--rule); padding: 48px 0 40px; }
-.foot-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); gap: 2.5rem; }
-.foot-brand { display: inline-block; line-height: 0; }
-.foot-logo { height: 30px; width: auto; display: block; }
-.foot-desc { margin: 1rem 0 0; max-width: 26rem; font-size: .84rem; color: var(--bone-faint); }
-.foot-col h4 { margin: 0 0 1rem; font: 500 .66rem var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--gold); }
-.foot-col ul { list-style: none; margin: 0; padding: 0; }
-.foot-col li { margin: 0 0 .6rem; }
-.foot-col a { color: var(--bone-dim); text-decoration: none; font-size: .86rem; }
-.foot-col a:hover { color: var(--bone); }
 
 /* ---------- responsive ---------- */
 @media (max-width: 960px) {
   .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .foot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .foot-brand-col { grid-column: 1 / -1; }
 }
 @media (max-width: 640px) {
   #pf-form { grid-template-columns: minmax(0, 1fr); padding: 1.1rem; }
@@ -279,7 +266,6 @@ table.grid a { color: var(--bone); text-decoration-color: var(--gold); text-unde
 }
 @media (max-width: 420px) {
   .tabs { grid-template-columns: minmax(0, 1fr); }
-  .foot-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ---------- phones and tablets (900px and below): app shell ----------
@@ -325,7 +311,7 @@ table.grid a { color: var(--bone); text-decoration-color: var(--gold); text-unde
   .db-item[aria-current="page"]::before { transform: scaleX(1); }
   .db-item:active { color: var(--bone); background: rgba(255,255,255,.03); }
 
-  .site-footer { display: none; }
+  .site-foot { display: none; }
   .mini-foot { display: flex; flex-wrap: wrap; justify-content: center; gap: .4rem 1.1rem; margin: 2.4rem 0 0; padding-top: 1.2rem; border-top: 1px solid var(--rule-soft); font: 400 .66rem/1.5 var(--mono); letter-spacing: .06em; color: var(--bone-faint); text-align: center; }
   .mini-foot span { flex-basis: 100%; }
   .mini-foot a { color: var(--bone-dim); text-decoration-color: var(--gold); text-underline-offset: 3px; min-height: 32px; display: inline-flex; align-items: center; }

@@ -1,0 +1,30 @@
+/* The one site footer, the same on the landing page, the desks, Resolve and the docs.
+   Uses tokens.css. On the desk pages at 900px and below it gives way to the compact mini-foot (desk.css). */
+.site-foot { position: relative; z-index: 1; border-top: 1px solid var(--rule); padding: 64px 0 56px; background: var(--ink); }
+.foot-wrap { width: 100%; max-width: var(--wrap); margin: 0 auto; padding: 0 var(--gutter); }
+.foot-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); gap: 2.5rem; }
+.foot-grid > * { min-width: 0; }
+.foot-brand { display: inline-block; line-height: 0; }
+.foot-logo { height: 30px; width: auto; display: block; }
+.foot-desc { margin: 1.1rem 0 1.2rem; max-width: 26rem; font-size: .86rem; line-height: 1.6; color: var(--bone-faint); }
+.foot-social { display: flex; gap: 1rem; }
+.foot-social a { color: var(--bone-faint); line-height: 0; }
+.foot-social a:hover { color: var(--bone); }
+.foot-social svg { width: 20px; height: 20px; fill: currentColor; }
+.foot-col h4 { margin: 0 0 1rem; font: 500 .68rem var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--gold); }
+.foot-col ul { list-style: none; margin: 0; padding: 0; }
+.foot-col li { margin: 0 0 .6rem; }
+.foot-col a { color: var(--bone-dim); text-decoration: none; font-size: .88rem; background: linear-gradient(var(--gold), var(--gold)) 0 100% / 0 1px no-repeat; padding-bottom: 2px; transition: background-size .35s cubic-bezier(.2,.8,.2,1), color .15s; }
+.foot-col a:hover, .foot-col a:focus-visible { color: var(--bone); background-size: 100% 1px; }
+
+@media (max-width: 1080px) {
+  .foot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .foot-brand-col { grid-column: 1 / -1; }
+}
+@media (max-width: 600px) {
+  .site-foot { padding: 48px 0 calc(40px + env(safe-area-inset-bottom)); }
+  .foot-grid { column-gap: 1.2rem; row-gap: 2rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .foot-col a { transition: none; }
+}

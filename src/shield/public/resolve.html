@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=Inter+Tight:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="./tokens.css">
 <link rel="stylesheet" href="./desk.css">
+<link rel="stylesheet" href="./footer.css">
 <style>
   /* Resolve's own verdicts on the shared stamp: RESOLVED green, DISPUTED red, REVIEW and TOO EARLY amber */
   .decision.RESOLVED { --c: var(--ok); }
@@ -47,6 +48,8 @@
     <div class="header-right">
       <div class="badge-row">
         <span class="badge">Telegraph Season II · Apps &amp; Agents</span>
+        <a href="/docs/resolution">docs</a>
+        <span class="sep" aria-hidden="true">·</span>
         <a href="/preflight">the other desks</a>
         <span class="sep" aria-hidden="true">·</span>
         <a href="https://github.com/mrnetwork0001/Truvian/blob/main/src/shield/resolve.ts" target="_blank" rel="noopener">the rules</a>
@@ -129,29 +132,52 @@
     </section>
   </main>
 
-  <p class="mini-foot"><span>Telegraph Season II · devnode · test USDC</span><a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">Source</a><a href="/">Home</a></p>
+  <p class="mini-foot"><span>Telegraph Season II · devnode · test USDC</span><a href="/docs">Docs</a><a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">Source</a><a href="/">Home</a></p>
 
-  <footer class="site-footer">
-    <div class="foot-grid">
-      <div class="foot-brand-col">
-        <a class="foot-brand" href="/"><img class="foot-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
-        <p class="foot-desc">Built for the Telegraph Protocol Season II hackathon. Every answer above was bought through Telegraph and can be resolved on the node by its signal hash.</p>
-      </div>
-      <nav class="foot-col"><h4>Shield</h4><ul>
-        <li><a href="/preflight">Token desks</a></li>
-        <li><a href="/resolve">Market resolution</a></li>
-        <li><a href="/api/resolutions">Resolution feed (JSON)</a></li>
-      </ul></nav>
-      <nav class="foot-col"><h4>Telegraph</h4><ul>
-        <li><a href="https://anjoman.ai" target="_blank" rel="noopener">anjoman.ai</a></li>
-      </ul></nav>
-      <nav class="foot-col"><h4>Source</h4><ul>
-        <li><a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">GitHub</a></li>
-        <li><a href="https://github.com/mrnetwork0001/Truvian/blob/main/src/shield/resolve.ts" target="_blank" rel="noopener">The rules</a></li>
-      </ul></nav>
-    </div>
-  </footer>
 </div>
+<footer class="site-foot">
+  <div class="foot-wrap foot-grid">
+    <div class="foot-brand-col">
+      <a class="foot-brand" href="/"><img class="foot-logo" src="/brand/truvian-header.png" alt="Truvian Shield" width="588" height="176"></a>
+      <p class="foot-desc">Truvian decides before money moves. It buys evidence from Telegraph's ranked specialist miners, checks every answer against the chain, and returns a signed memo with the cost and a receipt for each answer: for trading agents, exchanges, funds, custodians and prediction markets, on EVM chains and Solana.</p>
+      <div class="foot-social">
+        <a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener" aria-label="Truvian on GitHub"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+        <a href="https://x.com/Telegraphprotoc" target="_blank" rel="noopener" aria-label="Telegraph Protocol on X"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117Z"/></svg></a>
+      </div>
+    </div>
+    <nav class="foot-col" aria-label="Shield">
+      <h4>Shield</h4>
+      <ul>
+        <li><a href="/preflight?desk=trade">Token preflight</a></li>
+        <li><a href="/preflight?desk=listing">Listing review</a></li>
+        <li><a href="/preflight?desk=holdings">Holdings proof</a></li>
+        <li><a href="/preflight?desk=settlement">Settlement on Solana</a></li>
+        <li><a href="/resolve">Market resolution</a></li>
+        <li><a href="/app">Season I pre-sign check</a></li>
+      </ul>
+    </nav>
+    <nav class="foot-col" aria-label="Telegraph">
+      <h4>Telegraph</h4>
+      <ul>
+        <li><a href="https://anjoman.ai" target="_blank" rel="noopener">Anjoman</a></li>
+        <li><a href="https://anjoman.ai/docs" target="_blank" rel="noopener">Telegraph docs</a></li>
+        <li><a href="https://devnode.telegraphprotocol.com/api/miners/6180" target="_blank" rel="noopener">Our miner on the node</a></li>
+        <li><a href="https://x.com/Telegraphprotoc" target="_blank" rel="noopener">@Telegraphprotoc</a></li>
+      </ul>
+    </nav>
+    <nav class="foot-col" aria-label="Resources">
+      <h4>Resources</h4>
+      <ul>
+        <li><a href="/docs">Docs</a></li>
+        <li><a href="/docs/roadmap">Roadmap</a></li>
+        <li><a href="https://github.com/mrnetwork0001/Truvian" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="https://miner.truvian.xyz" target="_blank" rel="noopener">Truvian miner</a></li>
+        <li><a href="https://github.com/mrnetwork0001/Truvian/tree/main/evaluator" target="_blank" rel="noopener">Evaluator adapters</a></li>
+        <li><a href="/api/stats">Live stats</a></li>
+      </ul>
+    </nav>
+  </div>
+</footer>
 <!-- phones and tablets (900px and below): the desks are a bottom bar -->
 <nav class="deskbar" id="deskbar" aria-label="Desks">
   <a class="db-item" href="/preflight?desk=trade" data-mode="trade"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span>Trade</span></a>

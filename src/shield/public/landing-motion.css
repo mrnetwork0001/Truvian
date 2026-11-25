@@ -75,8 +75,6 @@
 .desk-foot a { background: linear-gradient(var(--gold-soft), var(--gold-soft)) 0 100% / 0 1px no-repeat, linear-gradient(var(--gold), var(--gold)) 0 100% / 100% 1px no-repeat; }
 .track a:hover, .limits a:hover, .hero-memo figcaption a:hover, .desk-foot a:hover, .stats-note a:hover,
 .track a:focus-visible, .limits a:focus-visible, .hero-memo figcaption a:focus-visible, .desk-foot a:focus-visible, .stats-note a:focus-visible { background-size: 100% 1px, 100% 1px; color: var(--gold-soft); }
-.foot-col a { background: linear-gradient(var(--gold), var(--gold)) 0 100% / 0 1px no-repeat; padding-bottom: 2px; transition: background-size .35s cubic-bezier(.2,.8,.2,1), color .15s; }
-.foot-col a:hover, .foot-col a:focus-visible { background-size: 100% 1px; }
 .topnav a { position: relative; border-bottom: 0; }
 .topnav a::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--gold); transform: scaleX(0); transform-origin: left; transition: transform .3s cubic-bezier(.2,.8,.2,1); }
 .topnav a:hover::after, .topnav a:focus-visible::after { transform: scaleX(1); }
