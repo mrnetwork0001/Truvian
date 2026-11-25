@@ -193,10 +193,11 @@
 .endpoints .m { display: inline-block; min-width: 2.9rem; font: 600 .64rem var(--mono); letter-spacing: .1em; color: var(--gold); }
 
 /* limits */
-.limits { margin: 0; padding: 0; list-style: none; counter-reset: l; max-width: 54rem; }
-.limits li { counter-increment: l; display: grid; grid-template-columns: 3rem minmax(0, 1fr); padding: 1.1rem 0; border-top: 1px solid var(--rule); color: var(--bone-dim); }
-.limits li::before { content: "†" counter(l); font: 500 .74rem var(--mono); color: var(--gold); padding-top: .2rem; }
-.limits b { color: var(--bone); font-weight: 500; }
+.limits { margin: 0; padding: 0; list-style: none; counter-reset: l; max-width: 64rem; }
+.limits li { counter-increment: l; position: relative; display: grid; grid-template-columns: 3rem minmax(0, 14rem) minmax(0, 1fr); gap: 0 1.5rem; align-items: baseline; padding: 1.2rem 0; border-top: 1px solid var(--rule); }
+.limits li::before { content: "†" counter(l); font: 500 .74rem var(--mono); color: var(--gold); }
+.limits h3 { margin: 0; font-size: 1rem; font-weight: 500; letter-spacing: -.01em; color: var(--bone); }
+.limits p { margin: 0; color: var(--bone-dim); }
 .limits a { color: var(--bone); text-decoration-color: var(--gold); text-underline-offset: 3px; }
 
 /* final */
@@ -266,6 +267,8 @@
   .endpoints th { border-top: 1px solid var(--rule); padding-bottom: .2rem; }
   .endpoints td { border-top: 0; padding-top: 0; }
   .foot-grid { grid-template-columns: minmax(0, 1fr); }
+  .limits li { grid-template-columns: 2.4rem minmax(0, 1fr); row-gap: .4rem; }
+  .limits p { grid-column: 2; }
   .memo-top { flex-direction: column; gap: .35rem; }
   .stats > div:nth-child(5) { grid-column: 1 / -1; border-left: 0; padding-left: 0; }
   /* the tape: each row a slip */
