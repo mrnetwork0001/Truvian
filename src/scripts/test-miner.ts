@@ -1086,6 +1086,70 @@ async function main() {
   const noPool = (await app.inject({ method: 'GET', url: '/liquidity?chain=base' })).json();
   check('/liquidity with no pool answers 200 with a refusal about a pool', noPool.error === 'INVALID_INPUT'
     && noPool.answer.startsWith('The request did not identify a DEX pool whose liquidity can be read'), noPool.answer);
+
+  // --- Solana: balance, SPL supply (Token and Token-2022) and a transfer, against direct reads ---
+  console.log('');
+  const solRpc = async (method: string, params: unknown[]) => {
+    const r = await fetch('https://api.mainnet-beta.solana.com', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+    const b = await r.json() as any;
+    if (b.error) throw new Error(b.error.message);
+    return b.result;
+  };
+  const solGet = async (url: string) => {
+    const res = await app.inject({ method: 'GET', url });
+    const body = res.json();
+    return { res, body, limited: res.statusCode === 502 || /429|too many requests|rate/i.test(String(body.message ?? '')) };
+  };
+  const solWallet = '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM';
+  const usdcMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+  {
+    const { body, limited } = await solGet(`/balance?address=${solWallet}&chain=solana&token=USDC`);
+    if (limited) skip('/balance solana USDC', body.message);
+    else {
+      const direct = await solRpc('getTokenAccountsByOwner', [solWallet, { mint: usdcMint }, { encoding: 'jsonParsed', commitment: 'finalized' }]).catch(() => null);
+      const sum = direct ? direct.value.reduce((a: bigint, x: any) => a + BigInt(x.account.data.parsed.info.tokenAmount.amount), 0n) : null;
+      check('/balance solana: USDC is the sum of the owner\'s token accounts for the mint, decimals applied, at a finalized slot',
+        body.token_address === usdcMint && body.decimals === 6 && /^\d+$/.test(body.slot) && body.token_symbol === 'USDC'
+          && (sum === null || BigInt(body.balance_raw) === sum || body.slot !== String(direct.context.slot)), `${body.balance_exact} USDC at slot ${body.slot}`);
+      check('/balance solana: balance is a JSON number equal to the exact text', typeof body.balance === 'number' && body.balance === Number(body.balance_exact));
+    }
+  }
+  {
+    const { body, limited } = await solGet(`/balance?address=${solWallet}&chain=solana`);
+    if (limited) skip('/balance solana SOL', body.message);
+    else check('/balance solana with no token reads native SOL with 9 decimals', body.token_symbol === 'SOL' && body.decimals === 9 && body.balance_raw !== undefined, body.answer);
+  }
+  for (const [label, url, mint, program] of [
+    ['USDC by "USDC on Solana"', '/total-supply?token=USDC%20on%20Solana', usdcMint, 'Token'],
+    ['PYUSD (Token-2022) by mint', '/total-supply?token=2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo&chain=solana', '2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo', 'Token-2022'],
+  ] as const) {
+    const { body, limited } = await solGet(url);
+    if (limited) { skip(`/total-supply solana ${label}`, body.message); continue; }
+    const direct = await solRpc('getTokenSupply', [mint, { commitment: 'finalized' }]).catch(() => null);
+    check(`/total-supply solana ${label}: the mint's supply with its decimals, read from its ${program} program`,
+      body.token_address === mint && body.token_program === program && body.total_supply_exact !== undefined
+        && (direct === null || direct.context.slot !== Number(body.slot) || direct.value.amount === body.total_supply_raw)
+        && Math.abs(body.total_supply - Number(direct?.value.uiAmountString ?? body.total_supply)) / body.total_supply < 0.01, body.answer);
+  }
+  {
+    const sig = '4UsiwZTYEBqNpUnYAteKAKd2dC1QiaFBNLBpxAWzLLhTAAwTWJb6BHH6FMTBfmbMorNGpruvGnLzzoY7dYU2vyhY';
+    const { body, limited } = await solGet(`/transfer?tx_hash=${sig}`);
+    if (limited) skip('/transfer solana', body.message);
+    else {
+      const t = body.token_transfers?.[0];
+      check('/transfer solana: a base58 signature is found on mainnet: settled, slot, fee and the USDC moved between owners',
+        body.settled === true && body.chain === 'solana' && body.slot === '359509488' && body.fee_total_native === '0.000005'
+          && t?.token === usdcMint && t.amount === '1' && t.from === 'GFJfRAsqyryttEsxK9qfG1ojWDF5vP8BJfACx8awbng9' && t.to === solWallet, body.answer);
+    }
+  }
+  const badSol = (await app.inject({ method: 'GET', url: '/balance?address=notAnAddress0OIl&chain=solana&token=USDC' })).json();
+  check('/balance solana refuses an address that is not base58 of 32 bytes, with a scoreable answer',
+    badSol.error === 'INVALID_INPUT' && badSol.answer.includes('is not a Solana address'), badSol.answer);
+  const badMint = (await app.inject({ method: 'GET', url: `/balance?address=${solWallet}&chain=solana&token=NOTATOKEN` })).json();
+  check('/balance solana refuses a symbol outside the verified Solana table instead of guessing a mint',
+    badMint.error === 'INVALID_INPUT' && badMint.answer.includes('verified table'), badMint.answer);
+  const evmStill = (await app.inject({ method: 'GET', url: '/balance?address=vitalik.eth&chain=ethereum' })).json();
+  check('an EVM balance request still goes to the EVM handler', evmStill.chain === 'ethereum' && typeof evmStill.balance === 'number', evmStill.answer);
   await app.close();
 
   const tally = `${passes} passed, ${failures} failed, ${skips} skipped`;
