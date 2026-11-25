@@ -42,6 +42,7 @@ import { normalizeSettlementRequest, runSettlement, SolanaReadError, type Settle
 import { createMemoStore, memoSigner, signMemo, verifyMemo } from './memo.js';
 import { TokenFactsError } from './tokenFacts.js';
 import { registerResolveRoutes } from './resolveRoutes.js';
+import { registerDocsRoutes } from './docs.js';
 import { payerAddress, payerUsdcBalance } from './payer.js';
 import {
   buildRequirements,
@@ -743,6 +744,9 @@ export function buildShieldServer() {
     save,
     sendPage: (reply, file) => sendPublicFile(reply, file),
   });
+
+  // Documentation at /docs (./docs.ts), rendered from public/docs/nav.json and public/docs/pages/*.html.
+  registerDocsRoutes(app, PUBLIC_DIR);
 
   app.get('/*', async (req, reply) => {
     const rel = (req.params as Record<string, string>)['*'] ?? '';

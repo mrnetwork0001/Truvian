@@ -1,0 +1,48 @@
+{
+  "groups": [
+    {
+      "label": "Getting started",
+      "items": [
+        { "slug": "", "title": "Welcome to Truvian", "blurb": "what it is and where everything lives" },
+        { "slug": "how-it-works", "title": "How a decision is made", "blurb": "the loop, and one real decision end to end" }
+      ]
+    },
+    {
+      "label": "The desks",
+      "items": [
+        { "slug": "token-preflight", "title": "Token preflight", "blurb": "may this agent buy this token through this pool?" },
+        { "slug": "listing-review", "title": "Listing review", "blurb": "should an exchange list this token?" },
+        { "slug": "holdings-proof", "title": "Holdings proof", "blurb": "does the custody wallet hold what the fund says?" },
+        { "slug": "settlement", "title": "Settlement assurance", "blurb": "may a custodian pay this counterparty on Solana?" },
+        { "slug": "resolution", "title": "Market resolution", "blurb": "what really happened, before a market settles" }
+      ]
+    },
+    {
+      "label": "Telegraph",
+      "items": [
+        { "slug": "miner", "title": "The miner", "blurb": "registration 6180 and the six intents it answers" },
+        { "slug": "evaluators", "title": "Evaluators", "blurb": "two champion adapters and the truth sources" }
+      ]
+    },
+    {
+      "label": "Build",
+      "items": [
+        { "slug": "api", "title": "HTTP API", "blurb": "every route, streaming, and paying with x402" },
+        { "slug": "self-hosting", "title": "Self-hosting", "blurb": "scripts, environment variables, repository map" }
+      ]
+    },
+    {
+      "label": "Trust",
+      "items": [
+        { "slug": "results", "title": "Results and receipts", "blurb": "every stored decision and what it cost" },
+        { "slug": "limits", "title": "Limits and FAQ", "blurb": "what is real, what is testnet, what is not done" }
+      ]
+    },
+    {
+      "label": "Roadmap",
+      "items": [
+        { "slug": "roadmap", "title": "Building on Telegraph mainnet", "blurb": "what ships next, and who pays for it" }
+      ]
+    }
+  ]
+}
