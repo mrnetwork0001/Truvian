@@ -114,7 +114,7 @@ export function buildRequirements(resource: string, payTo: string, price = price
     network: networkName(),
     maxAmountRequired: String(Math.round(price * USDC_ATOMIC_PER_USD)),
     resource,
-    description: 'Truvian Shield execution-safety check: four paid queries to live Telegraph miners, one verdict with receipts.',
+    description: 'One Truvian Shield desk run: evidence bought from ranked Telegraph miners, checked against the chain, decided in a signed memo with receipts.',
     mimeType: 'application/json',
     payTo,
     maxTimeoutSeconds: 300,
