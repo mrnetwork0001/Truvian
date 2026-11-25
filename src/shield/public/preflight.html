@@ -78,6 +78,7 @@
         <button type="button" class="tab" role="tab" id="tab-trade" aria-selected="true" data-mode="trade">Token preflight<small>trading agent · HOLD / REVIEW / REJECT · Mission 14</small></button>
         <button type="button" class="tab" role="tab" id="tab-listing" aria-selected="false" data-mode="listing">Listing review<small>exchange listings desk · LIST / REVIEW / REJECT · Mission 01</small></button>
         <button type="button" class="tab" role="tab" id="tab-holdings" aria-selected="false" data-mode="holdings">Holdings proof<small>fund or index holdings · VERIFIED / REVIEW / REJECT · Mission 13</small></button>
+        <button type="button" class="tab" role="tab" id="tab-settlement" aria-selected="false" data-mode="settlement">Settlement · Solana<small>custodian payment · RELEASE / REVIEW / REJECT · settles on devnet</small></button>
       </div>
       <p class="section-note" id="desk-note"></p>
 
@@ -87,7 +88,7 @@
       </div>
 
       <form id="pf-form" novalidate>
-        <div class="field">
+        <div class="field mode-evm">
           <label for="chain">chain</label>
           <select id="chain" name="chain">
             <option value="ethereum" selected>ethereum</option>
@@ -126,6 +127,36 @@
         <div class="field wide mode-holdings hidden">
           <label for="holdings">holdings <span class="label-hint">- one per line, at most 3: token contract, claimed amount in whole tokens, rebalancing pool (optional)</span></label>
           <textarea id="holdings" name="holdings" class="holdings" spellcheck="false" placeholder="0xA0b8…eB48, 2400000&#10;0xC183…9D72, 8600000, 0x9256…f58a"></textarea>
+        </div>
+        <div class="field mode-settlement hidden">
+          <label for="network">network</label>
+          <select id="network" name="network">
+            <option value="solana-devnet" selected>solana-devnet (sends the payment)</option>
+            <option value="solana">solana mainnet (decision only)</option>
+          </select>
+        </div>
+        <div class="field mode-settlement hidden">
+          <label for="mint">token <span class="label-hint">- mint address, or TUSD / RUSD / USDC</span></label>
+          <input id="mint" name="mint" type="text" placeholder="TUSD" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field mode-settlement hidden">
+          <label for="amount">amount <span class="label-hint">- whole tokens (devnet sends at most 1)</span></label>
+          <input id="amount" name="amount" type="text" inputmode="decimal" value="1" autocomplete="off">
+        </div>
+        <div class="field wide mode-settlement hidden">
+          <label for="recipient">recipient wallet <span class="label-hint">- the counterparty's Solana address</span></label>
+          <input id="recipient" name="recipient" type="text" placeholder="base58 address" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field wide mode-settlement hidden">
+          <label for="counterparty">counterparty legal name <span class="label-hint">- screened for sanctions and looked up in its registry</span></label>
+          <input id="counterparty" name="counterparty" type="text" placeholder="Coinbase Global, Inc." autocomplete="off">
+        </div>
+        <div class="field mode-settlement hidden">
+          <label for="jurisdiction">registered in</label>
+          <input id="jurisdiction" name="jurisdiction" type="text" placeholder="US-DE" autocomplete="off">
+        </div>
+        <div class="field mode-settlement hidden">
+          <label for="execute"><input id="execute" name="execute" type="checkbox" checked> send the payment on RELEASE <span class="label-hint">(devnet, from Shield's wallet)</span></label>
         </div>
         <div class="field submit-field">
           <button id="submit-btn" type="submit">Run preflight</button>

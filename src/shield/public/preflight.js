@@ -33,6 +33,13 @@
       { label: 'UNI by Uniswap Labs, timelock treasury', cls: '', v: { chain: 'ethereum', token: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', pool: '', issuer: 'Uniswap Labs', treasury: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC' } },
       { label: 'Sanctioned issuer (Garantex) → REJECT', cls: 'preset-block', v: { chain: 'ethereum', token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', pool: '', issuer: 'Garantex Europe OU', treasury: '' } },
     ],
+    // Devnet: tUSD is a plain SPL dollar, rUSD a Token-2022 dollar whose issuer keeps a permanent delegate
+    // (src/scripts/solana-devnet-fixtures.ts). The recipient is a fresh devnet wallet.
+    settlement: [
+      { label: 'Coinbase Global, 1 tUSD → expect RELEASE, sent', cls: 'preset-safe', v: { network: 'solana-devnet', mint: 'TUSD', amount: '1', recipient: 'Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ', counterparty: 'Coinbase Global, Inc.', jurisdiction: 'US-DE' } },
+      { label: 'Sanctioned counterparty (Garantex) → REJECT', cls: 'preset-block', v: { network: 'solana-devnet', mint: 'TUSD', amount: '1', recipient: 'Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ', counterparty: 'Garantex Europe OU', jurisdiction: 'Estonia' } },
+      { label: 'Issuer can claw back (rUSD) → REVIEW', cls: 'preset-block', v: { network: 'solana-devnet', mint: 'RUSD', amount: '1', recipient: 'Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ', counterparty: 'Coinbase Global, Inc.', jurisdiction: 'US-DE' } },
+    ],
     // Read on-chain 2026-11-23 (block 26476779): the ENS DAO timelock held 2,435,008 USDC and
     // 8,632,326 ENS; the Uniswap timelock held 262,247,996 UNI. Balances move, so the labels say "expect".
     holdings: [
@@ -42,14 +49,15 @@
   };
 
   const NOTES = {
+    settlement: 'A custodian is about to pay a counterparty in a token on Solana. Shield reads the token\'s mint (what its issuer can still do to the recipient\'s tokens: freeze, claw back, tax, hook), the payer\'s funds and the recipient\'s accounts from two Solana RPC providers, buys sanctions screening and a corporate registry record of the counterparty through Telegraph, and decides RELEASE, REVIEW or REJECT. On RELEASE it sends the payment on devnet, waits for finalized and checks the exact amount arrived, all in one signed memo.',
     trade: 'An agent is about to buy a token. Shield reads the contract from the chain, then buys a security review, the total supply, a wash-trading check and the pool\'s liquidity through Telegraph, one routed request each, with one second opinion from the next-best ranked miner when an answer examined nothing, and decides HOLD, REVIEW or REJECT. The buy itself is only simulated.',
     listing: 'A listings desk is reviewing a token. Shield reads the contract from the chain, buys a security review, the total supply and a wash-trading check, screens the issuer against sanctions lists, and checks the treasury balance against the chain, then decides LIST, REVIEW or REJECT in a signed memo.',
     holdings: 'An investor agent checks what a fund or index says it holds, without trusting the issuer. Shield reads every holding\'s balance in the custody wallet from the chain at one block, buys the same balance, the token\'s total supply and, for a rebalancing pool, its liquidity through Telegraph, and decides VERIFIED, REVIEW or REJECT. The memo states each holding\'s share of the float and the pool depth, with a receipt for every answer.',
   };
 
-  const KIND_LABEL = { 'token-preflight': 'Token preflight', 'listing-review': 'Listing review', 'holdings-proof': 'Holdings proof' };
-  const KIND_SHORT = { 'token-preflight': 'preflight', 'listing-review': 'listing', 'holdings-proof': 'holdings' };
-  const SUBMIT = { trade: 'Run preflight', listing: 'Run listing review', holdings: 'Run holdings proof' };
+  const KIND_LABEL = { 'token-preflight': 'Token preflight', 'listing-review': 'Listing review', 'holdings-proof': 'Holdings proof', 'settlement-assurance': 'Settlement assurance (Solana)' };
+  const KIND_SHORT = { 'token-preflight': 'preflight', 'listing-review': 'listing', 'holdings-proof': 'holdings', 'settlement-assurance': 'settlement' };
+  const SUBMIT = { trade: 'Run preflight', listing: 'Run listing review', holdings: 'Run holdings proof', settlement: 'Run settlement check' };
   // The symbol of each holding, by index, once the chain read names it
   let holdingSymbols = [];
   const rowKey = (p) => `${p.key}${p.holding === undefined || p.holding === null ? '' : `-${p.holding}`}`;
@@ -63,7 +71,9 @@
     for (const f of document.querySelectorAll('.mode-trade')) f.classList.toggle('hidden', mode !== 'trade');
     for (const f of document.querySelectorAll('.mode-listing')) f.classList.toggle('hidden', mode !== 'listing');
     for (const f of document.querySelectorAll('.mode-holdings')) f.classList.toggle('hidden', mode !== 'holdings');
-    for (const f of document.querySelectorAll('.mode-token')) f.classList.toggle('hidden', mode === 'holdings');
+    for (const f of document.querySelectorAll('.mode-settlement')) f.classList.toggle('hidden', mode !== 'settlement');
+    for (const f of document.querySelectorAll('.mode-token')) f.classList.toggle('hidden', mode === 'holdings' || mode === 'settlement');
+    for (const f of document.querySelectorAll('.mode-evm')) f.classList.toggle('hidden', mode === 'settlement');
     $('pool-hint').textContent = mode === 'trade' ? '- the pool the trade goes through' : '(optional) - its liquidity is bought too';
     $('desk-note').textContent = NOTES[mode];
     $('submit-btn').textContent = SUBMIT[mode];
@@ -97,6 +107,7 @@
       case 'LIQUIDITY_DEPTH_VERIFY_GENERAL': return el('span', { text: f.liquidity_usd != null ? usd(f.liquidity_usd) : 'no figure' });
       case 'SANCTIONS_SCREENING_MATCH_GENERAL': return el('span', {}, el('b', { text: f.matched === true ? 'MATCH' : f.matched === false ? 'no match' : 'uncertain' }), f.match_score != null ? ` · score ${f.match_score}` : '', Array.isArray(f.lists) ? el('div', { class: 'fields', text: `${f.lists.length} lists checked` }) : null);
       case 'ONCHAIN_METRIC_VERIFY_GENERAL': return el('span', { text: f.balance_gwei != null ? `${f.balance_gwei} Gwei` : 'no figure' });
+      case 'CORPORATE_REGISTRY_LOOKUP_GENERAL': return el('span', {}, el('b', { text: f.active === true ? 'active' : f.active === false ? 'INACTIVE' : 'status unknown' }), ` · ${f.legal_name || '-'}`, el('div', { class: 'fields', text: [f.registration_id, f.jurisdiction, f.incorporated].filter(Boolean).join(' · ') }));
       case 'WALLET_BALANCE_CHECK_GENERAL': return el('span', { text: f.balance != null ? `${Number(f.balance).toLocaleString('en-US', { maximumFractionDigits: 6 })}${f.token_symbol ? ` ${f.token_symbol}` : ''}` : 'no figure' });
       default: return el('span', { class: 'fields', text: JSON.stringify(f).slice(0, 300) });
     }
@@ -170,6 +181,23 @@
     box.replaceChildren(...parts.map((t) => el('div', { class: 'mono', text: t })));
   }
 
+  // Settlement assurance: the mint, its powers, the payer's funds and the payment itself, read on Solana.
+  function renderSolana(s) {
+    const box = $('chainread');
+    if (!s) { box.textContent = '-'; return; }
+    const mint = s.mint;
+    const lines = [
+      `${s.network} · mint ${mint.mint} · ${mint.isMint ? `${mint.program}, ${mint.decimals} decimals, supply ${Number(mint.supply).toLocaleString('en-US')}` : 'not a token mint'} · slot ${mint.slot}`,
+      `sources: ${mint.source}`,
+      ...(s.restrictions || []).map((r) => `${r.level.toUpperCase()} · ${r.title}`),
+      s.payerBalance ? `payer ${s.payerBalance.owner}: ${s.payerBalance.whole} at slot ${s.payerBalance.slot}` : `payer balance: ${s.payerBalanceError || 'unreadable'}`,
+      `recipient ${s.recipientIsWallet ? 'is a wallet' : 'is a program address'}${(s.recipientAccounts || []).some((a) => a.frozen) ? ', account FROZEN' : ''}`,
+      s.execution ? `payment: ${s.execution.reason}${s.execution.signature ? ` · ${s.execution.signature}` : ''}` : null,
+      s.execution && s.execution.check ? `read back: finalized ${s.execution.check.finalized}, received ${s.execution.check.received}, slot ${s.execution.check.slot}, fee ${s.execution.check.feeLamports} lamports` : null,
+    ].filter(Boolean);
+    box.replaceChildren(...lines.map((t) => el('div', { class: 'mono', text: t })));
+  }
+
   // Holdings proof: each holding's contract and the wallet's balance, all at one block.
   function renderHoldings(reads) {
     const box = $('chainread');
@@ -194,7 +222,8 @@
     d.replaceChildren(...[
       el('div', { class: 'word', text: m.decision }),
       el('div', { class: 'rule', text: `${KIND_LABEL[m.kind] || m.kind} · ${m.decisionRule}` }),
-      m.action ? el('div', { class: 'action', text: `${m.action.description} (simulated, nothing sent)` }) : null,
+      m.action ? el('div', { class: 'action' }, m.action.simulated === false ? `${m.action.description}` : `${m.action.description} (simulated, nothing sent)`,
+        m.settlement && m.settlement.execution && m.settlement.execution.explorer ? el('a', { href: m.settlement.execution.explorer, target: '_blank', rel: 'noopener', text: ' · view on Solana Explorer' }) : null) : null,
     ].filter(Boolean));
     $('costline').replaceChildren(...[
       el('span', {}, 'Telegraph cost ', el('b', { text: `$${m.cost.telegraphUsd.toFixed(2)}` })),
@@ -212,7 +241,9 @@
       el('td', {}, el('span', { class: `sev ${f.severity}`, text: f.severity })),
       el('td', {}, el('b', { text: f.title }), el('div', { class: 'detail', text: f.detail })),
       el('td', { class: 'detail', text: f.source }))));
-    if (m.kind === 'holdings-proof') renderHoldings(m.holdingReads); else renderChain(m.chainReads);
+    if (m.kind === 'holdings-proof') renderHoldings(m.holdingReads);
+    else if (m.kind === 'settlement-assurance') renderSolana(m.settlement);
+    else renderChain(m.chainReads);
     $('purchases').replaceChildren(...(m.purchases.length ? m.purchases.map(purchaseRow) : [el('tr', {}, el('td', { colspan: '4', class: 'pending', text: 'nothing was bought' }))]));
 
     const sig = $('sig');
@@ -261,7 +292,9 @@
     evt.preventDefault();
     showError('');
     let body;
-    if (mode === 'holdings') {
+    if (mode === 'settlement') {
+      body = { mode, network: $('network').value, mint: $('mint').value.trim(), amount: $('amount').value.trim(), recipient: $('recipient').value.trim(), counterparty: $('counterparty').value.trim(), jurisdiction: $('jurisdiction').value.trim(), execute: $('execute').checked };
+    } else if (mode === 'holdings') {
       // One holding per line: token, claimed amount, pool (optional). Commas inside the amount are not supported here; write 2400000.
       const holdings = $('holdings').value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
         const [token, claimed, pool] = l.split(/[,\s]+/).filter(Boolean);
@@ -306,6 +339,8 @@
           if (!line) continue;
           const ev = JSON.parse(line);
           if (ev.type === 'chain') { renderChain(ev.facts); $('decision').replaceChildren(el('div', { class: 'word pending', text: ev.facts.isContract ? 'buying intelligence through Telegraph…' : 'not a contract' })); }
+          else if (ev.type === 'solana') { $('chainread').replaceChildren(el('div', { class: 'mono', text: `${ev.reads.mint.network} mint ${ev.reads.mint.mint}: ${ev.reads.restrictions.map((r) => r.title).join(' · ') || 'no issuer powers'}` })); $('decision').replaceChildren(el('div', { class: 'word pending', text: 'screening the counterparty through Telegraph…' })); }
+          else if (ev.type === 'execution') { $('decision').replaceChildren(el('div', { class: 'word pending', text: ev.execution.sent ? 'payment sent and verified…' : 'payment not sent' })); }
           else if (ev.type === 'holdings') { renderHoldings(ev.reads); $('decision').replaceChildren(el('div', { class: 'word pending', text: 'buying the balances through Telegraph…' })); }
           else if (ev.type === 'plan') renderPlan(ev.plan);
           else if (ev.type === 'purchase') renderPurchase(ev.purchase);
@@ -344,7 +379,10 @@
       const stored = await res.json();
       const input = stored.memo.input;
       setMode(input.mode);
-      if (input.mode === 'holdings') {
+      if (input.mode === 'settlement') {
+        const st = stored.memo.settlement || {};
+        fill({ network: input.chain, mint: input.token, amount: st.mint && st.amountRaw ? String(Number(st.amountRaw) / 10 ** st.mint.decimals) : '', recipient: (stored.memo.action && (stored.memo.action.description.match(/to (\S+) on/) || [])[1]) || '', counterparty: input.issuer || '', jurisdiction: (stored.memo.purchases.find((p) => p.key === 'registry') || { params: {} }).params.jurisdiction || '' });
+      } else if (input.mode === 'holdings') {
         fill({ chain: input.chain, wallet: input.wallet || '', holdings: (input.holdings || []).map((h) => [h.token, h.claimed, h.pool].filter(Boolean).join(', ')).join('\n') });
       } else {
         fill({ chain: input.chain, token: input.token, pool: input.pool || '', tradeUsd: input.tradeUsd ?? '1000', issuer: input.issuer || '', treasury: input.treasury || '' });
@@ -358,7 +396,7 @@
   $('pf-form').addEventListener('submit', run);
   // ?desk=trade|listing|holdings opens that desk, so each desk has its own link.
   const params = new URLSearchParams(location.search);
-  const desk = ['trade', 'listing', 'holdings'].includes(params.get('desk')) ? params.get('desk') : 'trade';
+  const desk = ['trade', 'listing', 'holdings', 'settlement'].includes(params.get('desk')) ? params.get('desk') : 'trade';
   setMode(desk);
   fill(FIXTURES[desk][0].v);
   const id = params.get('m');
