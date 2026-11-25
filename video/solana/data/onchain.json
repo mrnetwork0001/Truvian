@@ -1,0 +1,153 @@
+{
+ "readAt": "2026-11-25T20:59:07.795Z",
+ "settlement": {
+  "id": "rk43l_0A",
+  "url": "https://truvian.xyz/preflight?m=rk43l_0A",
+  "createdAt": "2026-11-25T17:08:10.285Z",
+  "decision": "REJECT",
+  "rule": "at least one finding blocks the payment",
+  "network": "solana-devnet",
+  "counterparty": "Garantex Europe OU",
+  "mint": "DThEeRe6uhj2eT8SLrjiLexUiuxrggysA4zCuHE2sUFb",
+  "mintProgram": "spl-token",
+  "mintSlot": 526219339,
+  "amountWhole": 1,
+  "payer": "A4X5JKBCLobAY5MeDXkwiRV5Hr7Uu4vUhzHQczwXMBnz",
+  "payerBalanceChain": "998",
+  "recipient": "Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ",
+  "action": "payment of 1 to Afb8MYs9G63oHAPkZiK6cb5JKzuWy9is3pHc6Zj5voYZ on Solana devnet: not sent: the decision is REJECT",
+  "sanctions": {
+   "miner": "ChainSight — Universal Intelligence & Data Oracle",
+   "minerId": "302",
+   "lists": [
+    "OFAC SDN",
+    "OFAC SDN aliases",
+    "UN Consolidated"
+   ],
+   "matches": [
+    "GARANTEX EUROPE OU"
+   ],
+   "costUsd": 0.01,
+   "signal": "0xc3db8cf1d7c955e0baf008f55576b1a868f1b47fa14b3835731d17a2e772c75f"
+  },
+  "registry": {
+   "miner": "TxLens",
+   "minerId": "9002",
+   "active": false,
+   "jurisdiction": "Estonia",
+   "costUsd": 0.01,
+   "signal": "0x38b914764392dcb15d8a5dff818ae39c35c6c70450c9f1bab6ad7073a97f8983"
+  },
+  "balance": {
+   "miner": "PREFLIGHT Infrastructure Signals",
+   "minerId": "20260828",
+   "answered": 855.24,
+   "symbol": "ETH",
+   "costUsd": 0.01,
+   "signal": "0x64cb2672c2f365b7530082c22dafa45dfdc9453200a2981a825b781af61681d9"
+  },
+  "findings": [
+   {
+    "rule": "sanctions.match",
+    "severity": "block",
+    "title": "Counterparty matches a sanctions list"
+   },
+   {
+    "rule": "registry.inactive",
+    "severity": "block",
+    "title": "Counterparty is not active in its registry"
+   },
+   {
+    "rule": "balance.conflict",
+    "severity": "review",
+    "title": "Payer balance conflicts with the chain"
+   },
+   {
+    "rule": "mint.freeze_authority",
+    "severity": "info",
+    "title": "Issuer can freeze holders"
+   },
+   {
+    "rule": "mint.mint_authority",
+    "severity": "info",
+    "title": "Supply can grow"
+   },
+   {
+    "rule": "payer.funded",
+    "severity": "pass",
+    "title": "Payer can cover the payment"
+   }
+  ],
+  "costUsd": 0.03,
+  "paidRequests": 3,
+  "sha256": "9e90b357a93b635ccb7104c9610126d533072da7820dfbff50056f235d4b7d2a",
+  "signer": "0x956aECB0b0DEfC2f2631C26ec0FF7366Ebb53245"
+ },
+ "resolution": {
+  "id": "UnLKfa5v",
+  "url": "https://truvian.xyz/resolve?r=UnLKfa5v",
+  "createdAt": "2026-11-25T11:36:03.722Z",
+  "decision": "RESOLVED",
+  "outcome": "yes",
+  "rule": "3 sourced answers agree with each other and with the venue's settlement",
+  "source": "polymarket",
+  "marketId": "253591",
+  "question": "Will Donald Trump win the 2024 US Presidential Election?",
+  "answers": [
+   {
+    "miner": "TxLens",
+    "minerId": "9002",
+    "rank": 1,
+    "outcome": "yes",
+    "route": "routed"
+   },
+   {
+    "miner": "ZK Source-Checked Event Results",
+    "minerId": "73157",
+    "rank": 35,
+    "outcome": "yes",
+    "route": "pinned"
+   },
+   {
+    "miner": "Takar Outcome Resolver",
+    "minerId": "20261117",
+    "rank": 14,
+    "outcome": "yes",
+    "route": "pinned"
+   }
+  ],
+  "costUsd": 0.03,
+  "sha256": "56f16797a11c729263de6de5582a395a4bde5a961320d626baf3b34a79c08821",
+  "anchor": {
+   "cluster": "devnet",
+   "signature": "2pjabbtR6bAtWpNdqZB7s8e4L6cScNmn8Sk2ATxVxuZakvEgNvfrMaVXC2mnsDEZcGRXcabXk1jqzyLS6a1Y1qGn",
+   "slot": 526136425,
+   "blockTime": "2026-11-25T11:36:04.000Z",
+   "memoText": "Truvian Resolve sha256:56f16797a11c729263de6de5582a395a4bde5a961320d626baf3b34a79c08821",
+   "matchesDigest": true,
+   "explorer": "https://explorer.solana.com/tx/2pjabbtR6bAtWpNdqZB7s8e4L6cScNmn8Sk2ATxVxuZakvEgNvfrMaVXC2mnsDEZcGRXcabXk1jqzyLS6a1Y1qGn?cluster=devnet"
+  }
+ },
+ "mint": {
+  "address": "DThEeRe6uhj2eT8SLrjiLexUiuxrggysA4zCuHE2sUFb",
+  "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "decimals": 6,
+  "supply": "1000000000"
+ },
+ "miner": {
+  "registration": 6194,
+  "tx": "0xa49244818b8d2dbd8a495909af93bf6f5af985cfd58571f581b6298e984d01f8",
+  "status": "0x1",
+  "block": 12209795,
+  "time": "2026-11-25T13:21:00.000Z",
+  "from": "0xcd0a2370f2dc12c1802707b7d9ab3fec891e3c02",
+  "to": "0x72a70e949362670bf8bcead24efc5b8f950aa08b",
+  "explorer": "https://sepolia.etherscan.io/tx/0xa49244818b8d2dbd8a495909af93bf6f5af985cfd58571f581b6298e984d01f8"
+ },
+ "stats": {
+  "deskDecisions": 23,
+  "telegraphRequests": 137,
+  "paidToTelegraphUsd": 3.53,
+  "readAt": "2026-11-25T20:59:07.205Z"
+ }
+}

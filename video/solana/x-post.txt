@@ -1,0 +1,24 @@
+POST (with the video)
+
+Agents move money on Solana in under a second. Who checks the other side?
+
+Truvian buys each fact from ranked @Telegraphprotoc miners, checks it against @solana, and signs the answer: RELEASE, REVIEW or REJECT.
+
+A payment to Garantex: REJECTED, OFAC SDN match.
+
+truvian.xyz
+
+REPLY 1
+
+What's live:
+- Settlement assurance: mint read from Solana, Token-2022 risks flagged, counterparty screened
+- Resolve: @Polymarket markets settled by 3 miners, the signed result anchored on Solana
+- Our miner (reg. 6194) now answers Solana balances on Telegraph
+
+REPLY 2
+
+Real runs:
+REJECT memo: truvian.xyz/preflight?m=rk43l_0A
+RESOLVED memo: truvian.xyz/resolve?r=UnLKfa5v
+Solana anchor: explorer.solana.com/tx/2pjabbtR6bAtWpNdqZB7s8e4L6cScNmn8Sk2ATxVxuZakvEgNvfrMaVXC2mnsDEZcGRXcabXk1jqzyLS6a1Y1qGn?cluster=devnet
+Code: github.com/mrnetwork0001/Truvian

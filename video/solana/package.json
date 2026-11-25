@@ -1,0 +1,38 @@
+{
+  "name": "truvian-solana-film",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "draft": "remotion render src/index.ts TruvianSolana out/draft.mp4 --scale 0.5 --crf 24 --concurrency 8",
+    "render4k": "remotion render src/index.ts TruvianSolana out/truvian-solana-4k-raw.mp4 --scale 2 --image-format jpeg --jpeg-quality 95 --codec h264 --crf 14 --x264-preset medium --pixel-format yuv420p --audio-codec aac --audio-bitrate 320k --concurrency 8",
+    "finish": "node scripts/finish.mjs out/truvian-solana-4k-raw.mp4 out/truvian-solana-4k.mp4",
+    "1080p": "ffmpeg -y -i out/truvian-solana-4k.mp4 -vf scale=1920:1080:flags=lanczos -c:v libx264 -crf 16 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart out/truvian-solana-1080p.mp4",
+    "poster": "remotion still src/index.ts Poster out/truvian-solana-thumbnail.png",
+    "typecheck": "tsc --noEmit",
+    "data": "node scripts/data.mjs",
+    "voices": "node scripts/voices.mjs",
+    "vo": "node scripts/voiceover.mjs",
+    "sfx": "node scripts/sfx.mjs",
+    "music": "node scripts/music.mjs",
+    "timing": "node scripts/timing.mjs",
+    "capture": "node scripts/capture.mjs",
+    "encode": "node scripts/encode.mjs",
+    "stills": "node scripts/stills.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.530",
+    "@remotion/google-fonts": "4.0.530",
+    "@remotion/paths": "4.0.530",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "4.0.530"
+  },
+  "devDependencies": {
+    "@remotion/bundler": "4.0.530",
+    "@remotion/renderer": "4.0.530",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^5.6.0"
+  }
+}

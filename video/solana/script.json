@@ -1,0 +1,113 @@
+{
+  "title": "Truvian on Solana: signed decisions before money moves",
+  "model": "eleven_multilingual_v2",
+  "voices": {
+    "narrator": {
+      "name": "Daniel",
+      "id": "onwK4e9ZLuTAKqWW03F9",
+      "settings": {
+        "stability": 0.5,
+        "similarity_boost": 0.8,
+        "style": 0.22,
+        "use_speaker_boost": true
+      }
+    }
+  },
+  "scenes": [
+    {
+      "id": "open",
+      "seconds": 6.5,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "A payment on Solana, to Garantex. A sanctioned exchange. Truvian said no.",
+          "say": "A payment on Solana, to Garantex. A sanctioned exchange. Troovian said no."
+        }
+      ]
+    },
+    {
+      "id": "problem",
+      "seconds": 5,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "Agents move money on Solana in under a second. Nobody checks who is on the other side."
+        }
+      ]
+    },
+    {
+      "id": "telegraph",
+      "seconds": 5,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "Truvian buys every fact from ranked miners on Telegraph. One cent each, with a receipt.",
+          "say": "Troovian buys every fact from ranked miners on Telegraph. One cent each, with a receipt."
+        }
+      ]
+    },
+    {
+      "id": "catch",
+      "seconds": 6,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "Then it checks the chain. A miner said 855. Solana said 998.",
+          "say": "Then it checks the chain. A miner said eight fifty-five. Solana said nine ninety-eight."
+        }
+      ]
+    },
+    {
+      "id": "turn",
+      "seconds": 4,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "Truvian. Decide before you act.",
+          "say": "Troovian. Decide before you act."
+        }
+      ]
+    },
+    {
+      "id": "settle",
+      "seconds": 8,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "Settlement assurance reads the mint on Solana, screens the counterparty, and answers: release, review, or reject."
+        }
+      ]
+    },
+    {
+      "id": "resolve",
+      "seconds": 7,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "Resolve settles prediction markets with three miners, then anchors the signed result on Solana."
+        }
+      ]
+    },
+    {
+      "id": "miner",
+      "seconds": 5,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "And our own miner now answers Solana balances on Telegraph."
+        }
+      ]
+    },
+    {
+      "id": "close",
+      "seconds": 6,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "Signed decisions for Solana agents. truvian.xyz",
+          "say": "Signed decisions for Solana agents. Troovian dot x y z."
+        }
+      ]
+    }
+  ]
+}

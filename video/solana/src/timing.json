@@ -1,0 +1,832 @@
+{
+ "fps": 30,
+ "totalFrames": 1800,
+ "bpm": 110,
+ "beats": [
+  11,
+  27,
+  44,
+  60,
+  76,
+  93,
+  109,
+  125,
+  142,
+  158,
+  174,
+  191,
+  207,
+  224,
+  240,
+  256,
+  273,
+  289,
+  305,
+  322,
+  338,
+  354,
+  371,
+  387,
+  404,
+  420,
+  436,
+  453,
+  469,
+  485,
+  502,
+  518,
+  534,
+  551,
+  567,
+  584,
+  600,
+  616,
+  633,
+  649,
+  665,
+  682,
+  698,
+  714,
+  731,
+  747,
+  764,
+  780,
+  796,
+  813,
+  829,
+  845,
+  862,
+  878,
+  894,
+  911,
+  927,
+  944,
+  960,
+  976,
+  993,
+  1009,
+  1025,
+  1042,
+  1058,
+  1074,
+  1091,
+  1107,
+  1124,
+  1140,
+  1156,
+  1173,
+  1189,
+  1205,
+  1222,
+  1238,
+  1254,
+  1271,
+  1287,
+  1304,
+  1320,
+  1336,
+  1353,
+  1369,
+  1385,
+  1402,
+  1418,
+  1434,
+  1451,
+  1467,
+  1484,
+  1500,
+  1516,
+  1533,
+  1549,
+  1565,
+  1582,
+  1598,
+  1614,
+  1631,
+  1647,
+  1664,
+  1680,
+  1696,
+  1713,
+  1729,
+  1745,
+  1762,
+  1778,
+  1794
+ ],
+ "music": {
+  "file": "audio/music.mp3",
+  "source": "elevenlabs-music"
+ },
+ "scenes": [
+  {
+   "id": "open",
+   "from": 0,
+   "durationInFrames": 201,
+   "lines": [
+    {
+     "voice": "narrator",
+     "text": "A payment on Solana, to Garantex. A sanctioned exchange. Truvian said no.",
+     "file": "audio/vo/open_0.mp3",
+     "startFrame": 8,
+     "durationFrames": 177,
+     "words": [
+      {
+       "word": "A",
+       "start": 8,
+       "end": 11
+      },
+      {
+       "word": "payment",
+       "start": 13,
+       "end": 23
+      },
+      {
+       "word": "on",
+       "start": 25,
+       "end": 27
+      },
+      {
+       "word": "Solana,",
+       "start": 29,
+       "end": 45
+      },
+      {
+       "word": "to",
+       "start": 50,
+       "end": 53
+      },
+      {
+       "word": "Garantex.",
+       "start": 55,
+       "end": 79
+      },
+      {
+       "word": "A",
+       "start": 88,
+       "end": 91
+      },
+      {
+       "word": "sanctioned",
+       "start": 93,
+       "end": 106
+      },
+      {
+       "word": "exchange.",
+       "start": 107,
+       "end": 130
+      },
+      {
+       "word": "Truvian",
+       "start": 141,
+       "end": 156
+      },
+      {
+       "word": "said",
+       "start": 158,
+       "end": 164
+      },
+      {
+       "word": "no.",
+       "start": 166,
+       "end": 185
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "problem",
+   "from": 201,
+   "durationInFrames": 200,
+   "lines": [
+    {
+     "voice": "narrator",
+     "text": "Agents move money on Solana in under a second. Nobody checks who is on the other side.",
+     "file": "audio/vo/problem_0.mp3",
+     "startFrame": 209,
+     "durationFrames": 180,
+     "words": [
+      {
+       "word": "Agents",
+       "start": 209,
+       "end": 222
+      },
+      {
+       "word": "move",
+       "start": 223,
+       "end": 230
+      },
+      {
+       "word": "money",
+       "start": 232,
+       "end": 239
+      },
+      {
+       "word": "on",
+       "start": 241,
+       "end": 243
+      },
+      {
+       "word": "Solana",
+       "start": 246,
+       "end": 261
+      },
+      {
+       "word": "in",
+       "start": 263,
+       "end": 266
+      },
+      {
+       "word": "under",
+       "start": 268,
+       "end": 273
+      },
+      {
+       "word": "a",
+       "start": 274,
+       "end": 276
+      },
+      {
+       "word": "second.",
+       "start": 278,
+       "end": 295
+      },
+      {
+       "word": "Nobody",
+       "start": 307,
+       "end": 320
+      },
+      {
+       "word": "checks",
+       "start": 322,
+       "end": 334
+      },
+      {
+       "word": "who",
+       "start": 340,
+       "end": 346
+      },
+      {
+       "word": "is",
+       "start": 348,
+       "end": 350
+      },
+      {
+       "word": "on",
+       "start": 352,
+       "end": 355
+      },
+      {
+       "word": "the",
+       "start": 356,
+       "end": 358
+      },
+      {
+       "word": "other",
+       "start": 360,
+       "end": 366
+      },
+      {
+       "word": "side.",
+       "start": 367,
+       "end": 389
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "telegraph",
+   "from": 401,
+   "durationInFrames": 207,
+   "lines": [
+    {
+     "voice": "narrator",
+     "text": "Truvian buys every fact from ranked miners on Telegraph. One cent each, with a receipt.",
+     "file": "audio/vo/telegraph_0.mp3",
+     "startFrame": 409,
+     "durationFrames": 187,
+     "words": [
+      {
+       "word": "Truvian",
+       "start": 409,
+       "end": 425
+      },
+      {
+       "word": "buys",
+       "start": 427,
+       "end": 438
+      },
+      {
+       "word": "every",
+       "start": 440,
+       "end": 448
+      },
+      {
+       "word": "fact",
+       "start": 450,
+       "end": 458
+      },
+      {
+       "word": "from",
+       "start": 459,
+       "end": 464
+      },
+      {
+       "word": "ranked",
+       "start": 468,
+       "end": 475
+      },
+      {
+       "word": "miners",
+       "start": 477,
+       "end": 487
+      },
+      {
+       "word": "on",
+       "start": 488,
+       "end": 491
+      },
+      {
+       "word": "Telegraph.",
+       "start": 493,
+       "end": 516
+      },
+      {
+       "word": "One",
+       "start": 525,
+       "end": 533
+      },
+      {
+       "word": "cent",
+       "start": 534,
+       "end": 542
+      },
+      {
+       "word": "each,",
+       "start": 543,
+       "end": 557
+      },
+      {
+       "word": "with",
+       "start": 563,
+       "end": 568
+      },
+      {
+       "word": "a",
+       "start": 569,
+       "end": 570
+      },
+      {
+       "word": "receipt.",
+       "start": 572,
+       "end": 596
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "catch",
+   "from": 608,
+   "durationInFrames": 213,
+   "lines": [
+    {
+     "voice": "narrator",
+     "text": "Then it checks the chain. A miner said 855. Solana said 998.",
+     "file": "audio/vo/catch_0.mp3",
+     "startFrame": 616,
+     "durationFrames": 191,
+     "words": [
+      {
+       "word": "Then",
+       "start": 616,
+       "end": 622
+      },
+      {
+       "word": "it",
+       "start": 623,
+       "end": 625
+      },
+      {
+       "word": "checks",
+       "start": 627,
+       "end": 635
+      },
+      {
+       "word": "the",
+       "start": 637,
+       "end": 639
+      },
+      {
+       "word": "chain.",
+       "start": 640,
+       "end": 657
+      },
+      {
+       "word": "A",
+       "start": 671,
+       "end": 673
+      },
+      {
+       "word": "miner",
+       "start": 677,
+       "end": 687
+      },
+      {
+       "word": "said",
+       "start": 688,
+       "end": 695
+      },
+      {
+       "word": "eight",
+       "start": 697,
+       "end": 703
+      },
+      {
+       "word": "fifty-five.",
+       "start": 704,
+       "end": 732
+      },
+      {
+       "word": "Solana",
+       "start": 743,
+       "end": 757
+      },
+      {
+       "word": "said",
+       "start": 759,
+       "end": 765
+      },
+      {
+       "word": "nine",
+       "start": 768,
+       "end": 775
+      },
+      {
+       "word": "ninety-eight.",
+       "start": 777,
+       "end": 807
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "turn",
+   "from": 821,
+   "durationInFrames": 121,
+   "lines": [
+    {
+     "voice": "narrator",
+     "text": "Truvian. Decide before you act.",
+     "file": "audio/vo/turn_0.mp3",
+     "startFrame": 829,
+     "durationFrames": 90,
+     "words": [
+      {
+       "word": "Truvian.",
+       "start": 829,
+       "end": 853
+      },
+      {
+       "word": "Decide",
+       "start": 866,
+       "end": 881
+      },
+      {
+       "word": "before",
+       "start": 882,
+       "end": 891
+      },
+      {
+       "word": "you",
+       "start": 892,
+       "end": 895
+      },
+      {
+       "word": "act.",
+       "start": 898,
+       "end": 918
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "settle",
+   "from": 942,
+   "durationInFrames": 292,
+   "lines": [
+    {
+     "voice": "narrator",
+     "text": "Settlement assurance reads the mint on Solana, screens the counterparty, and answers: release, review, or reject.",
+     "file": "audio/vo/settle_0.mp3",
+     "startFrame": 950,
+     "durationFrames": 272,
+     "words": [
+      {
+       "word": "Settlement",
+       "start": 950,
+       "end": 964
+      },
+      {
+       "word": "assurance",
+       "start": 965,
+       "end": 980
+      },
+      {
+       "word": "reads",
+       "start": 982,
+       "end": 991
+      },
+      {
+       "word": "the",
+       "start": 992,
+       "end": 994
+      },
+      {
+       "word": "mint",
+       "start": 996,
+       "end": 1003
+      },
+      {
+       "word": "on",
+       "start": 1006,
+       "end": 1011
+      },
+      {
+       "word": "Solana,",
+       "start": 1013,
+       "end": 1034
+      },
+      {
+       "word": "screens",
+       "start": 1045,
+       "end": 1062
+      },
+      {
+       "word": "the",
+       "start": 1064,
+       "end": 1066
+      },
+      {
+       "word": "counterparty,",
+       "start": 1067,
+       "end": 1092
+      },
+      {
+       "word": "and",
+       "start": 1099,
+       "end": 1104
+      },
+      {
+       "word": "answers:",
+       "start": 1107,
+       "end": 1125
+      },
+      {
+       "word": "release,",
+       "start": 1135,
+       "end": 1154
+      },
+      {
+       "word": "review,",
+       "start": 1162,
+       "end": 1180
+      },
+      {
+       "word": "or",
+       "start": 1190,
+       "end": 1195
+      },
+      {
+       "word": "reject.",
+       "start": 1196,
+       "end": 1222
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "resolve",
+   "from": 1234,
+   "durationInFrames": 214,
+   "lines": [
+    {
+     "voice": "narrator",
+     "text": "Resolve settles prediction markets with three miners, then anchors the signed result on Solana.",
+     "file": "audio/vo/resolve_0.mp3",
+     "startFrame": 1242,
+     "durationFrames": 194,
+     "words": [
+      {
+       "word": "Resolve",
+       "start": 1242,
+       "end": 1259
+      },
+      {
+       "word": "settles",
+       "start": 1260,
+       "end": 1271
+      },
+      {
+       "word": "prediction",
+       "start": 1273,
+       "end": 1286
+      },
+      {
+       "word": "markets",
+       "start": 1288,
+       "end": 1300
+      },
+      {
+       "word": "with",
+       "start": 1301,
+       "end": 1305
+      },
+      {
+       "word": "three",
+       "start": 1307,
+       "end": 1314
+      },
+      {
+       "word": "miners,",
+       "start": 1316,
+       "end": 1334
+      },
+      {
+       "word": "then",
+       "start": 1345,
+       "end": 1351
+      },
+      {
+       "word": "anchors",
+       "start": 1354,
+       "end": 1364
+      },
+      {
+       "word": "the",
+       "start": 1366,
+       "end": 1368
+      },
+      {
+       "word": "signed",
+       "start": 1370,
+       "end": 1380
+      },
+      {
+       "word": "result",
+       "start": 1381,
+       "end": 1392
+      },
+      {
+       "word": "on",
+       "start": 1400,
+       "end": 1406
+      },
+      {
+       "word": "Solana.",
+       "start": 1408,
+       "end": 1436
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "miner",
+   "from": 1448,
+   "durationInFrames": 150,
+   "lines": [
+    {
+     "voice": "narrator",
+     "text": "And our own miner now answers Solana balances on Telegraph.",
+     "file": "audio/vo/miner_0.mp3",
+     "startFrame": 1456,
+     "durationFrames": 122,
+     "words": [
+      {
+       "word": "And",
+       "start": 1456,
+       "end": 1461
+      },
+      {
+       "word": "our",
+       "start": 1463,
+       "end": 1467
+      },
+      {
+       "word": "own",
+       "start": 1469,
+       "end": 1474
+      },
+      {
+       "word": "miner",
+       "start": 1476,
+       "end": 1485
+      },
+      {
+       "word": "now",
+       "start": 1487,
+       "end": 1492
+      },
+      {
+       "word": "answers",
+       "start": 1495,
+       "end": 1506
+      },
+      {
+       "word": "Solana",
+       "start": 1507,
+       "end": 1519
+      },
+      {
+       "word": "balances",
+       "start": 1521,
+       "end": 1537
+      },
+      {
+       "word": "on",
+       "start": 1543,
+       "end": 1548
+      },
+      {
+       "word": "Telegraph.",
+       "start": 1550,
+       "end": 1577
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "close",
+   "from": 1598,
+   "durationInFrames": 202,
+   "lines": [
+    {
+     "voice": "narrator",
+     "text": "Signed decisions for Solana agents. truvian.xyz",
+     "file": "audio/vo/close_0.mp3",
+     "startFrame": 1606,
+     "durationFrames": 134,
+     "words": [
+      {
+       "word": "Signed",
+       "start": 1606,
+       "end": 1619
+      },
+      {
+       "word": "decisions",
+       "start": 1621,
+       "end": 1636
+      },
+      {
+       "word": "for",
+       "start": 1638,
+       "end": 1641
+      },
+      {
+       "word": "Solana",
+       "start": 1642,
+       "end": 1654
+      },
+      {
+       "word": "agents.",
+       "start": 1656,
+       "end": 1673
+      },
+      {
+       "word": "Truvian",
+       "start": 1682,
+       "end": 1695
+      },
+      {
+       "word": "dot",
+       "start": 1697,
+       "end": 1703
+      },
+      {
+       "word": "x",
+       "start": 1708,
+       "end": 1713
+      },
+      {
+       "word": "y",
+       "start": 1715,
+       "end": 1718
+      },
+      {
+       "word": "z.",
+       "start": 1721,
+       "end": 1740
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
