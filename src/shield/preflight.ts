@@ -31,11 +31,13 @@
 import type { SupportedChain } from '../config/chains.js';
 import { apiKeyBalanceUsd, askPinnedIntent, askTypedIntent, intentRanking, type IntentRanking, type PaymentReceipt, type RankedMiner, type TypedAnswer } from './telegraph.js';
 import { parseAddress, parseChain, readBalanceGwei, readTokenFacts, TokenFactsError, type TokenFacts } from './tokenFacts.js';
+import type { SolanaNetwork } from './solana.js';
+import type { SettlementSection } from './settlement.js';
 
-export type PreflightMode = 'trade' | 'listing' | 'holdings';
-export type Decision = 'HOLD' | 'LIST' | 'VERIFIED' | 'REVIEW' | 'REJECT';
+export type PreflightMode = 'trade' | 'listing' | 'holdings' | 'settlement';
+export type Decision = 'HOLD' | 'LIST' | 'VERIFIED' | 'RELEASE' | 'REVIEW' | 'REJECT';
 export type Severity = 'block' | 'review' | 'info' | 'pass';
-export type PurchaseKey = 'security' | 'supply' | 'wash' | 'liquidity' | 'sanctions' | 'treasury' | 'balance';
+export type PurchaseKey = 'security' | 'supply' | 'wash' | 'liquidity' | 'sanctions' | 'treasury' | 'balance' | 'registry';
 
 export interface PreflightRequest {
   mode: PreflightMode;
@@ -176,11 +178,12 @@ export interface HoldingRead {
 
 export interface PreflightMemo {
   version: 'truvian-shield-memo/1';
-  kind: 'token-preflight' | 'listing-review' | 'holdings-proof';
+  kind: 'token-preflight' | 'listing-review' | 'holdings-proof' | 'settlement-assurance';
   createdAt: string;
   input: {
     mode: PreflightMode;
-    chain: SupportedChain;
+    /** An EVM chain, or solana / solana-devnet for the Solana desks */
+    chain: SupportedChain | SolanaNetwork;
     token: string;
     pool: string | null;
     tradeUsd: number | null;
@@ -205,7 +208,8 @@ export interface PreflightMemo {
   decision: Decision;
   decisionRule: string;
   /** What the agent does with the decision (trade mode); always simulated */
-  action: { simulated: true; description: string; executed: boolean } | null;
+  /** What the agent does with the decision: simulated for a trade, a real devnet payment for a settlement */
+  action: { simulated: boolean; description: string; executed: boolean } | null;
   cost: {
     telegraphUsd: number;
     /** Asks answered with response fields, second opinions included */
@@ -222,6 +226,8 @@ export interface PreflightMemo {
   latencyMs: number;
   policy: typeof POLICY;
   holdingsPolicy?: typeof HOLDINGS_POLICY;
+  /** Settlement assurance (Solana): the mint, the payer, the recipient and the transfer, read and verified on Solana */
+  settlement?: SettlementSection;
 }
 
 export class PreflightInputError extends Error {}
@@ -579,10 +585,13 @@ export interface FactContext {
   treasuryRead: PreflightMemo['treasuryRead'];
   /** The findings for a fact this file has no rule for (a holding's balance, holdings.ts) */
   judge?: (p: Purchase) => Finding[];
+  /** A desk with its own rules for every fact (settlement.ts): used instead of this file's */
+  judgeAll?: (p: Purchase) => Finding[];
 }
 
 /** The findings one answer gives for its own fact. */
 function factFindings(p: Purchase, ctx: FactContext): Finding[] {
+  if (ctx.judgeAll) return ctx.judgeAll(p);
   switch (p.key) {
     case 'security': return securityFindings(p, ctx.facts);
     case 'supply': return supplyFindings(p, ctx.facts);
@@ -591,6 +600,7 @@ function factFindings(p: Purchase, ctx: FactContext): Finding[] {
     case 'sanctions': return sanctionsFindings(p, ctx.req.issuer ?? '');
     case 'treasury': return treasuryFindings(p, ctx.treasuryRead, ctx.req.treasury !== undefined);
     case 'balance': return ctx.judge ? ctx.judge(p) : [unavailable(p, 'balance', 'Wallet balance')];
+    case 'registry': return [unavailable(p, 'registry', 'Corporate registry')];
   }
 }
 
@@ -603,6 +613,7 @@ const NO_EVIDENCE: ReadonlySet<string> = new Set([
   'sanctions.unavailable', 'sanctions.uncertain',
   'treasury.unavailable', 'treasury.missing',
   'balance.unavailable', 'balance.missing', 'balance.not_about_wallet',
+  'registry.unavailable', 'registry.missing', 'registry.other_entity',
 ]);
 
 /**

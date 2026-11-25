@@ -38,6 +38,7 @@ import { createLimiter, type Limiter, type LimiterState } from './limits.js';
 import { createReceiptStore } from './receipts.js';
 import { normalizePreflightRequest, PreflightInputError, runPreflight, type PreflightRequest } from './preflight.js';
 import { normalizeHoldingsRequest, runHoldings, type HoldingsRequest } from './holdings.js';
+import { normalizeSettlementRequest, runSettlement, SolanaReadError, type SettlementRequest } from './settlement.js';
 import { createMemoStore, memoSigner, signMemo, verifyMemo } from './memo.js';
 import { TokenFactsError } from './tokenFacts.js';
 import { payerAddress, payerUsdcBalance } from './payer.js';
@@ -529,10 +530,11 @@ export function buildShieldServer() {
    * Draws on the same free allowance (or x402 payment) as a check.
    */
   app.post('/api/preflight', async (req, reply) => {
-    let parsed: PreflightRequest | HoldingsRequest;
+    let parsed: PreflightRequest | HoldingsRequest | SettlementRequest;
     try {
       const raw = (req.body ?? {}) as Record<string, unknown>;
-      parsed = String(raw.mode ?? '').trim().toLowerCase() === 'holdings' ? normalizeHoldingsRequest(raw) : normalizePreflightRequest(raw);
+      const mode = String(raw.mode ?? '').trim().toLowerCase();
+      parsed = mode === 'holdings' ? normalizeHoldingsRequest(raw) : mode === 'settlement' ? normalizeSettlementRequest(raw) : normalizePreflightRequest(raw);
     } catch (err) {
       if (err instanceof PreflightInputError) return reply.status(400).send({ error: 'INVALID_INPUT', message: err.message });
       throw err;
@@ -561,7 +563,14 @@ export function buildShieldServer() {
     let result: Record<string, unknown>;
     let status = 200;
     try {
-      const memo = 'wallet' in parsed
+      const memo = 'counterparty' in parsed
+        ? await runSettlement(parsed, {
+          onChainRead: (reads) => emit({ type: 'solana', reads }),
+          onPlan: (plan, escrowUsd) => emit({ type: 'plan', plan, escrowUsd }),
+          onPurchase: (purchase) => emit({ type: 'purchase', purchase }),
+          onExecution: (execution) => emit({ type: 'execution', execution }),
+        })
+        : 'wallet' in parsed
         ? await runHoldings(parsed, {
           onHoldingsRead: (reads) => emit({ type: 'holdings', reads }),
           onPlan: (plan, escrowUsd) => emit({ type: 'plan', plan, escrowUsd }),
@@ -580,9 +589,14 @@ export function buildShieldServer() {
       result = { type: 'memo', ...stored, url: `/preflight?m=${stored.id}` };
     } catch (err) {
       // The chain did not answer: no decision is possible and nothing was bought.
-      if (!(err instanceof TokenFactsError)) throw err;
-      status = 503;
-      result = { type: 'error', error: err.code, message: `${err.message}. Nothing was bought and no decision was made.` };
+      if (err instanceof SolanaReadError) {
+        status = 503;
+        result = { type: 'error', error: 'SOLANA_READ_FAILED', message: `${err.message}. Nothing was bought and no decision was made.` };
+      } else {
+        if (!(err instanceof TokenFactsError)) throw err;
+        status = 503;
+        result = { type: 'error', error: err.code, message: `${err.message}. Nothing was bought and no decision was made.` };
+      }
     }
 
     if (streaming) {
