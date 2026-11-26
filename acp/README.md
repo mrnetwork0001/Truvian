@@ -10,13 +10,13 @@ The desks themselves run on Shield (`src/shield/commerce/` in the repo root). Th
 ## What is real, and what is a fixture
 
 - The reports, verifications and memos are real runs: real Telegraph purchases (test USDC on Ethereum Sepolia in Season II) and real chain reads.
-- ACP runs on **Base Sepolia with test USDC** by default (`ACP_NETWORK=testnet`, the SDK's dev server). Set `ACP_NETWORK=mainnet` for Base and real USDC.
+- Agents registered on app.virtuals.io run on **Base mainnet with real USDC** (`ACP_NETWORK=mainnet`); new agents start in Virtuals' sandbox, unlisted. `ACP_NETWORK=testnet` points at the SDK's dev server.
 - The **demo provider** in `src/demo.ts` is a test fixture. It fetches a real report, then delivers it correct, with the sanctions claim flipped, or with the registry claim left out, and its delivery says which (`demoFixture: true`). Truvian's evaluator does not read that label.
 
 ## Set up (once)
 
 1. On [app.virtuals.io](https://app.virtuals.io/acp/new), register three agents, each with its own wallet:
-   - **Truvian**. Offering **"Counterparty due diligence"**, price 0.10 USDC, requirement schema:
+   - **Truvian**. Offering **`counterpartyDueDiligence`**, price 0.01 USDC (Virtuals recommends $0.01 while testing), requirement schema:
      ```json
      {"type":"object","required":["entity","jurisdiction"],"properties":{
        "entity":{"type":"string","description":"the counterparty's legal name"},
@@ -24,7 +24,7 @@ The desks themselves run on Shield (`src/shield/commerce/` in the repo root). Th
        "wallets":{"type":"array","maxItems":3,"items":{"type":"object","properties":{"chain":{"type":"string"},"address":{"type":"string"},"token":{"type":"string"}}}}}}
      ```
    - **Truvian Demo Buyer**. No offering needed.
-   - **Truvian Demo Provider**. Offering **"Counterparty due diligence (demo)"**, price 0.01 USDC, requirement schema as above plus `"mode":{"type":"string","enum":["correct","incorrect","incomplete"]}`.
+   - **Truvian Demo Seller** (the demo provider; agent names are capped at 20 characters). Offering **`counterpartyDueDiligenceDemo`**, price 0.01 USDC, requirement schema as above plus `"mode":{"type":"string","enum":["correct","incorrect","incomplete"]}`.
 2. On each agent's page, open **Signers**, click **+ Add Signer**, then **Copy Key**. Note the agent's wallet address and wallet id.
 3. Put them in the repo's `.env`. They are never printed or committed:
    ```
@@ -57,3 +57,12 @@ npm run demo -- --only=evaluation  # the three evaluation jobs only
 ## Without ACP
 
 `SHIELD_URL=http://127.0.0.1:8790 npx tsx src/rehearse.ts` runs the same three deliveries through the same evaluator code, with no wallets and no jobs. It shows what Truvian will decide; it is not an ACP run.
+
+## Notes from the first run (26 Nov 2026)
+
+- **Gas:** each agent wallet needs a little ETH on Base (0.0001 ETH covers many jobs); the first transactions were not sponsored.
+- **Signer policy "Virtuals-only":** the wallet's one-time EIP-7702 upgrade, and some calls, need a manual approval; the SDK prints the approval link and waits up to 5 minutes.
+- **Node 26:** its built-in fetch stalls while the SDK's event streams are open; `src/agent.ts` installs undici's dispatcher to avoid it.
+- `npx tsx src/check.ts <ROLE>` checks an agent's login and offerings, and `npx tsx src/jobs.ts <ROLE>` lists its jobs. Both are read-only.
+
+First paid job: ACP job 83055 on Base, Truvian Demo Buyer → Truvian, `counterpartyDueDiligence` on Coinbase, Inc. (US-DE), $0.01: PROCEED, memo [yFfiYka5](https://truvian.xyz/api/work/yFfiYka5), completed by the buyer after checking the memo's signature. Record: `runs/2026-11-26T13-41-24-989Z.json`.

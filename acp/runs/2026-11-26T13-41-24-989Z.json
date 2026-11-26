@@ -1,0 +1,47 @@
+{
+ "network": "mainnet",
+ "chainId": 8453,
+ "buyer": "0xe7ed0a9354fcbecf4787097c8fd4fa5ff546e8e7",
+ "truvian": "0x68c06925413593c1f374a4875e0a4fc2c7700e7e",
+ "results": [
+  {
+   "scenario": "sale: Truvian due diligence",
+   "jobId": "83055",
+   "provider": "0x68c06925413593c1f374a4875e0a4fc2c7700e7e",
+   "evaluator": "0xe7ed0a9354fcbecf4787097c8fd4fa5ff546e8e7",
+   "status": "completed",
+   "reason": "0x11987766ee2df977e6d358a702efd1fc66bf744093656cb165569be29ed74b8c",
+   "deliverable": {
+    "product": "counterpartyDueDiligence",
+    "subject": "Coinbase, Inc. (US-DE)",
+    "recommendation": "PROCEED",
+    "rule": "every check was answered and none holds the counterparty back",
+    "summary": "Coinbase, Inc. (US-DE): PROCEED.  Cleared: Counterparty not on the sanctions lists checked; Counterparty is a registered, active entity.",
+    "claims": [
+     {
+      "kind": "sanctions",
+      "entity": "Coinbase, Inc.",
+      "listed": false
+     },
+     {
+      "kind": "registry",
+      "entity": "Coinbase, Inc.",
+      "jurisdiction": "US-DE",
+      "active": true,
+      "registrationId": "549300QHD76EP6ZKTT48",
+      "legalName": "COINBASE, INC."
+     }
+    ],
+    "evidence": {
+     "memoId": "yFfiYka5",
+     "url": "https://truvian.xyz/api/work/yFfiYka5",
+     "sha256": "5549bdab75ed00222060a42b4bb11da254c31135921c9a3d63a2b1533346f7e5",
+     "signature": "0xaf21aba8414567c3adc55d7aca43b5d1223ce55504df1df6f79c01f8791884c22bfbcd69ebf149e599af323ef0cbdbcb993702ddc5a74d1e0a3760bad29bde571b",
+     "signer": "0x956aECB0b0DEfC2f2631C26ec0FF7366Ebb53245",
+     "telegraphAnswers": 2
+    },
+    "memoId": "yFfiYka5"
+   }
+  }
+ ]
+}
