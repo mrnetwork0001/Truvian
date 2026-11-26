@@ -19,7 +19,7 @@
  *      wrote it.
  */
 import { buy, memoCost, Spend, type FactContext, type Finding, type PreflightRequest, type Purchase } from '../preflight.js';
-import { countryOf, normName, registryJudge } from '../settlement.js';
+import { countryOf, normName, registryJudge, sanctionsJudge } from '../settlement.js';
 import { chat, firstJson, llmConfig, LlmUnavailableError, newUse, type LlmUse } from './llm.js';
 import { DiligenceInputError, normalizeDiligenceRequest, recommend, runDiligence, type DiligenceMemo, type DiligenceRequest, type Recommendation } from './diligence.js';
 
@@ -50,6 +50,8 @@ export function normalizeInvestigateRequest(raw: unknown): InvestigateRequest {
 }
 
 export interface FollowUp {
+  /** registry: another name or jurisdiction for the record; sanctions: the legal name a follow-up record gave, screened too */
+  kind: 'registry' | 'sanctions';
   why: string;
   asked: { company: string; jurisdiction: string };
   /** The model's reason for this name */
@@ -112,9 +114,11 @@ const FOLLOW_SYSTEM = `A corporate registry lookup found no usable record for a 
 
 /** The registry finding is no evidence: nothing came back, or it is about someone else. */
 const registryLacking = (f: Finding): boolean => ['registry.unavailable', 'registry.missing', 'registry.other_entity'].includes(f.rule);
+/** Worth a follow-up: no evidence, or a record from another country (often another company with a similar short name). */
+const registryUnsettled = (f: Finding): boolean => registryLacking(f) || f.rule === 'registry.jurisdiction_conflict';
 
 async function followUps(subject: DiligenceRequest, brief: string, d: DiligenceMemo, use: LlmUse): Promise<FollowUp[]> {
-  const lacking = d.findings.find(registryLacking);
+  const lacking = d.findings.find(registryUnsettled);
   if (!lacking) return [];
   const { text } = await chat(FOLLOW_SYSTEM, `Brief:\n${brief}\n\nCompany asked: ${subject.entity} (${subject.jurisdiction})\nWhy no usable record: ${lacking.detail}`, use, 500);
   let tries: Array<{ company: string; jurisdiction: string; reason: string }> = [];
@@ -139,7 +143,7 @@ async function followUps(subject: DiligenceRequest, brief: string, d: DiligenceM
   const spend = new Spend(0.03, 0);
   const out: FollowUp[] = [];
   for (const t of tries) {
-    const fu: FollowUp = { why: lacking.title, asked: { company: t.company, jurisdiction: t.jurisdiction }, reason: t.reason, purchase: null, used: false, outcome: '' };
+    const fu: FollowUp = { kind: 'registry', why: lacking.title, asked: { company: t.company, jurisdiction: t.jurisdiction }, reason: t.reason, purchase: null, used: false, outcome: '' };
     if (!spend.take(0.01)) {
       fu.outcome = 'not asked: over the follow-up budget';
       out.push(fu);
@@ -149,10 +153,21 @@ async function followUps(subject: DiligenceRequest, brief: string, d: DiligenceM
     const ctx = { req: { mode: 'listing', chain: 'ethereum', token: '0x0000000000000000000000000000000000000000', issuer: t.company } as unknown as PreflightRequest, facts: null as unknown as FactContext['facts'], treasuryRead: null, judgeAll, spend };
     fu.purchase = await buy({ key: 'registry', intent: 'CORPORATE_REGISTRY_LOOKUP_GENERAL', params: { company: t.company, jurisdiction: t.jurisdiction }, question: `Corporate registry record of ${t.company} (${t.jurisdiction}): legal name, registration id, active or not, jurisdiction.` }, ctx);
     const got = judgeAll(fu.purchase);
-    fu.used = !got.some(registryLacking);
+    fu.used = !got.some(registryUnsettled);
     fu.outcome = fu.used ? `record found: ${got.map((f) => f.title).join('; ')}` : `no usable record either: ${got.map((f) => f.title).join('; ')}`;
     out.push(fu);
-    if (fu.used) break;
+    if (fu.used) {
+      // The record names the company in full: screen that name too, not only the short one the brief used
+      const legal = typeof fu.purchase.fields?.legal_name === 'string' ? fu.purchase.fields.legal_name.trim() : '';
+      if (legal && normName(legal) !== normName(subject.entity) && spend.take(0.01)) {
+        const sj = (p: Purchase) => sanctionsJudge(p, legal);
+        const sctx = { ...ctx, judgeAll: sj };
+        const p = await buy({ key: 'sanctions', intent: 'SANCTIONS_SCREENING_MATCH_GENERAL', params: { name: legal }, question: `Is ${legal} on a sanctions list?` }, sctx);
+        const f = sj(p);
+        out.push({ kind: 'sanctions', why: `the registry record names the company "${legal}"`, asked: { company: legal, jurisdiction: t.jurisdiction }, reason: 'screen the full legal name as well as the name in the brief', purchase: p, used: true, outcome: f.map((x) => x.title).join('; ') });
+      }
+      break;
+    }
   }
   return out;
 }
@@ -178,13 +193,19 @@ export async function runInvestigation(req: InvestigateRequest): Promise<Investi
   const diligence = await runDiligence(subject);
   const fus = use ? await followUps(subject, req.brief, diligence, use) : [];
 
-  // A used follow-up replaces the registry finding that was no evidence
-  const used = fus.find((f) => f.used && f.purchase);
+  // A used follow-up replaces the registry finding it settled. The record it found is under a name the
+  // agent proposed, so a person must confirm that it is the counterparty: the agent can add evidence,
+  // never clear a counterparty on an identity it inferred.
+  const used = fus.find((f) => f.kind === 'registry' && f.used && f.purchase);
+  const screened = fus.find((f) => f.kind === 'sanctions' && f.purchase);
   let findings = diligence.findings;
   if (used) {
+    const legal = typeof used.purchase!.fields?.legal_name === 'string' ? used.purchase!.fields.legal_name : used.asked.company;
     findings = [
-      ...findings.filter((f) => !registryLacking(f)),
+      ...findings.filter((f) => !registryUnsettled(f)),
       ...registryJudge(used.purchase!, used.asked.company, used.asked.jurisdiction).map((f) => ({ ...f, title: `Follow-up (${used.asked.company}): ${f.title}` })),
+      ...(screened ? sanctionsJudge(screened.purchase!, screened.asked.company).map((f) => ({ ...f, title: `Follow-up (${screened.asked.company}): ${f.title}` })) : []),
+      { rule: 'identity.inferred', severity: 'review', title: `Confirm the counterparty is ${legal}`, detail: `The brief names "${subject.entity}" (${subject.jurisdiction}). The first registry answer did not settle who that is (${used.why}). The agent then asked for "${used.asked.company}" (${used.asked.jurisdiction}): ${used.reason || 'no reason given'}. That record is evidence about ${legal}; a person must confirm it is the counterparty in the brief.`, source: 'policy', evidence: ['registry'] },
     ];
   }
   const order = { block: 0, review: 1, info: 2, pass: 3 } as const;
