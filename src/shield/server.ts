@@ -42,6 +42,9 @@ import { normalizeSettlementRequest, runSettlement, SolanaReadError, type Settle
 import { createMemoStore, memoSigner, signMemo, verifyMemo } from './memo.js';
 import { TokenFactsError } from './tokenFacts.js';
 import { registerResolveRoutes } from './resolveRoutes.js';
+import { registerCommerceRoutes } from './commerceRoutes.js';
+import { createCommerceService } from './commerce/service.js';
+import { createLedger, createWorkStore } from './commerce/store.js';
 import { registerDocsRoutes } from './docs.js';
 import { payerAddress, payerUsdcBalance } from './payer.js';
 import {
@@ -743,6 +746,37 @@ export function buildShieldServer() {
     checksLeft: (ip) => limiter.peek(ip).remainingForIp,
     save,
     sendPage: (reply, file) => sendPublicFile(reply, file),
+  });
+
+  // Commerce desks: due diligence, investigation, work verification, and the business ledger (./commerceRoutes.ts).
+  const commerce = createCommerceService({
+    store: createWorkStore(process.env.SHIELD_WORK_MEMOS_FILE ?? resolve(process.cwd(), '.shield-work-memos.json')),
+    ledger: createLedger(process.env.SHIELD_LEDGER_FILE ?? resolve(process.cwd(), '.shield-ledger.json')),
+    // One job counts as a desk decision, like a preflight or a resolution
+    recordSpend: (usd, requests) => {
+      stats.preflightsRun++;
+      stats.telegraphRequests += requests;
+      stats.paidUsd = Number((stats.paidUsd + usd).toFixed(6));
+      limiter.recordSpend(usd);
+    },
+  });
+  registerCommerceRoutes(app, commerce, {
+    admit,
+    settle: async (admission, reply) => {
+      if (!admission.paid) return null;
+      const settlement = await settlePayment(admission.paid.payment, admission.paid.requirements);
+      reply.header('X-PAYMENT-RESPONSE', encodeSettlement(settlement));
+      if (settlement.success) {
+        stats.earnedUsd = Number((stats.earnedUsd + Number(admission.paid.requirements.maxAmountRequired) / 1_000_000).toFixed(6));
+        stats.paidChecks += 1;
+      } else {
+        app.log.warn({ reason: settlement.reason }, 'x402 settlement failed after work was delivered');
+      }
+      return { success: settlement.success, transaction: settlement.transaction ?? null, reason: settlement.reason };
+    },
+    priceUsd,
+    checksLeft: (ip) => limiter.peek(ip).remainingForIp,
+    save,
   });
 
   // Documentation at /docs (./docs.ts), rendered from public/docs/nav.json and public/docs/pages/*.html.

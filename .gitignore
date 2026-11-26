@@ -48,3 +48,7 @@ video/narration/*.mp3
 
 # Claude Code worktrees (local scratch checkouts, never source)
 /.claude/worktrees/
+
+# Commerce desks: signed work memos and the business ledger (served by /api/work, /api/business)
+.shield-work-memos.json
+.shield-ledger.json
