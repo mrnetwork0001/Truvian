@@ -32,9 +32,33 @@ export interface CommerceRouteDeps<A extends { admitted: boolean; paid?: unknown
 
 const ID = /^[A-Za-z0-9_-]{8}$/;
 
+/**
+ * Truvian's own ACP agent (acp/) calls these desks as the seller or evaluator of a job.
+ * With SHIELD_INTERNAL_KEY as a bearer token it skips the public free allowance and x402,
+ * because the ACP job carries its own payment; it books the sale itself through
+ * POST /api/business/book once the job settles on ACP.
+ */
+function internal(req: FastifyRequest): boolean {
+  const key = process.env.SHIELD_INTERNAL_KEY?.trim();
+  if (!key || key.length < 24) return false;
+  return req.headers.authorization === `Bearer ${key}`;
+}
+
 export function registerCommerceRoutes<A extends { admitted: boolean; paid?: unknown }>(app: FastifyInstance, service: CommerceService, deps: CommerceRouteDeps<A>): void {
   /** Admit, run, settle, book: the same for every commerce POST. */
   const sell = async (req: FastifyRequest, reply: FastifyReply, run: () => Promise<StoredWork>) => {
+    if (internal(req)) {
+      try {
+        const stored = await run();
+        deps.save();
+        return reply.send({ ...stored, url: `/api/work/${stored.id}`, booked: null });
+      } catch (err) {
+        deps.save();
+        if (err instanceof LlmUnavailableError) return reply.status(503).send({ error: 'AGENT_MODEL_UNAVAILABLE', message: `${err.message}. Nothing was bought.` });
+        if (err instanceof InvestigateInputError) return reply.status(422).send({ error: 'BRIEF_UNREADABLE', message: err.message });
+        throw err;
+      }
+    }
     const admission = await deps.admit(req, reply);
     if (!admission.admitted) return reply;
     let stored: StoredWork;
@@ -101,6 +125,23 @@ export function registerCommerceRoutes<A extends { admitted: boolean; paid?: unk
     const kinds = ['due-diligence', 'investigation', 'work-verification'] as const;
     const kind = kinds.find((k) => k === q.kind);
     return { works: service.store.recent(Number.isFinite(limit) && limit > 0 ? Math.min(50, Math.floor(limit)) : 12, kind) };
+  });
+
+  /** Book an ACP sale (internal): the job's memo, what the ACP job paid, and its id. Booked once per memo. */
+  app.post('/api/business/book', async (req, reply) => {
+    if (!internal(req)) return reply.status(401).send({ error: 'UNAUTHORIZED', message: 'internal route' });
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const memoId = typeof b.memoId === 'string' && ID.test(b.memoId) ? b.memoId : null;
+    const stored = memoId ? service.store.get(memoId) : undefined;
+    if (!stored) return reply.status(404).send({ error: 'NOT_FOUND', message: 'no stored work memo with that id' });
+    if (service.ledger.entries(5000).some((e) => e.memoId === stored.id)) return reply.status(409).send({ error: 'ALREADY_BOOKED', message: 'this memo is already in the ledger' });
+    const price = Number(b.priceUsd);
+    if (!Number.isFinite(price) || price < 0 || price > 1000) return reply.status(400).send({ error: 'INVALID_INPUT', message: 'priceUsd must be 0 to 1000' });
+    const acpJobId = typeof b.acpJobId === 'string' && b.acpJobId.trim() ? b.acpJobId.trim().slice(0, 80) : null;
+    const network = typeof b.network === 'string' && b.network.trim() ? b.network.trim().slice(0, 40) : 'base-sepolia';
+    const booked = service.book(stored, { channel: 'acp', priceUsd: price, payment: price > 0 ? { network, transaction: typeof b.transaction === 'string' ? b.transaction.slice(0, 100) : null } : null, acpJobId });
+    deps.save();
+    return booked;
   });
 
   app.get('/api/business', async (req) => {
