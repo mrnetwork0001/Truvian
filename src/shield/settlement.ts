@@ -172,7 +172,7 @@ export function countryOf(j: string): string | null {
   return COUNTRY[s.toLowerCase().replace(/^the /, '').replace(/,.*$/, '').trim()] ?? null;
 }
 
-function sanctionsJudge(p: Purchase, name: string): Finding[] {
+export function sanctionsJudge(p: Purchase, name: string): Finding[] {
   if (!p.ok || !p.fields) return [unavailable(p, 'sanctions', 'Sanctions screening')];
   const matched = p.fields.matched;
   const score = num(p.fields.match_score);
@@ -184,7 +184,7 @@ function sanctionsJudge(p: Purchase, name: string): Finding[] {
   return [{ rule: 'sanctions.clear', severity: 'pass', title: 'Counterparty not on the sanctions lists checked', detail: `"${name}" did not match${lists.length ? ` across ${lists.length} lists (${lists.slice(0, 3).join(', ')}${lists.length > 3 ? ', ...' : ''})` : ''}.`, source: 'telegraph', evidence: ['sanctions'] }];
 }
 
-function registryJudge(p: Purchase, name: string, jurisdiction: string): Finding[] {
+export function registryJudge(p: Purchase, name: string, jurisdiction: string): Finding[] {
   if (!p.ok || !p.fields) return [unavailable(p, 'registry', 'Corporate registry')];
   const f = p.fields;
   const legal = typeof f.legal_name === 'string' ? f.legal_name : null;

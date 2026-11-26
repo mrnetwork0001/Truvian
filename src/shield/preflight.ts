@@ -849,11 +849,12 @@ function cacheKey(intent: string, params: Record<string, unknown>): string {
  * already bought (or in flight) in the last REUSE_TTL_MS is reused whole,
  * second opinion and all, so a repeat never pays for either again.
  */
-export async function buy(plan: Planned, ctx: FactContext & { spend: Spend }): Promise<Purchase> {
+export async function buy(plan: Planned, ctx: FactContext & { spend: Spend }, opts: { noReuse?: boolean } = {}): Promise<Purchase> {
   const ck = cacheKey(plan.intent, plan.params);
   const now = Date.now();
   const hit = fresh.get(ck);
-  const reused = hit !== undefined && now - hit.at < REUSE_TTL_MS;
+  // An independent check (work verification) buys its own answer instead of reusing the one being checked
+  const reused = !opts.noReuse && hit !== undefined && now - hit.at < REUSE_TTL_MS;
   let entry = hit;
   if (reused) {
     ctx.spend.adjust(-ROUTED_ASK_USD); // nothing is bought for this fact in this decision
