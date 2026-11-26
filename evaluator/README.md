@@ -38,6 +38,23 @@ scores our own answers. Both executors run on the scorer VPS behind
 node's requests so a rejected version can be retrained against the batch
 the node actually sent, as v3 of the first adapter was.
 
+## Preference pairs: SLA_COMPLIANCE_GENERAL
+
+On 26 Nov 2026 the intent's pool had 2 contributors and needed 3 before its
+questions were used, so 21 of its 23 miners scored 0 that epoch. We uploaded
+42 pairs from [`sla-pairs/`](sla-pairs/) with `upload-pairs.sh`: 42 accepted,
+0 duplicate, 0 rejected, and the pool reached 3 submitters.
+
+Each pair is built by `sla-pairs/build.py` from a vendor's own status page
+(GitHub, Vercel, DigitalOcean, Netlify, npm, OpenAI, Cloudflare), for months,
+half months and weeks the incident history fully covers. The better answer
+counts the minutes the vendor marked major or critical outage, merged where
+incidents overlap, and compares them with the target stated in the question.
+The worse answer makes one clear mistake: the wrong verdict for its own
+numbers, minutes read as hours, no measurement, no target, or the wrong period.
+The method is cruder than a contract would be (a regional or control-panel
+outage counts as full downtime) and every better answer says so.
+
 ## What was verified
 
 `npm run verify:truth` builds each request from the descriptor itself, reads
