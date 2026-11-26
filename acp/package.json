@@ -1,0 +1,22 @@
+{
+  "name": "truvian-acp",
+  "private": true,
+  "type": "module",
+  "description": "Truvian on Virtuals ACP: the due diligence seller and the independent work evaluator",
+  "scripts": {
+    "truvian": "tsx src/truvian.ts",
+    "demo": "tsx src/demo.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@account-kit/infra": "^4.88.5",
+    "@virtuals-protocol/acp-node-v2": "^0.1.15",
+    "dotenv": "^18.0.10",
+    "viem": "^2.58.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.11",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}
