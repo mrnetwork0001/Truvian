@@ -66,3 +66,5 @@ npm run demo -- --only=evaluation  # the three evaluation jobs only
 - `npx tsx src/check.ts <ROLE>` checks an agent's login and offerings, and `npx tsx src/jobs.ts <ROLE>` lists its jobs. Both are read-only.
 
 First paid job: ACP job 83055 on Base, Truvian Demo Buyer → Truvian, `counterpartyDueDiligence` on Coinbase, Inc. (US-DE), $0.01: PROCEED, memo [yFfiYka5](https://truvian.xyz/api/work/yFfiYka5), completed by the buyer after checking the memo's signature. Record: `runs/2026-11-26T13-41-24-989Z.json`.
+
+Evaluation jobs (same day): 83057 correct delivery ACCEPTED, completed (memo Hehi_9kr); 83058 sanctions claim flipped REJECTED (memo pqnUapI_); 83059 registry claim left out INCOMPLETE, rejected (memo DpzCNrrm). Record: `runs/2026-11-26T15-47-40-998Z.json`.

@@ -1,0 +1,35 @@
+{
+ "network": "mainnet",
+ "chainId": 8453,
+ "buyer": "0xe7ed0a9354fcbecf4787097c8fd4fa5ff546e8e7",
+ "truvian": "0x68c06925413593c1f374a4875e0a4fc2c7700e7e",
+ "results": [
+  {
+   "scenario": "evaluation: correct delivery",
+   "jobId": "83057",
+   "provider": "0x6ccdc1ac7aedf136248268860b96bf6b043c0dab",
+   "evaluator": "0x68c06925413593c1f374a4875e0a4fc2c7700e7e",
+   "status": "completed",
+   "reason": "0xcf32b495737306bfef91f9d1bd2496b5e31e11efbac26011b34bce01ef9429c0",
+   "deliverable": null
+  },
+  {
+   "scenario": "evaluation: incorrect delivery",
+   "jobId": "83058",
+   "provider": "0x6ccdc1ac7aedf136248268860b96bf6b043c0dab",
+   "evaluator": "0x68c06925413593c1f374a4875e0a4fc2c7700e7e",
+   "status": "rejected",
+   "reason": "0x5d9eebf411084f7dc965a273ebf3662af8194afd0a7dfc61be2db4987d0e6fa8",
+   "deliverable": null
+  },
+  {
+   "scenario": "evaluation: incomplete delivery",
+   "jobId": "83059",
+   "provider": "0x6ccdc1ac7aedf136248268860b96bf6b043c0dab",
+   "evaluator": "0x68c06925413593c1f374a4875e0a4fc2c7700e7e",
+   "status": "rejected",
+   "reason": "0xdd7315ba0bc8a3775e08b9ae7870635e817985c6c31159aa0001b2d4f204f469",
+   "deliverable": null
+  }
+ ]
+}

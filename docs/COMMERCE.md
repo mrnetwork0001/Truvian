@@ -12,9 +12,10 @@ Four of Telegraph's commercial use cases run on the same engine: buy each fact f
 ## What is real, and what is not yet
 
 - **Real:** every Telegraph answer (routed asks paid from Truvian's escrow, each with a receipt and a signal hash), every chain read, and every verdict, recommendation and signed memo listed here.
-- **Testnet:** Telegraph Season II settles in test USDC on Ethereum Sepolia. x402 payments settle on Base Sepolia. ACP runs on Base Sepolia by default.
+- **Testnet:** Telegraph Season II settles in test USDC on Ethereum Sepolia. x402 payments settle on Base Sepolia.
+- **Mainnet:** the ACP jobs below ran on Base with real USDC ($0.01 each), through agents registered on app.virtuals.io (still in Virtuals' unlisted sandbox stage).
 - **Test inputs:** the deliverables in the verification cases were written for the run, and their task text says so. The exception is the USDC supply figure, a real answer gemini-3.1-pro-preview gave on 23 Nov. The decision briefs are written for the demo.
-- **Not run yet:** the ACP jobs need the agents registered on app.virtuals.io (see [acp/README.md](../acp/README.md)). The evaluator's code path has been run against live Shield with the same three deliveries the ACP demo sends (`acp/src/rehearse.ts`); that is a rehearsal, not an ACP job. The agent model is Hunyuan when `HUNYUAN_API_KEY`, `HUNYUAN_BASE_URL` and `HUNYUAN_MODEL` are set; until then the fallback model is used and each memo names the model that ran (`llm.provider`, `llm.model`).
+- **Demo fixtures:** the Truvian Demo Buyer and Truvian Demo Seller are Truvian's own test agents. The seller delivers the same real report correct, with the sanctions claim flipped, or with the registry claim left out, and says so in its delivery (`demoFixture: true`); Truvian's evaluator does not read that label. The agent model is Hunyuan when `HUNYUAN_API_KEY`, `HUNYUAN_BASE_URL` and `HUNYUAN_MODEL` are set; until then the fallback model is used and each memo names the model that ran (`llm.provider`, `llm.model`).
 
 ## Enterprise Decision Assurance (Tencent)
 
@@ -45,13 +46,16 @@ Total Telegraph cost for the four: $0.05. Each fact is bought fresh for the veri
 
 ## Agent Commerce on Virtuals ACP
 
-`acp/` runs one Truvian agent that sells "Counterparty due diligence" and evaluates other agents' jobs. The demo (`npm run demo`) sends three deliveries from a labelled test provider (correct, sanctions claim flipped, registry claim dropped) with Truvian as evaluator, then buys a real report from Truvian. Rehearsed against live Shield with the same code path, without ACP:
+`acp/` runs one Truvian agent that sells `counterpartyDueDiligence` and evaluates other agents' jobs. Four ACP jobs ran on Base mainnet on 26 Nov 2026, each paid $0.01 in USDC:
 
-| Delivery | Truvian's verdict |
-|---|---|
-| Correct report | ACCEPTED |
-| Sanctions claim flipped to "not listed" | REJECTED (contradicted) |
-| Registry claim left out | INCOMPLETE (required item missing) |
+| ACP job | What happened | Truvian's verdict | Memo |
+|---|---|---|---|
+| 83055 | Demo Buyer bought Truvian's due diligence on Coinbase, Inc. (US-DE); the buyer checked the memo's signature and completed the job | PROCEED (not sanctioned, active Delaware registration) | [yFfiYka5](https://truvian.xyz/api/work/yFfiYka5) |
+| 83057 | Demo Seller delivered a correct report, Truvian evaluating | ACCEPTED, job completed | [Hehi_9kr](https://truvian.xyz/api/work/Hehi_9kr) |
+| 83058 | Demo Seller delivered the sanctions claim flipped to "not listed" | REJECTED (contradicted by fresh evidence), job rejected | [pqnUapI_](https://truvian.xyz/api/work/pqnUapI_) |
+| 83059 | Demo Seller left out the registry claim | INCOMPLETE (required item missing), job rejected | [DpzCNrrm](https://truvian.xyz/api/work/DpzCNrrm) |
+
+Records: [acp/runs/2026-11-26T13-41-24-989Z.json](../acp/runs/2026-11-26T13-41-24-989Z.json) and [acp/runs/2026-11-26T15-47-40-998Z.json](../acp/runs/2026-11-26T15-47-40-998Z.json). Telegraph cost per evaluation: $0.01 to $0.02.
 
 ## The business
 
