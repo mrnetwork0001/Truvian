@@ -54,6 +54,23 @@ npm run demo -- --only=evaluation  # the three evaluation jobs only
 
 `npm run demo` writes every job id, outcome, reason and memo to `runs/<time>.json`.
 
+## Running 24/7
+
+Since 27 Nov 2026 Truvian's agent runs on the scorer VPS as the systemd unit
+`truvian-acp` (enabled at boot, restarts after 10 s if it exits). It has its
+own clone at `/opt/truvian-acp`, separate from the truth API's, and
+`/opt/truvian-acp/acp/.env` (mode 600) holds only what this agent needs:
+`ACP_NETWORK`, `ACP_DILIGENCE_PRICE_USD`, the three `ACP_TRUVIAN_*` values and
+`SHIELD_INTERNAL_KEY`. The demo buyer's and seller's keys are not on the server.
+
+```bash
+journalctl -u truvian-acp -f                      # what it is doing
+cd /opt/truvian-acp && git pull && (cd acp && npm ci) && systemctl restart truvian-acp
+```
+
+Run only one copy: stop the server's (`systemctl stop truvian-acp`) before
+running `npm run truvian` anywhere else, or two agents answer the same jobs.
+
 ## Without ACP
 
 `SHIELD_URL=http://127.0.0.1:8790 npx tsx src/rehearse.ts` runs the same three deliveries through the same evaluator code, with no wallets and no jobs. It shows what Truvian will decide; it is not an ACP run.

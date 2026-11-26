@@ -46,7 +46,7 @@ Total Telegraph cost for the four: $0.05. Each fact is bought fresh for the veri
 
 ## Agent Commerce on Virtuals ACP
 
-`acp/` runs one Truvian agent that sells `counterpartyDueDiligence` and evaluates other agents' jobs. Four ACP jobs ran on Base mainnet on 26 Nov 2026, each paid $0.01 in USDC:
+`acp/` runs one Truvian agent that sells `counterpartyDueDiligence` and evaluates other agents' jobs. Since 27 Nov it runs 24/7 on our server (systemd `truvian-acp`, see `acp/README.md`). Four ACP jobs ran on Base mainnet on 26 Nov 2026, each paid $0.01 in USDC:
 
 | ACP job | What happened | Truvian's verdict | Memo |
 |---|---|---|---|
