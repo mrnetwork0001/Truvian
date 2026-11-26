@@ -1,0 +1,80 @@
+{
+ "ranAt": "2026-11-26T11:21:24.175Z",
+ "shield": "https://truvian.xyz",
+ "cases": [
+  {
+   "case": "Vendor onboarding: a due diligence summary in prose",
+   "expected": "REJECTED",
+   "verdict": "REJECTED",
+   "rule": "at least one claim is contradicted by the evidence",
+   "memo": "https://truvian.xyz/api/work/q6yjaOmw",
+   "id": "q6yjaOmw",
+   "sha256": "ae36f637dd2f9632937ae0d914a0d76b20898556eef2b5d4df798e87430c56f3",
+   "claimsFrom": "extracted",
+   "extractedBy": "openai-compatible/gpt-6.1-sol",
+   "checks": [
+    "contradicted: Contradicted: Garantex Europe OU IS on a sanctions list",
+    "contradicted: Contradicted: Garantex Europe OU's registry record"
+   ],
+   "missing": [],
+   "telegraphUsd": 0.02,
+   "paidRequests": 2
+  },
+  {
+   "case": "Market research: a model's USDC supply figure",
+   "expected": "REJECTED",
+   "verdict": "REJECTED",
+   "rule": "at least one claim is contradicted by the evidence",
+   "memo": "https://truvian.xyz/api/work/4SpzhW8i",
+   "id": "4SpzhW8i",
+   "sha256": "3aa8e5b30080c0ca115864028cde725803a8af9bc4476c4ec66a3f16bee39a40",
+   "claimsFrom": "structured",
+   "extractedBy": null,
+   "checks": [
+    "contradicted: Contradicted: total supply is 44817776470.346948, not 33246830704"
+   ],
+   "missing": [],
+   "telegraphUsd": 0.01,
+   "paidRequests": 1
+  },
+  {
+   "case": "Treasury proof: a DAO treasury's USDC holding",
+   "expected": "ACCEPTED",
+   "verdict": "ACCEPTED",
+   "rule": "every required item is covered and every claim is confirmed by independent evidence",
+   "memo": "https://truvian.xyz/api/work/VZMB3YqE",
+   "id": "VZMB3YqE",
+   "sha256": "8e33a7b8f7b80e4b48b88c00d7d24c54b85dd585fb7878804adf35f9a0aeab70",
+   "claimsFrom": "structured",
+   "extractedBy": null,
+   "checks": [
+    "confirmed: Confirmed: the wallet holds 2435008.157713"
+   ],
+   "missing": [],
+   "telegraphUsd": 0.01,
+   "paidRequests": 1
+  },
+  {
+   "case": "Supplier KYB: a check that skipped the registry",
+   "expected": "INCOMPLETE",
+   "verdict": "INCOMPLETE",
+   "rule": "nothing is contradicted, but 1 required item is not covered",
+   "memo": "https://truvian.xyz/api/work/jxbqkb4Q",
+   "id": "jxbqkb4Q",
+   "sha256": "c257d29acb994b320cd8035df82dee7ac7dfde4da12b23558e2de6d3b7c984e4",
+   "claimsFrom": "structured",
+   "extractedBy": null,
+   "checks": [
+    "confirmed: Confirmed: Coinbase is not on the lists checked"
+   ],
+   "missing": [
+    {
+     "kind": "registry",
+     "entity": "Coinbase"
+    }
+   ],
+   "telegraphUsd": 0.01,
+   "paidRequests": 1
+  }
+ ]
+}
