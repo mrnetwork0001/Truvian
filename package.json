@@ -18,7 +18,8 @@
     "test:truth": "tsx src/scripts/test-truth.ts",
     "truth": "tsx src/truth/server.ts",
     "typecheck": "tsc --noEmit",
-    "verify:truth": "tsx src/scripts/verify-truth-sources.ts"
+    "verify:truth": "tsx src/scripts/verify-truth-sources.ts",
+    "test:commerce": "tsx src/scripts/test-commerce.ts"
   },
   "keywords": [],
   "author": "",
