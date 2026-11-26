@@ -31,7 +31,7 @@ import { createAgent, log } from './agent.js';
 import { chain, DILIGENCE_OFFERING, network, shieldUrl, wallet } from './config.js';
 import { diligence } from './shield.js';
 
-export const DEMO_OFFERING = process.env.ACP_DEMO_OFFERING?.trim() || 'Counterparty due diligence (demo)';
+export const DEMO_OFFERING = process.env.ACP_DEMO_OFFERING?.trim() || 'counterpartyDueDiligenceDemo';
 const DEMO_PRICE_USD = 0.01;
 
 type Mode = 'correct' | 'incorrect' | 'incomplete';

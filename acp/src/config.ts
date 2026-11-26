@@ -91,4 +91,4 @@ export function diligencePriceUsd(): number {
 }
 
 /** The offering name registered on app.virtuals.io for the report */
-export const DILIGENCE_OFFERING = process.env.ACP_DILIGENCE_OFFERING?.trim() || 'Counterparty due diligence';
+export const DILIGENCE_OFFERING = process.env.ACP_DILIGENCE_OFFERING?.trim() || 'counterpartyDueDiligence';
